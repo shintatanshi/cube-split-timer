@@ -6,7 +6,6 @@ import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
 import {
   CROSS_SEARCH_MAX_DEPTH,
-  analyzeBasicF2lPlan,
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
@@ -46,6 +45,13 @@ interface CrossSearchWorkerResponse {
   jobId: number;
   ok: boolean;
   results?: CrossSearchResult[];
+  error?: string;
+}
+
+interface F2lAnalysisWorkerResponse {
+  jobId: number;
+  ok: boolean;
+  plan?: BasicF2lAnalysisPlan;
   error?: string;
 }
 
@@ -836,6 +842,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const animationRunRef = useRef(0);
   const crossWorkerRef = useRef<Worker | null>(null);
   const crossJobIdRef = useRef(0);
+  const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
+  const f2lAnalysisJobIdRef = useRef(0);
   const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
   const lastRestoredSceneIdRef = useRef(0);
   const skipNextSettingsSaveCountRef = useRef(0);
@@ -881,6 +889,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [selectedF2lPairId, setSelectedF2lPairId] = useState<string | null>(
     () => initialAnalyzerState?.selectedF2lPairId ?? null,
   );
+  const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(null);
+  const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
+  const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
 
@@ -1108,6 +1119,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedCrossSolution(null);
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
+    f2lAnalysisWorkerRef.current?.terminate();
+    f2lAnalysisWorkerRef.current = null;
+    f2lAnalysisJobIdRef.current += 1;
+    setIsAnalyzingBasicF2l(false);
+    setBasicF2lPlan(null);
+    setBasicF2lError(null);
     setAiNotice(null);
   }, [
     scrambleInput,
@@ -1171,10 +1188,77 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     solveInput,
   ]);
 
+  useEffect(() => {
+    f2lAnalysisWorkerRef.current?.terminate();
+    f2lAnalysisWorkerRef.current = null;
+    const jobId = f2lAnalysisJobIdRef.current + 1;
+    f2lAnalysisJobIdRef.current = jobId;
+
+    setBasicF2lPlan(null);
+    setBasicF2lError(null);
+
+    if (!selectedCrossSolution) {
+      setIsAnalyzingBasicF2l(false);
+      return undefined;
+    }
+
+    setIsAnalyzingBasicF2l(true);
+    const worker = new Worker(new URL("./f2lAnalysisWorker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    f2lAnalysisWorkerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
+      if (event.data.jobId !== f2lAnalysisJobIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+      if (f2lAnalysisWorkerRef.current === worker) {
+        f2lAnalysisWorkerRef.current = null;
+      }
+      setIsAnalyzingBasicF2l(false);
+
+      if (!event.data.ok || !event.data.plan) {
+        setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
+        return;
+      }
+
+      setBasicF2lPlan(event.data.plan);
+    };
+    worker.onerror = () => {
+      if (jobId !== f2lAnalysisJobIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+      if (f2lAnalysisWorkerRef.current === worker) {
+        f2lAnalysisWorkerRef.current = null;
+      }
+      setIsAnalyzingBasicF2l(false);
+      setBasicF2lError("F2L解析Workerでエラーが発生しました。");
+    };
+    worker.postMessage({
+      jobId,
+      state: selectedCrossSolution.stateAfterCross,
+      crossColor: selectedCrossSolution.color,
+      targetFace: selectedCrossSolution.targetFace,
+    });
+
+    return () => {
+      worker.terminate();
+      if (f2lAnalysisWorkerRef.current === worker) {
+        f2lAnalysisWorkerRef.current = null;
+      }
+    };
+  }, [selectedCrossSolution]);
+
   useEffect(
     () => () => {
       crossWorkerRef.current?.terminate();
       crossWorkerRef.current = null;
+      f2lAnalysisWorkerRef.current?.terminate();
+      f2lAnalysisWorkerRef.current = null;
     },
     [],
   );
@@ -1505,18 +1589,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     return getF2lRecommendation(selectedF2lPair, f2lLearningCases);
   }, [f2lLearningCases, selectedF2lPair]);
-  const basicF2lPlan = useMemo<BasicF2lAnalysisPlan | null>(() => {
-    if (!selectedCrossSolution) {
-      return null;
-    }
-
-    return analyzeBasicF2lPlan(
-      selectedCrossSolution.stateAfterCross,
-      selectedCrossSolution.color,
-      selectedCrossSolution.targetFace,
-    );
-  }, [selectedCrossSolution]);
-
   const getCrossSearchFaceColorMap = useCallback(
     (targetCrossColor = settings.crossColor): Record<FaceName, CubeColorName> =>
       faceColorMap[settings.crossTargetFace] === targetCrossColor
@@ -1600,6 +1672,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedCrossSolution(null);
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
+    f2lAnalysisWorkerRef.current?.terminate();
+    f2lAnalysisWorkerRef.current = null;
+    f2lAnalysisJobIdRef.current += 1;
+    setIsAnalyzingBasicF2l(false);
+    setBasicF2lPlan(null);
+    setBasicF2lError(null);
 
     if (!scrambleInput.trim()) {
       setCrossError("スクランブルを入力してください。");
@@ -2278,6 +2356,22 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     Crossを3Dで再確認
                   </button>
                 </div>
+                {isAnalyzingBasicF2l && (
+                  <article className="analyzer-basic-f2l-plan">
+                    <p className="eyebrow">Basic F2L 41</p>
+                    <h3>F2L解析中...</h3>
+                    <p>
+                      Cross結果は表示済みです。F2Lの24順序比較とフォールバック探索だけWorkerで計算しています。
+                    </p>
+                  </article>
+                )}
+                {basicF2lError && (
+                  <article className="analyzer-basic-f2l-plan">
+                    <p className="eyebrow">Basic F2L 41</p>
+                    <h3>F2L解析エラー</h3>
+                    <p>{basicF2lError}</p>
+                  </article>
+                )}
                 {basicF2lPlan && (
                   <article className="analyzer-basic-f2l-plan">
                     <div className="analyzer-basic-f2l-heading">

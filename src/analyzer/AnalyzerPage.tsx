@@ -2286,6 +2286,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                         <h3>基本41パターン解析</h3>
                       </div>
                       <div className="analyzer-basic-f2l-summary">
+                        <span>{basicF2lPlan.strategy === "permutation" ? "24順序比較" : "貪欲選択"}</span>
                         <span>{basicF2lPlan.steps.length} steps</span>
                         <strong>{basicF2lPlan.totalMoveCount} moves</strong>
                       </div>
@@ -2307,6 +2308,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                               <div className="analyzer-f2l-tags">
                                 <span>Target: {step.targetSlot}</span>
                                 <span>Extract: {step.extractAlgorithm || "なし"}</span>
+                                <span>
+                                  Method: {step.method === "localSearch" ? "局所探索" : "基本41"}
+                                </span>
                                 <span>Case: {step.caseId}</span>
                                 <span>Moves: {step.moveCount}</span>
                               </div>

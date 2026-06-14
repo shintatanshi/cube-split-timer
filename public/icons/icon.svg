@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Cube Split Timer</title>
+  <desc id="desc">A cube timer app icon.</desc>
+  <rect width="512" height="512" rx="112" fill="#10131f"/>
+  <rect x="70" y="70" width="372" height="372" rx="84" fill="#14192a"/>
+  <g transform="translate(126 122)">
+    <rect x="0" y="0" width="78" height="78" rx="18" fill="#77a7ff"/>
+    <rect x="91" y="0" width="78" height="78" rx="18" fill="#ffd166"/>
+    <rect x="182" y="0" width="78" height="78" rx="18" fill="#f4f7fb"/>
+    <rect x="0" y="91" width="78" height="78" rx="18" fill="#35d07f"/>
+    <rect x="91" y="91" width="78" height="78" rx="18" fill="#77a7ff"/>
+    <rect x="182" y="91" width="78" height="78" rx="18" fill="#ff7a59"/>
+    <rect x="0" y="182" width="78" height="78" rx="18" fill="#f4f7fb"/>
+    <rect x="91" y="182" width="78" height="78" rx="18" fill="#35d07f"/>
+    <rect x="182" y="182" width="78" height="78" rx="18" fill="#ffd166"/>
+  </g>
+  <path d="M160 382h192" stroke="#f4f7fb" stroke-width="26" stroke-linecap="round"/>
+  <path d="M256 360v44" stroke="#77a7ff" stroke-width="26" stroke-linecap="round"/>
+</svg>

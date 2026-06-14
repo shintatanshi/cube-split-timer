@@ -1,0 +1,1313 @@
+Cube Split Timer 開発計画メモ
+==============================
+
+このメモの目的
+--------------
+このメモは、ここまで話したルービックキューブ用Webアプリのアイディアを、
+「実装しやすい順番」に並べ替えてまとめたものです。
+
+入っている内容:
+- アプリ全体の機能説明
+- 実装する順番
+- 各段階で何を作るか
+- 重くならないための注意点
+- Codexにそのまま投げやすい指示文
+
+
+アプリの最終イメージ
+--------------------
+ルービックキューブの練習用Webアプリ。
+
+普通のタイマーだけではなく、以下をまとめてできるようにする。
+
+- 通常タイマー
+- CFOP Split Mode
+- Cross / F2L / OLL / PLL の各工程タイム計測
+- Cross Practice
+- F2L Practice
+- F2L Pair Split
+- 履歴管理
+- +2 / DNF
+- 保存しない
+- 履歴から削除
+- soft delete
+- 平均・ao5・ao12などの分析
+- PWA対応
+- Share機能
+- Helpページ
+- Supabaseログイン
+- ユーザー別クラウド保存
+- 管理者機能
+- プロフィール
+- フレンド
+- 週間ランキング
+- F2L / OLL / PLL 学習ページ
+- Analyzerページ
+- 仮想キューブアニメーション
+- スクランブル通りに仮想キューブを混ぜる
+- 色エディター
+- Cross / F2L解析
+- F2L後のOLL判定
+- OLL後のPLL判定
+
+
+おすすめ技術構成
+----------------
+HTMLだけでも作れるが、今回の機能量ならおすすめしない。
+
+おすすめ:
+- React
+- Vite
+- TypeScript
+- CSS または CSS Modules
+- localStorage
+- Supabase Auth
+- Supabase Database
+- Netlify
+- PWA
+- Web Share API
+- cubing.js などの3Dキューブ表示ライブラリ
+
+理由:
+- 後から機能追加しやすい
+- Codexが扱いやすい
+- Supabaseと相性がいい
+- Netlifyで公開しやすい
+- PWA対応しやすい
+- TypeScriptでデータミスを減らせる
+
+
+最重要ルール
+------------
+1. タイマー中は絶対に軽くする
+- Supabase通信しない
+- localStorageへ頻繁に保存しない
+- 解析処理しない
+- ランキングやフレンド情報を読み込まない
+- 下ナビや設定ボタンを隠す
+
+2. 保存はソルブ終了時だけ
+- 計測中は表示だけ
+- 停止したらlocalStorageに保存
+- ログイン済みならその後Supabaseに同期
+
+3. 削除はsoft delete
+- 完全削除ではなく deletedAt / deleted_at を入れる
+- 通常履歴には表示しない
+- 平均・ao5・ao12・グラフ・best・worstから除外
+- 管理者画面では削除済みも確認・復元可能
+
+4. 重い機能は別ページ
+- /timer は軽くする
+- /analyzer は解析と3Dキューブ
+- /learn は手順学習
+- /ranking はランキング
+- /friends はフレンド
+- /admin は管理者
+
+5. スマホファースト
+- 大きいタイマー
+- ボタンは押しやすく
+- 計測中は誤タップ防止
+- PWA対応
+- 長押し文字選択を防ぐ
+- スクロール誤動作を防ぐ
+
+
+ページ構成案
+------------
+/timer
+- 通常タイマー
+- CFOP Split Mode
+- スクランブル
+- 最低限のao5 / ao12
+
+/history
+- 履歴
+- Share
+- +2
+- DNF
+- 削除
+
+/analysis
+- 平均
+- best / worst
+- ao5 / ao12 / ao50 / ao100
+- Cross / F2L / OLL / PLL 平均
+- 苦手フェーズ
+- 直近50回グラフ
+
+/practice
+- Cross Practice
+- F2L Practice
+- F2L Pair Split
+
+/learn
+- F2L / OLL / PLL の学習トップ
+
+/learn/f2l
+- F2L手順
+- 形の画像
+- 覚えた / 練習中 / 苦手
+
+/learn/oll
+- OLL番号
+- 形の画像
+- 手順
+- 覚えた / 練習中 / 苦手
+
+/learn/pll
+- PLL名
+- 形の画像
+- 手順
+- 覚えた / 練習中 / 苦手
+
+/analyzer
+- スクランブル入力
+- 色エディター
+- 3Dキューブ
+- Cross解析
+- F2L解析
+- OLL判定
+- PLL判定
+- アニメーション再生
+
+/ranking
+- フレンド内週間ランキング
+
+/profile
+- 自分のプロフィール
+
+/friends
+- フレンド申請・承認・一覧
+
+/admin
+- 管理者画面
+
+/help
+- 使い方
+- FAQ
+- 初回チュートリアル
+
+
+実装順番
+========
+
+チャットで話した順番ではなく、作りやすさと安全性を優先した順番。
+
+
+Phase 1: React + Vite + TypeScriptで基本タイマー
+----------------------------------------------
+目的:
+まずはログインなしで、普通に使えるタイマーを作る。
+
+作る機能:
+- 通常タイマー
+- Spaceキーまたは画面タップで開始・停止
+- ミリ秒表示
+- 3x3スクランブル生成
+- タイム履歴
+- localStorage保存
+- +2 / DNF
+- soft delete用 deletedAt
+- average / ao5 / ao12 / best / worst
+- スマホファーストUI
+- ダークモード風UI
+
+この時点ではSupabaseなし。
+まずは毎日使えるローカルタイマーを完成させる。
+
+Codex指示文:
+React + Vite + TypeScriptで、ルービックキューブ用Webタイマーを作ってください。
+まずはログイン機能なしで、localStorage保存だけにしてください。
+
+機能:
+- 通常タイマー
+- Spaceキーまたは画面タップで開始・停止
+- ミリ秒表示
+- 3x3スクランブル生成
+- タイム履歴
+- localStorage保存
+- +2 / DNF
+- 削除は完全削除ではなく soft delete 用に deletedAt を持たせる
+- average / ao5 / ao12 / best / worst は deletedAt がない記録だけで計算する
+- スマホファーストのUI
+- ダークモード風のシンプルUI
+
+軽量化:
+- 不要なライブラリを使わない
+- タイマー表示は requestAnimationFrame で更新する
+- localStorage保存はソルブ終了時だけ
+- 履歴表示は最新100件まで
+
+
+Phase 2: UI改善・テーマ切替・誤操作防止
+--------------------------------------
+目的:
+スマホでもPCでも使いやすくする。
+計測中の誤タップ、スクロール、文字選択を防ぐ。
+
+作る機能:
+- ダーク / ライト / システム設定テーマ
+- 計測中は秒数だけ表示する専用画面
+- 計測中は下ナビ、設定、プロフィールボタンを非表示
+- タイマー文字とスクランブル文字をコピー不可
+- 長押しの青い文字選択を防ぐ
+- 計測中スクロール禁止
+- Spaceキーのページスクロール防止
+- リロード・戻る対策
+- currentSolveDraft
+
+仕様:
+- 通常時は普通にスクロール可能
+- 計測中だけ body に timing クラス
+- 計測途中でリロードされたら、そのソルブは正式保存しない
+- 起動時に未完了draftがあれば破棄する
+
+Codex指示文:
+UIを見やすく使いやすく改善してください。
+
+要件:
+- ダークモード / ライトモード / システム設定に合わせる の3つのテーマ切替を実装する
+- 初期テーマはダークモードにする
+- メインのタイマー画面は情報を詰め込みすぎず、Scramble、大きなタイマー、最低限の ao5 / ao12 だけ表示する
+- モバイルでは下部ナビゲーションを表示する
+
+計測中のUI:
+- タイマー計測中は誤タップ防止のため、下部ナビゲーション、設定ボタン、プロフィールボタンなどを非表示にする
+- 計測中は専用のシンプル画面に切り替える
+- 通常タイマーモードでは、計測中は秒数だけを大きく表示する
+- 停止後は通常UIに戻る
+- 計測中に他ページへ遷移できないようにする
+
+誤操作防止:
+- タイマー画面では文字選択できないようにする
+- スクランブル文字も選択・コピーできないようにする
+- CSSで user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; を適用する
+- PCでSpaceキーを押した時にページがスクロールしないように preventDefault() する
+- 計測中は body に timing クラスを付ける
+- body.timing では overflow: hidden; position: fixed; width: 100%; を使ってスクロールを防ぐ
+- 計測中の timer-screen には touch-action: none; overscroll-behavior: none; を適用する
+- 計測していない時は普通にスクロールできるようにする
+
+リロード・ページ離脱対策:
+- 計測中にリロードやページ離脱しようとしたら beforeunload で警告を出す
+- ただしスマホ/PWAでは警告が確実ではないので、警告に依存しない設計にする
+- ソルブ開始時に currentSolveDraft を localStorage または sessionStorage に保存する
+- currentSolveDraft には status: "running", startTime, scramble, splits を保存する
+- 正式な solves 履歴には、タイマー停止時だけ保存する
+- 計測途中でリロードされた場合、次回起動時に running の currentSolveDraft を検出し、「前回の計測は未完了のため保存しませんでした」と表示する
+- 未完了ソルブは正式履歴、平均、ao5、ao12、グラフに含めない
+
+
+Phase 3: CFOP Split Mode
+-----------------------
+目的:
+Cross / F2L / OLL / PLL の各工程タイムを測れるようにする。
+
+操作:
+- Sキーではなく、Space / Tap だけで進める
+- Space 1回目: スタート
+- Space 2回目: Cross完了
+- Space 3回目: F2L完了
+- Space 4回目: OLL完了
+- Space 5回目: PLL完了＆停止
+
+保存:
+- mode = cfop_split
+- totalTime
+- crossTime
+- f2lTime
+- ollTime
+- pllTime
+- scramble
+- penalty
+- deletedAt
+- createdAt
+
+誤作動対策:
+- KeyboardEvent.repeat が true の場合は無視
+- 1入力で1段階だけ進む
+- 200ms程度のdebounce
+- preventDefault
+- Spaceキーは keydown ではなく keyup で状態を進める
+- キーを押しっぱなしにしている間は状態を進めない
+- Spaceを離したタイミングで1回だけ処理する
+- keydownでは preventDefault のみ行い、タイマー状態の変更はしない
+
+Codex指示文:
+CFOP Split Modeを追加してください。
+
+仕様:
+- Cross / F2L / OLL / PLL を計測する
+- Sキーではなく Spaceキーだけで操作する
+- Space 1回目でスタート
+- Space 2回目でCross完了を記録
+- Space 3回目でF2L完了を記録
+- Space 4回目でOLL完了を記録
+- Space 5回目でPLL完了＆タイマー停止
+- スマホでは画面タップで同じ操作ができるようにする
+- タイマー本体は途中で止めない
+- totalTime, crossTime, f2lTime, ollTime, pllTime を保存する
+- 各フェーズの平均、最速、最遅を表示する
+
+誤作動対策:
+- Spaceキーでページがスクロールしないように preventDefault() する
+- KeyboardEvent.repeat が true の場合は無視する
+- 1回の入力で1段階だけ進むようにする
+- 200ms程度のdebounceを入れて二重反応を防ぐ
+- Spaceキーは keydown ではなく keyup で状態を進める
+- keydownでは preventDefault のみ行う
+- キーを押しっぱなしにしている間は状態を進めない
+- Spaceを離したタイミングで1回だけ処理する
+
+表示:
+- 計測中は秒数を大きく表示する
+- CFOP Split中は現在フェーズ Cross / F2L / OLL / PLL を表示する
+- すでに記録済みのスプリットは小さく表示する
+- 停止後に Total, Cross, F2L, OLL, PLL を表示する
+
+
+Phase 4: 保存しない・履歴削除・soft delete
+-----------------------------------------
+目的:
+ミスソルブや測定ミスを扱えるようにする。
+
+仕様:
+- ソルブ終了後は基本自動保存
+- 終了直後に「保存しない」ボタンを表示
+- 保存しないを押すと deletedAt を入れる
+- 履歴からも削除できる
+- 削除もsoft delete
+- 削除済みは平均・ao・グラフ・best・worstに含めない
+- 削除直後に「元に戻す」
+
+Codex指示文:
+ミスソルブ対策として soft delete を追加・整理してください。
+
+仕様:
+- ソルブ終了時は基本的に自動保存する
+- 終了直後に「保存しない」ボタンを数秒表示する
+- 「保存しない」を押したら deletedAt に現在時刻を入れる
+- 履歴の各記録にも「削除」ボタンを付ける
+- 削除も完全削除ではなく deletedAt を入れる
+- deletedAt がある記録は通常履歴に表示しない
+- average / ao5 / ao12 / ao50 / ao100 / best / worst / グラフ / フェーズ平均には含めない
+- 削除直後に「元に戻す」を表示する
+- 復元する場合は deletedAt を null に戻す
+
+
+Phase 5: Practice Mode
+---------------------
+目的:
+通常ソルブ以外の練習をできるようにする。
+
+作る練習:
+1. Cross Practice
+2. F2L Practice
+3. F2L Pair Split
+
+Cross Practice:
+- Space / Tap でスタート
+- 次の Space / Tap でクロス完了＆停止
+- mode = cross_practice
+- crossTime
+- scramble
+- crossColor
+- deletedAt
+
+F2L Practice:
+- クロスを作った後、F2Lだけ測る
+- Space / Tap でスタート
+- 次の Space / Tap でF2L完了＆停止
+- mode = f2l_practice
+- f2lTime
+
+F2L Pair Split:
+- F2Lの4ペアをそれぞれ測る
+- Space / Tap でスタート
+- Pair1 / Pair2 / Pair3 / Pair4 をSpaceで記録
+- Pair4で停止
+- mode = f2l_pair_split
+
+Codex指示文:
+Practiceページに Cross Practice と F2L Practice と F2L Pair Split を追加してください。
+
+Cross Practice:
+- mode = "cross_practice"
+- Space / Tap でスタート
+- 次の Space / Tap でクロス完了＆停止
+- crossTime を保存
+- scramble, crossColor, createdAt, deletedAt を保存
+- Cross Practice専用の履歴、平均、best、ao5、ao12を表示する
+
+F2L Practice:
+- mode = "f2l_practice"
+- Space / Tap でスタート
+- 次の Space / Tap でF2L完了＆停止
+- f2lTime を保存
+- F2L Practice専用の履歴、平均、best、ao5、ao12を表示する
+
+F2L Pair Split:
+- mode = "f2l_pair_split"
+- Space / Tap でスタート
+- その後の Space / Tap で Pair 1, Pair 2, Pair 3, Pair 4 を記録する
+- Pair 4で停止する
+- pair1Time, pair2Time, pair3Time, pair4Time, totalTime を保存する
+- 各ペアの平均、最速、最遅を表示する
+
+共通:
+- ソルブ終了後は基本自動保存
+- ミスった時だけ「保存しない」
+- 履歴から削除できる
+- 削除はsoft deleteで deletedAt を使う
+- 削除済み記録は平均、ao5、ao12、グラフに含めない
+
+
+Phase 6: AnalysisとShare
+-----------------------
+目的:
+記録を分析して、友達に共有できるようにする。
+
+Analysis:
+- best
+- worst
+- session average
+- ao5
+- ao12
+- ao50
+- ao100
+- Cross平均
+- F2L平均
+- OLL平均
+- PLL平均
+- 各フェーズ最速
+- 各フェーズ最遅
+- 苦手フェーズ
+- 直近50回グラフ
+
+Share:
+- 直前のソルブ共有
+- 履歴から共有
+- 今日のまとめ共有
+- Web Share API
+- 非対応ならクリップボードコピー
+- 最初は画像共有なし
+
+Codex指示文:
+分析機能とShare機能を追加してください。
+
+Analysis:
+- /analysis ページを作る
+- best / worst / average / ao5 / ao12 / ao50 / ao100 を表示する
+- CFOP Splitの記録から Cross / F2L / OLL / PLL の平均、最速、最遅を表示する
+- 平均より遅れているフェーズを「苦手フェーズ」として表示する
+- 直近50回の軽量グラフを表示する
+- deletedAt がある記録はすべての集計から除外する
+
+Share:
+- 直前のソルブ結果を共有できる
+- 履歴の各記録から共有できる
+- 今日の練習まとめを共有できる
+- Web Share API の navigator.share() を使う
+- navigator.share が使えない環境ではクリップボードにコピーする
+- 共有テキストには total, Cross, F2L, OLL, PLL, scramble, penalty, ao5, ao12 を含める
+- deletedAt がある削除済み記録は共有対象にしない
+- DNFの場合は total を DNF として表示する
+- +2の場合は +2込みのタイムと penalty を表示する
+- 重くならないように画像生成共有は最初は入れない
+
+
+Phase 7: PWA対応
+----------------
+目的:
+スマホでホーム画面に追加して、アプリのように使えるようにする。
+
+作るもの:
+- manifest.json
+- service worker
+- 192x192 / 512x512 アイコン
+- display: standalone
+- theme_color
+- background_color
+- オフラインでもlocalStorage記録を見られる
+
+Codex指示文:
+このWebタイマーをPWA対応してください。
+
+要件:
+- スマホでホーム画面に追加してアプリのように使えるようにする
+- manifest.json を作成する
+- アプリ名は Cube Split Timer にする
+- display は standalone にする
+- theme_color と background_color をダーク系にする
+- 192x192 と 512x512 のアイコンを設定する
+- iPhone/Android両方でホーム画面追加しやすいようにする
+- service worker を追加する
+- アプリ本体の静的ファイルをキャッシュして、2回目以降の起動を速くする
+- オフラインでもlocalStorageに保存済みの記録は見られるようにする
+- オフライン中に計測した記録はlocalStorageに保存し、オンライン復帰後にSupabaseへ同期できる構成にする
+- 重くならないように、動画や大量データはキャッシュしない
+
+
+Phase 8: Helpページとチュートリアル
+----------------------------------
+目的:
+機能が多いので、初めて使う人が迷わないようにする。
+
+作るもの:
+- /help
+- 初回チュートリアル
+- 各ページの「？」ボタン
+- FAQ
+- PWA追加方法
+- 保存しない・削除の説明
+
+Codex指示文:
+Webアプリ全体の使い方を説明するヘルプ機能を追加してください。
+
+要件:
+- /help ページを作る
+- ヘルプページはスマホでも読みやすいUIにする
+- アコーディオン形式で項目を開閉できるようにする
+- 内容は以下を含める
+  - このアプリでできること
+  - 通常タイマーの使い方
+  - CFOP Split Modeの使い方
+  - Cross Practice / F2L Practiceの使い方
+  - +2 / DNF / 保存しない / 削除の説明
+  - soft deleteされた記録は平均に含まれないこと
+  - Share機能の使い方
+  - PWAとしてホーム画面に追加する方法
+  - ログインとSupabase同期の説明
+  - フレンドと週間ランキングの説明
+  - よくある質問
+- 初回起動時に簡単なチュートリアルを表示する
+- チュートリアルを見たかどうかは localStorage に保存する
+- 各主要ページに小さな「？」ヘルプボタンを置く
+- タイマー計測中はヘルプボタンを非表示にする
+
+
+Phase 9: Learnページ
+-------------------
+目的:
+F2L / OLL / PLL の手順と形を見て覚えられるようにする。
+
+作るもの:
+- /learn
+- /learn/f2l
+- /learn/oll
+- /learn/pll
+- /learn/practice
+- 形の画像
+- 手順
+- 覚えた / 練習中 / 苦手
+- フィルター
+- 進捗表示
+
+注意:
+- 画像はSVGや小さめ画像
+- タイマー画面では学習データを読み込まない
+
+Codex指示文:
+学習用の別ページを追加してください。
+
+要件:
+- /learn ページを作る
+- /learn/f2l, /learn/oll, /learn/pll を作る
+- F2L / OLL / PLL の形の画像と手順を一覧・詳細で見られるようにする
+- 各ケースに対して「未習得」「練習中」「覚えた」「苦手」の状態を持てるようにする
+- ログインしている場合はユーザーごとに進捗を保存する
+- 未ログイン時は localStorage に保存する
+- 学習ページはタイマー画面と分離して、タイマー画面が重くならないようにする
+- 画像は軽量に扱い、必要ならSVGや小さい画像を使う
+- 一覧表示、詳細表示、フィルター（覚えた/未習得/苦手）を実装する
+- /learn/practice ページを作り、ランダムにF2L / OLL / PLLのケースを出題できるようにする
+- 練習ページでは「答えを見る」「覚えた」「まだ苦手」を更新できるようにする
+
+
+Phase 10: Analyzer基本
+---------------------
+目的:
+スクランブルやソルブ手順を貼って、仮想キューブで確認できるようにする。
+
+作るもの:
+- /analyzer
+- スクランブル入力
+- 仮想3Dキューブ表示
+- スクランブル通りに混ぜる
+- スクランブル再生
+- ソルブ手順入力
+- 1手ずつ再生
+- 1手戻る / 進む / リセット
+- エラー表示
+
+Codex指示文:
+/analyzer ページを追加してください。
+
+目的:
+スクランブルや自分のソルブ手順を貼り付けて、仮想キューブで確認できるページにする。
+
+要件:
+- タイマー画面とは別ページにする
+- /analyzer を開いた時だけ必要な処理を読み込む
+- cubing.js の TwistyPlayer などを使って3Dキューブを表示する
+- スクランブル入力欄を作る
+- 入力したスクランブルを仮想キューブに反映する
+- 初期状態は完成状態にする
+- R, U, F, D, L, B, ', 2 を含む一般的な3x3スクランブル記法を解析する
+- 「スクランブルを反映」ボタンで、完成状態からスクランブルを適用した状態を表示する
+- 「スクランブルを再生」ボタンで、1手ずつアニメーション再生できるようにする
+- ソルブ手順入力欄を作る
+- scramble + solve を1手ずつ再生できるようにする
+- 再生、一時停止、1手進む、1手戻る、リセットボタンを作る
+- 入力ミスがある場合は日本語で分かりやすくエラー表示する
+- タイマー画面が重くならないように、analyzer関連コードは遅延読み込みにする
+
+
+Phase 11: Analyzer設定
+---------------------
+目的:
+実物キューブと画面の向きを合わせられるようにする。
+
+設定:
+- Cross color
+- Cross target face
+- Scramble orientation Front color
+- Scramble orientation Top color
+- 全色クロス候補表示
+- 設定保存
+
+ポイント:
+キューブの向きは、正面色と上面色で決まる。
+Front color と Top color は同じ色や反対色を選べないようにする。
+
+Codex指示文:
+/analyzer にキューブの向きとクロス色を細かく設定できる機能を追加してください。
+
+要件:
+- Cross color を選べるようにする
+  - White / Yellow / Blue / Green / Red / Orange
+- Cross target face を選べるようにする
+  - 基本は D 面
+  - 将来的に U 面にも対応できる構成にする
+- Scramble orientation を設定できるようにする
+  - Front color を選択
+  - Top color を選択
+- Front color と Top color は同じ色や反対色を選べないようにする
+- 無効な組み合わせを選んだ場合は日本語でエラー表示する
+- 入力されたスクランブルは、選択された Front / Top の向きを基準に仮想キューブへ適用する
+- Cross解析は、選択された Cross color をD面に作る前提で候補手順を表示する
+- 色ニュートラル用に「全色のCross候補を表示」オプションも追加する
+- 各Cross候補には色、手順、手数を表示する
+- Analyzerの Cross color / Front color / Top color 設定は保存する
+- 未ログイン時はlocalStorage、ログイン時はprofilesまたはuser_settingsに保存する
+- /timer が重くならないように、この設定と解析処理は /analyzer でだけ読み込む
+
+
+Phase 12: Cube Color Editor
+--------------------------
+目的:
+スクランブルミスや、すでに崩れている状態から解析できるようにする。
+
+作るもの:
+- 色を直接入力するモード
+- 6面展開図
+- 3x3グリッド
+- 白 / 黄 / 赤 / 橙 / 青 / 緑
+- センター固定
+- 色カウント
+- 完成状態に戻す
+- 1つ戻す
+- 色配置を3Dキューブに反映
+- 色数チェック
+- ありえない状態への警告
+
+Codex指示文:
+/analyzer ページに Cube Color Editor を追加してください。
+
+目的:
+スクランブルをミスした場合や、すでに崩れているキューブ状態からCross/F2L解析できるようにする。
+
+要件:
+- Analyzerの入力方法として「スクランブルから作る」と「色を直接入力する」を選べるようにする
+- 色エディターでは6面の展開図を表示する
+- U / D / F / B / R / L の各面を3x3グリッドで表示する
+- ユーザーは各ステッカーをタップして色を変更できる
+- 色は White / Yellow / Red / Orange / Blue / Green から選択する
+- スマホでも押しやすいサイズにする
+- センター色は基本固定にする
+- 色カウントを表示する
+  - White 9/9
+  - Yellow 9/9
+  - Red 9/9
+  - Orange 9/9
+  - Blue 9/9
+  - Green 9/9
+- 色数が9枚ずつになっていない場合は解析ボタンを無効にする
+- 「完成状態に戻す」ボタンを作る
+- 「1つ戻す」ボタンを作る
+- 入力した色配置を3Dキューブに反映する
+- 入力した状態からCross/F2L解析を実行できるようにする
+- ありえないキューブ状態の場合は「この色配置は実際のキューブではありえない可能性があります」と表示する
+- タイマー画面が重くならないように、この機能は/analyzerでだけ読み込む
+
+
+Phase 13: Cross / F2L Analyzer
+------------------------------
+目的:
+スクランブルや色エディターから、CrossとF2Lの改善手順を学べるようにする。
+
+Cross:
+- 選んだ色のクロス候補を表示
+- 手数表示
+- 全色クロス候補にも対応
+- アニメーション再生
+
+F2L:
+- 完全最短は最初から目指さない
+- F2Lケース別おすすめ手順DBを使う
+- ペアごとにおすすめ手順表示
+- 手数・説明・アニメーション再生
+- AIは手順生成ではなく説明役
+
+Codex指示文:
+/analyzer に Cross / F2L 解析機能を追加してください。
+
+目的:
+スクランブルや色エディターから作ったキューブ状態をもとに、CrossとF2Lだけを解析・学習できるようにする。
+
+Cross解析:
+- 入力スクランブルまたは色エディター状態からCrossの短い手順候補を表示する
+- まずは選択されたCross colorを優先する
+- 色ニュートラル設定がONなら全色のCross候補を表示する
+- 各候補に色、手順、手数を表示する
+- 選んだCross候補を3Dキューブでアニメーション再生できるようにする
+
+F2L解析:
+- F2Lは完全最短解を最初から目指さない
+- F2Lケース別のおすすめ手順データベースを使う
+- 各ペアごとのおすすめ手順を表示する
+- 手数、回しやすさ、簡単な説明を表示する
+- 選んだF2L手順を3Dキューブ上でアニメーション再生する
+- 将来的にAI説明を追加できる構成にする
+
+AI説明:
+- AIは手順生成の本体ではなく、Cross/F2L手順の説明役として使う
+- 「なぜこのCrossが短いか」「自分の手順と比べてどこが無駄か」を説明できるようにする
+- AI説明はボタンを押した時だけ実行する
+
+軽量化:
+- タイマー画面ではanalyzer関連の処理を読み込まない
+- 解析ページを開いた時だけ読み込む
+- 重い処理は必要ならWeb Workerに分ける
+
+
+Phase 14: OLL / PLL 判定
+-----------------------
+目的:
+F2Lが終わったあとに次のOLLを教える。
+OLLが終わったあとにPLLを教える。
+
+機能:
+- F2L完成状態からOLLケース判定
+- OLL番号・名前・手順表示
+- 手順再生
+- OLL完了状態からPLLケース判定
+- 何パームか・手順表示
+- 手順再生
+- 覚えた / 練習中 / 苦手
+- Learnページと進捗共有
+
+注意:
+- F2Lが未完成ならOLL判定しない
+- OLLが未完了ならPLL判定しない
+- 手順はAI生成ではなくDBから出す
+
+Codex指示文:
+/analyzer に OLL / PLL 判定機能を追加してください。
+
+目的:
+F2Lが終わった状態から次のOLLケースを判定し、OLL番号・名前・手順を表示する。
+OLLが終わった状態からPLLケースを判定し、何パームか・手順を表示する。
+
+OLL:
+- F2Lが完成している状態なら、上面の向きを読み取ってOLLケースを判定する
+- OLLケースには id, name, algorithm, image, description を持たせる
+- 判定結果として OLL番号、名前、手順を表示する
+- 「手順を再生」ボタンで3Dキューブ上でアニメーション再生する
+- F2L未完成の場合は「F2Lが未完成なのでOLL判定できません」と表示する
+
+PLL:
+- OLLが完了している状態なら、PLLケースを判定する
+- PLLケースには id, name, algorithm, image, description を持たせる
+- 例: Ua Perm, Ub Perm, T Perm, J Perm など
+- 判定結果としてPLL名、手順を表示する
+- 「手順を再生」ボタンで3Dキューブ上でアニメーション再生する
+- OLLが完了していない場合は「OLLが未完了なのでPLL判定できません」と表示する
+
+学習連携:
+- 各OLL/PLLに「覚えた」「練習中」「苦手」を付けられるようにする
+- 未ログイン時はlocalStorageに保存する
+- ログイン時はユーザーごとにSupabaseへ保存する
+- LearnページのOLL/PLL一覧と進捗を共有する
+
+軽量化:
+- OLL/PLL判定や手順データは/analyzerや/learnページでだけ読み込む
+- /timer画面では読み込まない
+- 画像は軽量なSVGまたは小さい画像を使う
+
+
+Phase 15: Supabaseログイン・クラウド保存
+--------------------------------------
+目的:
+ユーザーごとに記録を保存する。
+
+作るもの:
+- Supabase Auth
+- profiles
+- solves
+- sessions
+- learning_progress
+- user_settings
+- 未ログインでもlocalStorageで使える
+- ログイン後にSupabaseへ同期
+- オフライン時はlocalStorage
+- オンライン復帰後に同期
+- RLS
+
+テーブル案:
+
+profiles
+- id uuid
+- username text
+- display_name text
+- bio text
+- avatar_url text
+- main_cube text
+- role text
+- created_at timestamp
+
+solves
+- id uuid
+- user_id uuid
+- mode text
+- total_time integer nullable
+- cross_time integer nullable
+- f2l_time integer nullable
+- oll_time integer nullable
+- pll_time integer nullable
+- pair1_time integer nullable
+- pair2_time integer nullable
+- pair3_time integer nullable
+- pair4_time integer nullable
+- scramble text
+- penalty text nullable
+- tags text[]
+- session_id uuid nullable
+- deleted_at timestamp nullable
+- created_at timestamp
+
+sessions
+- id uuid
+- user_id uuid
+- name text
+- created_at timestamp
+
+learning_progress
+- id uuid
+- user_id uuid
+- case_id text
+- category text
+- status text
+- updated_at timestamp
+
+user_settings
+- user_id uuid
+- theme text
+- cross_color text
+- front_color text
+- top_color text
+- created_at timestamp
+- updated_at timestamp
+
+Codex指示文:
+Supabase Authとクラウド保存を追加してください。
+
+要件:
+- Supabase Authでログイン
+- 未ログインでもlocalStorageで使える
+- ログイン後はSupabaseに同期
+- solvesテーブルにユーザーごとの記録を保存
+- profilesテーブルに username, display_name, role などを持たせる
+- user_settings にテーマやAnalyzer設定を保存できるようにする
+- タイマー中はSupabaseへ通信しない
+- ソルブ終了時だけSupabaseへ保存する
+- まずlocalStorageに保存してからSupabaseへ同期する
+- オフライン時はlocalStorageに残し、オンライン復帰時に同期する
+- 履歴取得は最新100件まで
+- グラフは直近50件だけ
+- deleted_at がある記録は通常履歴や平均から除外する
+- RLSを必ず有効にする
+- service_role key は絶対にフロントエンドに置かない
+
+
+Phase 16: 管理者機能
+-------------------
+目的:
+一部ユーザーに管理者権限を付けて、全員の記録を確認できるようにする。
+
+仕様:
+- 管理者専用ログインではない
+- 普通のユーザーに role = admin を付ける
+- adminだけ /admin に入れる
+- 管理者は全ユーザー・全記録を見られる
+- 削除済み記録を見られる
+- 復元できる
+- 他ユーザーにadmin権限を付与できる
+- 一般ユーザーは自分でadminになれない
+
+安全:
+- RLS必須
+- service_role keyはフロント禁止
+- role変更など強い処理はNetlify Functionsなどサーバー側
+
+Codex指示文:
+管理者専用ログインではなく、通常ユーザーに admin 権限を付与する方式にしてください。
+
+要件:
+- 全員Supabase Authで普通にログインする
+- profilesテーブルに role カラムを作る
+- role は "user" または "admin"
+- ログイン後、自分の profiles.role を取得する
+- role が admin の場合だけ /admin ページを表示する
+- 一般ユーザーは自分の solves だけ見られる
+- admin は全ユーザーの solves を見られる
+- admin は削除済み記録も見られる
+- admin は削除済み記録を復元できる
+- admin は他のユーザーの role を user/admin に変更できる
+- 一般ユーザーは自分の role を変更できないようにする
+- RLSを必ず設定する
+- service_role key はフロントエンドに絶対に置かない
+- role変更などの強い管理者処理は Netlify Functions 経由で行う
+- 最初のadminだけはSupabaseの管理画面で手動設定する想定にする
+
+
+Phase 17: プロフィール・フレンド
+-------------------------------
+目的:
+少人数で一緒に使えるようにする。
+
+プロフィール:
+- ユーザー名
+- アイコン
+- 自己紹介
+- メインキューブ
+- ベスト
+- ao5
+- ao12
+- 総ソルブ数
+
+フレンド:
+- フレンド申請
+- 承認
+- 拒否
+- フレンド一覧
+- フレンドのプロフィール
+- フレンドの最近の記録
+
+重くしない:
+- フレンドの記録は最新20件だけ
+- もっと見るで追加取得
+- 全履歴を一気に取らない
+- 画像アップロードは後回し
+- 最初は絵文字やプリセットアイコンでもよい
+
+Codex指示文:
+プロフィール画面とフレンド機能を追加してください。
+
+要件:
+- メインのタイマー画面が重くならないように、プロフィールとフレンド機能は別ページに分ける
+- /profile で自分のプロフィールを表示・編集できる
+- /friends でフレンド一覧、フレンド申請、承認、拒否ができる
+- /user/:id でフレンドのプロフィールを見られる
+- フレンドの記録は最新20件だけ取得する
+- 「もっと見る」で追加取得する
+- 全履歴を一度に取得しない
+- プロフィール画像は重くならないように小さい画像のみ許可する
+- 可能なら最初はプリセットアイコンや絵文字アイコンでも選べるようにする
+- RLSで、自分のプロフィールは編集できるが、他人のプロフィールは編集できないようにする
+- フレンドの記録は deleted_at が null のものだけ表示する
+- 平均やランキングも deleted_at が null の記録だけ使う
+- 管理者は管理画面から全ユーザーを確認できる
+
+
+Phase 18: 週間ランキング
+-----------------------
+目的:
+ツムツムの週間ランキングのように、フレンド内で競えるようにする。
+
+ランキング:
+- 今週のBest
+- 今週のao5
+- 今週のソルブ数
+- 今週の成長
+- フレンド内だけ
+- 毎週リセット
+- deleted_at が null の記録だけ
+
+重くしない:
+- /rankingを開いた時だけ取得
+- 今週分と先週分だけ
+- 全ユーザーランキングは最初は不要
+- タイマー画面では読み込まない
+
+Codex指示文:
+フレンド内の週間ランキング機能を追加してください。
+
+要件:
+- /ranking ページを作る
+- ランキングはフレンド内だけにする
+- 今週のBestランキング
+- 今週のao5ランキング
+- 今週のソルブ数ランキング
+- 今週の成長ランキング
+- deleted_at が null の記録だけを対象にする
+- DNFはBestやao5ではルールに従って除外/処理する
+- +2はペナルティ込みのタイムで計算する
+- ランキング画面を開いた時だけSupabaseから取得する
+- 取得する記録は今週分と必要な比較用の先週分だけにする
+- 全履歴を一度に取得しない
+- タイマー画面の動作が重くならないようにする
+
+
+Phase 19: パスワードリセット
+---------------------------
+目的:
+ログインできなくなった時に復旧できるようにする。
+これは後回しでもよい。
+
+ユーザー自身:
+- /forgot-password
+- /reset-password
+- メールでリセットリンク
+- 新しいパスワード設定
+
+管理者補助:
+- /admin/users から「リセットメール送信」
+- 管理者はパスワードを見ない
+- 管理者が勝手にパスワードを決める方式は避ける
+- 連打防止
+
+Codex指示文:
+Supabase Authのパスワードリセット機能を追加してください。
+
+要件:
+- /forgot-password ページを作る
+- /reset-password ページを作る
+- ログイン画面に「パスワードを忘れた」リンクを追加する
+- /forgot-password ではメールアドレスを入力して、supabase.auth.resetPasswordForEmail() を呼ぶ
+- resetPasswordForEmail では redirectTo に /reset-password のURLを指定する
+- /reset-password では新しいパスワードと確認用パスワードを入力できるようにする
+- 2つのパスワードが一致しない場合はエラー表示する
+- パスワードが短すぎる場合もエラー表示する
+- パスワード変更には supabase.auth.updateUser({ password: newPassword }) を使う
+- 成功したら「パスワードを変更しました」と表示してログイン画面へ戻す
+- エラー時は分かりやすい日本語メッセージを表示する
+- service_role key は絶対にフロントに置かない
+
+管理者補助:
+- /admin/users に「パスワードリセットメールを送る」ボタンを追加する
+- adminユーザーだけが使える
+- 管理者がユーザーの現在のパスワードを見られる機能は作らない
+- 必要な管理者処理は Netlify Functions などサーバー側で行う
+- 送信後60秒は同じユーザーに再送できないようにする
+
+
+後回しでいい機能
+----------------
+最初から入れなくていい:
+- 動画分析
+- 音声認識
+- チャット
+- リアルタイム通知
+- 全ユーザーランキング
+- プロフィール画像アップロード
+- 画像カード共有
+- AIによる完全自動手順生成
+- 管理者による直接パスワード変更
+
+理由:
+重くなりやすい、または完成が遠くなる。
+まずは「使えるタイマー」と「軽い分析」を完成させる。
+
+
+最初の完成目標
+--------------
+まず目指すべきMVP:
+
+- React + Vite + TypeScript
+- 通常タイマー
+- CFOP Split Mode
+- Cross Practice
+- F2L Practice
+- F2L Pair Split
+- スクランブル
+- 履歴
+- localStorage保存
+- +2 / DNF
+- 保存しない
+- 履歴削除
+- soft delete
+- 削除済みは平均から除外
+- ao5 / ao12
+- 各フェーズ平均
+- ダーク/ライト切替
+- 計測中専用UI
+- 誤タップ防止
+- PWA
+- Share機能
+- Helpページ
+
+これが完成したら、すでに普通に使える。
+その後に Supabase、管理者、プロフィール、フレンド、ランキング、Analyzerを追加する。
+
+
+VSCode + Codexで進める時のやり方
+-------------------------------
+1. 新しいフォルダを作る
+2. VSCodeで開く
+3. Codexに「Phase 1だけ作って」と頼む
+4. npm install
+5. npm run dev
+6. 動かして確認
+7. エラーが出たらCodexに修正させる
+8. Gitでコミット
+9. 次のPhaseへ進む
+
+コツ:
+- 一度に全部頼まない
+- 1機能ずつ追加
+- 変更したファイルを毎回説明させる
+- 実行コマンドも説明させる
+- エラーが出たらエラー文をそのまま貼る
+- Supabaseを入れる前にローカル版を完成させる
+
+Codexに最初に言うと良い共通指示:
+今から一緒に段階的に作ります。
+一度に全部作らず、まずは指定したPhaseだけを完成させてください。
+変更したファイルと実行コマンドを毎回説明してください。
+エラーが出たら、修正方針を説明してから直してください。
+重くならないように、不要なライブラリは入れないでください。
+タイマー中は通信や重い処理をしない設計にしてください。
+TypeScriptの型を丁寧に定義してください。
+service_role key は絶対にフロントエンドに置かないでください。
+RLSが必要な機能では、安全なポリシーを前提にしてください。
+
+
+データ型のざっくり例
+--------------------
+Solve:
+- id
+- userId
+- mode
+- totalTime
+- crossTime
+- f2lTime
+- ollTime
+- pllTime
+- pair1Time
+- pair2Time
+- pair3Time
+- pair4Time
+- scramble
+- penalty
+- tags
+- sessionId
+- deletedAt
+- createdAt
+- synced
+
+Mode:
+- normal
+- cfop_split
+- cross_practice
+- f2l_practice
+- f2l_pair_split
+
+Penalty:
+- none
+- +2
+- DNF
+
+LearningStatus:
+- unlearned
+- learning
+- learned
+- weak
+
+UserRole:
+- user
+- admin
+
+
+UIイメージ
+----------
+メインタイマー画面:
+- 上: スクランブル
+- 中央: 大きいタイマー
+- 下: ao5 / ao12
+- 下部ナビ: Timer / History / Analysis / Rank / Me
+
+計測中:
+- 秒数だけ大きく表示
+- CFOP Splitなら現在フェーズだけ追加表示
+- 下ナビ非表示
+- スクロール不可
+- 文字選択不可
+
+履歴:
+- カード型
+- 各記録に Share / +2 / DNF / 削除
+
+Analyzer:
+- 入力方法: スクランブル / 色エディター
+- 3Dキューブ
+- スクランブル再生
+- Cross候補
+- F2L候補
+- OLL判定
+- PLL判定
+- 手順再生
+
+Learn:
+- F2L / OLL / PLL
+- 一覧
+- 詳細
+- 形の画像
+- 手順
+- 覚えた / 練習中 / 苦手
+
+
+最後に
+------
+このアプリは機能を全部入れると大きくなる。
+でも、実装順を守ればかなり現実的。
+
+おすすめ順は:
+1. 軽いローカルタイマー
+2. UI/誤操作対策
+3. CFOP Split
+4. soft delete
+5. Practice
+6. Analysis / Share
+7. PWA / Help
+8. Learn
+9. Analyzer
+10. Supabase
+11. 管理者
+12. フレンド
+13. 週間ランキング
+14. パスワードリセット
+
+まずは「ログインなしで毎日使えるタイマー」を完成させるのが最優先。

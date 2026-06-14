@@ -72,6 +72,43 @@ export interface Database {
         };
         Relationships: [];
       };
+      feedback_reports: {
+        Row: {
+          id: string;
+          category: "bug" | "request" | "other";
+          message: string;
+          contact: string | null;
+          page_path: string | null;
+          current_scramble: string | null;
+          timer_mode: string | null;
+          user_agent: string | null;
+          status: "open" | "reviewing" | "resolved" | "archived";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          category: "bug" | "request" | "other";
+          message: string;
+          contact?: string | null;
+          page_path?: string | null;
+          current_scramble?: string | null;
+          timer_mode?: string | null;
+          user_agent?: string | null;
+          status?: "open" | "reviewing" | "resolved" | "archived";
+          created_at?: string;
+        };
+        Update: {
+          category?: "bug" | "request" | "other";
+          message?: string;
+          contact?: string | null;
+          page_path?: string | null;
+          current_scramble?: string | null;
+          timer_mode?: string | null;
+          user_agent?: string | null;
+          status?: "open" | "reviewing" | "resolved" | "archived";
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

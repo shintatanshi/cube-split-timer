@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import type {
   CfopPhase,
   F2lPairPhase,
@@ -11,6 +11,7 @@ import type {
   ThemePreference,
 } from "./types";
 import { HELP_TOPICS, TUTORIAL_STEPS } from "./helpContent";
+import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
 import { generateScramble } from "./lib/scramble";
 import {
   clearCurrentSolveDraft,
@@ -52,7 +53,7 @@ const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
 
-type AppPage = "timer" | "help" | "learn" | "analyzer" | "scramble";
+type AppPage = "timer" | "help" | "learn" | "analyzer" | "scramble" | "feedback";
 
 interface LocationInfo {
   page: AppPage;
@@ -220,7 +221,9 @@ function getLocationInfo(): LocationInfo {
             ? "analyzer"
             : pathname === "/scramble"
               ? "scramble"
-              : "timer",
+              : pathname === "/feedback"
+                ? "feedback"
+                : "timer",
     path: pathname,
     hash,
   };
@@ -1263,6 +1266,10 @@ export default function App() {
     navigateTo("/");
   }, [navigateTo]);
 
+  const openFeedback = useCallback(() => {
+    navigateTo("/feedback");
+  }, [navigateTo]);
+
   const openCurrentScrambleInAnalyzer = useCallback(() => {
     navigateTo(`/analyzer?scramble=${encodeURIComponent(scramble)}`);
   }, [navigateTo, scramble]);
@@ -1408,6 +1415,17 @@ export default function App() {
     );
   }
 
+  if (locationInfo.page === "feedback") {
+    return (
+      <FeedbackPage
+        currentScramble={scramble}
+        timerMode={timerMode}
+        onBack={openTimer}
+        onOpenTimer={openTimer}
+      />
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -1421,6 +1439,9 @@ export default function App() {
           </button>
           <button className="ghost-button" type="button" onClick={() => navigateTo("/analyzer")}>
             Analyzer
+          </button>
+          <button className="ghost-button" type="button" onClick={openFeedback}>
+            意見箱
           </button>
           <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
           <button className="icon-button" type="button" aria-label="Profile">
@@ -1467,6 +1488,9 @@ export default function App() {
               </button>
             ))}
           </div>
+          <button className="ghost-button" type="button" onClick={openFeedback}>
+            意見箱
+          </button>
           <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
         </div>
 
@@ -1790,6 +1814,158 @@ function TutorialDialog({ onClose, onOpenHelp }: TutorialDialogProps) {
         </div>
       </section>
     </div>
+  );
+}
+
+interface FeedbackPageProps {
+  currentScramble: string;
+  timerMode: SolveMode;
+  onBack: () => void;
+  onOpenTimer: () => void;
+}
+
+const FEEDBACK_CATEGORY_OPTIONS: Array<{ value: FeedbackCategory; label: string }> = [
+  { value: "bug", label: "バグ報告" },
+  { value: "request", label: "直してほしいこと / 要望" },
+  { value: "other", label: "その他" },
+];
+
+function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: FeedbackPageProps) {
+  const [category, setCategory] = useState<FeedbackCategory>("bug");
+  const [message, setMessage] = useState("");
+  const [contact, setContact] = useState("");
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (message.trim().length < 5) {
+      setStatus("error");
+      setStatusMessage("内容をもう少し詳しく書いてください。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await submitFeedbackReport({
+        category,
+        message,
+        contact,
+        pagePath: "/feedback",
+        currentScramble,
+        timerMode,
+      });
+      setStatus("success");
+      setStatusMessage("送信しました。ありがとうございます。");
+      setMessage("");
+      setContact("");
+    } catch {
+      setStatus("error");
+      setStatusMessage(
+        "送信できませんでした。時間を置いてもう一度試すか、Supabaseの設定を確認してください。",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="app-shell feedback-page">
+      <header className="app-header feedback-header">
+        <div>
+          <p className="eyebrow">Feedback</p>
+          <h1>意見箱</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={onBack}>
+            戻る
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenTimer}>
+            Timerへ戻る
+          </button>
+        </div>
+      </header>
+
+      <section className="feedback-card" aria-label="Feedback form">
+        <div>
+          <p className="eyebrow">Report</p>
+          <h2>バグや直してほしいところを送る</h2>
+          <p className="feedback-lead">
+            送信内容は管理者がSupabaseの `feedback_reports` テーブルで確認できます。
+            返信が必要な場合だけ、連絡先を書いてください。
+          </p>
+        </div>
+
+        {status !== "idle" && (
+          <div className={`feedback-status feedback-status-${status}`} role="status">
+            {statusMessage}
+          </div>
+        )}
+
+        <form className="feedback-form" onSubmit={handleSubmit}>
+          <label>
+            種類
+            <select
+              value={category}
+              onChange={(event) => setCategory(event.target.value as FeedbackCategory)}
+            >
+              {FEEDBACK_CATEGORY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            内容
+            <textarea
+              required
+              maxLength={4000}
+              rows={8}
+              value={message}
+              placeholder="どの画面で、何をしたときに、どうなったかを書いてください。"
+              onChange={(event) => setMessage(event.target.value)}
+            />
+          </label>
+
+          <label>
+            連絡先 任意
+            <input
+              maxLength={240}
+              value={contact}
+              placeholder="メール、SNS IDなど。返信不要なら空でOK"
+              onChange={(event) => setContact(event.target.value)}
+            />
+          </label>
+
+          <div className="feedback-context" aria-label="Attached context">
+            <p>
+              <span>Mode</span>
+              <strong>{getModeLabel(timerMode)}</strong>
+            </p>
+            <p>
+              <span>Scramble</span>
+              <strong>{currentScramble}</strong>
+            </p>
+          </div>
+
+          <div className="feedback-actions">
+            <button className="primary-button" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "送信中..." : "送信する"}
+            </button>
+            <button className="ghost-button" type="button" onClick={onBack}>
+              キャンセル
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
   );
 }
 

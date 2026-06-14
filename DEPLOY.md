@@ -119,9 +119,10 @@ git push -u origin main
 
 ```text
 supabase/migrations/001_initial_schema.sql
+supabase/migrations/002_feedback_reports.sql
 ```
 
-Supabase画面で実行する手順:
+Supabase画面で、上から順番に実行します。
 
 1. Supabaseのプロジェクトを開く
 2. 左メニューの `SQL Editor`
@@ -129,18 +130,33 @@ Supabase画面で実行する手順:
 4. `supabase/migrations/001_initial_schema.sql` の中身を全部コピー
 5. SQL Editorに貼り付け
 6. `Run`
+7. もう一度 `New query`
+8. `supabase/migrations/002_feedback_reports.sql` の中身を全部コピー
+9. SQL Editorに貼り付け
+10. `Run`
 
 作成されるテーブル:
 
 - `profiles`
 - `solve_sessions`
+- `feedback_reports`
 
 有効になるもの:
 
 - Row Level Security
 - 自分のプロフィールだけ読める・更新できるポリシー
 - 自分の記録だけ読める・追加できる・更新できるポリシー
+- サイト利用者が意見箱へ匿名投稿できるポリシー
 - 新規ユーザー作成時に `profiles` を作るトリガー
+
+意見箱の内容を見る場所:
+
+1. Supabaseのプロジェクトを開く
+2. 左メニューの `Table Editor`
+3. `feedback_reports` を開く
+4. `created_at` が新しい行を確認する
+
+公開サイト側からは投稿だけでき、通常ユーザーが一覧を読むことはできません。
 
 ## 6. Supabase URL と anon key の確認場所
 

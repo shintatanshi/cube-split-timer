@@ -319,6 +319,11 @@ h2 {
   opacity: 0.45;
 }
 
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .scramble-text {
   min-height: 74px;
   margin: 0;
@@ -3051,6 +3056,132 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   padding-bottom: 40px;
 }
 
+.feedback-page {
+  padding-bottom: 40px;
+}
+
+.feedback-header {
+  align-items: center;
+}
+
+.feedback-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px var(--shadow);
+}
+
+.feedback-card h2 {
+  margin-bottom: 8px;
+}
+
+.feedback-lead {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 14px;
+}
+
+.feedback-form label {
+  display: grid;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.feedback-form select,
+.feedback-form input,
+.feedback-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.feedback-form select,
+.feedback-form input {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.feedback-form textarea {
+  min-height: 160px;
+  padding: 12px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.feedback-form select:focus,
+.feedback-form input:focus,
+.feedback-form textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.feedback-context {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.feedback-context p {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.feedback-context span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.feedback-context strong {
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-status {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.feedback-status-success {
+  border-color: color-mix(in srgb, #57d889 48%, var(--border));
+  background: color-mix(in srgb, #57d889 12%, var(--panel));
+  color: #a6f3be;
+}
+
+.feedback-status-error {
+  border-color: color-mix(in srgb, #ff6f7d 48%, var(--border));
+  background: color-mix(in srgb, #ff6f7d 12%, var(--panel));
+  color: #ffb0b8;
+}
+
 .help-header {
   align-items: center;
 }
@@ -3443,6 +3574,7 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   .post-solve-actions,
   .undo-toast,
   .help-hero,
+  .feedback-actions,
   .learn-landscape-hint,
   .learn-hero,
   .learn-section-heading,

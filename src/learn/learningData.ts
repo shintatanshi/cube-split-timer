@@ -1,4 +1,6 @@
 import type {
+  F2lCase,
+  F2lCaseImage,
   F2lHighlightConfig,
   F2lTargetSlot,
   LearningCase,
@@ -6,6 +8,7 @@ import type {
   LearningHighlightConfig,
   LearningSticker,
 } from "../types";
+import { APPROVED_F2L_CASES } from "./f2lCaseData";
 
 type ImageModuleMap = Record<string, string>;
 
@@ -24,7 +27,7 @@ export const LEARNING_CATEGORY_LABELS: Record<LearningCategory, string> = {
 };
 
 export const LEARNING_CATEGORY_DESCRIPTIONS: Record<LearningCategory, string> = {
-  f2l: "src/assets/learn/f2l に入れた画像から自動でケースを読み込みます。",
+  f2l: "src/assets/learn/f2l の画像ケースと、承認済みの追加F2Lデータを表示します。",
   oll: "src/assets/learn/oll に入れた画像から自動でケースを読み込みます。",
   pll: "src/assets/learn/pll に入れた画像から自動でケースを読み込みます。",
 };
@@ -132,6 +135,76 @@ function createDefaultF2lHighlight(): F2lHighlightConfig {
   };
 }
 
+const F2L_OFFICIAL_SLOT_CONFIG: Record<
+  Exclude<F2lTargetSlot, "auto">,
+  {
+    slot: F2lCaseImage["slot"];
+    targetCorner: [number, number, number];
+    targetEdge: [number, number, number];
+    centers: F2lHighlightConfig["centers"];
+  }
+> = {
+  FR: { slot: "right", targetCorner: [1, -1, 1], targetEdge: [1, 0, 1], centers: ["D", "F", "R"] },
+  FL: { slot: "left", targetCorner: [-1, -1, 1], targetEdge: [-1, 0, 1], centers: ["D", "F", "L"] },
+  BR: { slot: "back", targetCorner: [1, -1, -1], targetEdge: [1, 0, -1], centers: ["D", "B", "R"] },
+  BL: { slot: "wrong", targetCorner: [-1, -1, -1], targetEdge: [-1, 0, -1], centers: ["D", "B", "L"] },
+};
+
+const F2L_CASE_TYPE_LABELS: Record<F2lCase["caseType"], string> = {
+  basic41: "基本41",
+  advanced: "追加F2L",
+  backSlot: "裏F2L",
+  insertVariation: "インサート",
+  extraction: "取り出し",
+  rotationless: "回転削減",
+  other: "その他",
+};
+
+function getOfficialF2lSlotConfig(caseItem: F2lCase) {
+  return caseItem.targetSlot === "auto"
+    ? F2L_OFFICIAL_SLOT_CONFIG.FR
+    : F2L_OFFICIAL_SLOT_CONFIG[caseItem.targetSlot];
+}
+
+function createApprovedF2lLearningCase(caseItem: F2lCase): LearningCase {
+  const slotConfig = getOfficialF2lSlotConfig(caseItem);
+  const caseTypeLabel = F2L_CASE_TYPE_LABELS[caseItem.caseType];
+  const id = caseItem.learnCaseId ?? `official-${caseItem.id}`;
+
+  return {
+    id,
+    type: "f2l",
+    category: "f2l",
+    name: caseItem.name,
+    title: caseItem.name,
+    subtitle: `${caseTypeLabel} / ${caseItem.targetSlot} / ${caseItem.moveCount} moves`,
+    algorithm: caseItem.alg,
+    alternative: caseItem.inverseAlg,
+    description: caseItem.description,
+    image: {
+      kind: "f2l",
+      slot: slotConfig.slot,
+      relation: caseItem.caseType === "backSlot" ? "backSlot" : "paired",
+      corner: "topRight",
+      edge: "top",
+    },
+    imageUrl: "",
+    highlightConfig: {
+      kind: "f2l",
+      startCorner: "topRight",
+      startEdge: "top",
+      targetCorner: slotConfig.targetCorner,
+      targetEdge: slotConfig.targetEdge,
+      targetSlot: caseItem.targetSlot,
+      highlightMode: "auto",
+      slot: slotConfig.slot,
+      centers: slotConfig.centers,
+    },
+    shape: repeatSticker("empty", 9),
+    tags: ["正式F2L", caseTypeLabel, caseItem.difficulty, ...caseItem.tags],
+  };
+}
+
 function createDefaultHighlightConfig(category: LearningCategory): LearningHighlightConfig {
   if (category === "f2l") {
     return createDefaultF2lHighlight();
@@ -218,7 +291,9 @@ function getImageCasesByCategory(category: LearningCategory): LearningCase[] {
 }
 
 export const LEARNING_CASES: LearningCase[] = LEARNING_CATEGORIES.flatMap((category) =>
-  getImageCasesByCategory(category),
+  category === "f2l"
+    ? [...APPROVED_F2L_CASES.map(createApprovedF2lLearningCase), ...getImageCasesByCategory(category)]
+    : getImageCasesByCategory(category),
 );
 
 export function getLearningCasesByCategory(category: LearningCategory): LearningCase[] {

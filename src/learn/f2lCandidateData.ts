@@ -117,6 +117,7 @@ function candidate(
   tags: string[],
   description: string,
   notes?: string,
+  status: F2lCandidate["status"] = "approved",
 ): F2lCandidate {
   return createCandidate({
     id,
@@ -129,6 +130,7 @@ function candidate(
     description,
     source: [REVIEW_SOURCE],
     notes,
+    status,
   });
 }
 
@@ -257,6 +259,7 @@ export const F2L_CANDIDATES: F2lCandidate[] = [
 
 export const F2L_CANDIDATE_SUMMARY = {
   total: F2L_CANDIDATES.length,
+  approved: F2L_CANDIDATES.filter((candidateItem) => candidateItem.status === "approved").length,
   duplicates: findDuplicateF2lCandidates(F2L_CANDIDATES).length,
   invalid: F2L_CANDIDATES.filter((candidateItem) => !validateF2lCandidate(candidateItem).ok).length,
 };

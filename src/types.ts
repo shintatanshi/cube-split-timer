@@ -55,6 +55,38 @@ export interface F2lCandidate {
   notes?: string;
 }
 
+export interface F2lCase {
+  id: string;
+  caseType: F2lCaseType;
+  name: string;
+  alg: string;
+  inverseAlg?: string;
+  targetSlot: F2lTargetSlot;
+  difficulty: F2lCandidateDifficulty;
+  tags: string[];
+  moveCount: number;
+  score?: number;
+  description: string;
+  source?: F2lCandidateSource[];
+  learnCaseId?: string;
+  notes?: string;
+}
+
+export type AnalyzerPhase = "cross" | "f2l" | "oll" | "pll";
+
+export interface AnalyzerCandidate {
+  id: string;
+  phase: AnalyzerPhase;
+  name: string;
+  algorithm: string;
+  moveCount?: number;
+  description?: string;
+  targetSlot?: F2lTargetSlot;
+  learnCaseId?: string;
+  tags?: string[];
+  caseType?: F2lCaseType;
+}
+
 export type F2lPieceSpot =
   | "topLeft"
   | "top"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
 import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
@@ -17,9 +17,13 @@ import type {
   CrossSolution,
   F2lPairCandidate,
 } from "./cubeState";
-import type { LearningCase } from "../types";
+import type { AnalyzerCandidate, LearningCase } from "../types";
+
+const AlgorithmPlayer = lazy(() => import("../learn/AlgorithmPlayer"));
 
 type PlaybackMode = "scramble" | "scramble-solve";
+type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
+type AnimationSpeed = 0.25 | 0.5 | 1 | 1.5 | 2;
 type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
 type CrossTargetFace = "D" | "U";
@@ -118,6 +122,8 @@ const INITIAL_VIEW_ROTATION = {
 
 const ANALYZER_SETTINGS_STORAGE_KEY = "cubeSplitTimer.analyzerSettings.v1";
 const ANALYZER_STATE_STORAGE_KEY = "cube-split-timer-analyzer-state";
+const ANALYZER_SPEED_STORAGE_KEY = "cubeSplitTimer.analyzerSpeed.v1";
+const ANIMATION_SPEED_OPTIONS: AnimationSpeed[] = [0.25, 0.5, 1, 1.5, 2];
 const BASIC_SCRAMBLE_MOVES = new Set([
   "U",
   "U'",
@@ -333,6 +339,26 @@ function saveAnalyzerSettings(settings: AnalyzerSettings): void {
     localStorage.setItem(ANALYZER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Analyzer settings are local convenience data; the page should still work.
+  }
+}
+
+function loadAnalyzerSpeed(): AnimationSpeed {
+  try {
+    const savedSpeed = Number(localStorage.getItem(ANALYZER_SPEED_STORAGE_KEY));
+
+    return ANIMATION_SPEED_OPTIONS.includes(savedSpeed as AnimationSpeed)
+      ? (savedSpeed as AnimationSpeed)
+      : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function saveAnalyzerSpeed(speed: AnimationSpeed): void {
+  try {
+    localStorage.setItem(ANALYZER_SPEED_STORAGE_KEY, String(speed));
+  } catch {
+    // Playback speed is a convenience setting; ignore storage failures.
   }
 }
 
@@ -844,6 +870,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const crossJobIdRef = useRef(0);
   const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
   const f2lAnalysisJobIdRef = useRef(0);
+  const playerPanelRef = useRef<HTMLElement | null>(null);
   const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
   const lastRestoredSceneIdRef = useRef(0);
   const skipNextSettingsSaveCountRef = useRef(0);
@@ -867,6 +894,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   );
   const [currentIndex, setCurrentIndex] = useState(() => initialAnalyzerState?.currentIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() => loadAnalyzerSpeed());
+  const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [isSearchingCross, setIsSearchingCross] = useState(false);
   const [crossResults, setCrossResults] = useState<CrossSearchResult[]>(
     () => initialAnalyzerState?.crossResults ?? [],
@@ -889,6 +918,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [selectedF2lPairId, setSelectedF2lPairId] = useState<string | null>(
     () => initialAnalyzerState?.selectedF2lPairId ?? null,
   );
+  const [helperCaseId, setHelperCaseId] = useState<string | null>(null);
   const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(null);
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
@@ -1119,6 +1149,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedCrossSolution(null);
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
+    setHelperCaseId(null);
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
     f2lAnalysisJobIdRef.current += 1;
@@ -1144,6 +1175,63 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     saveAnalyzerSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    saveAnalyzerSpeed(animationSpeed);
+  }, [animationSpeed]);
+
+  const enterAnalyzerFullscreen = useCallback(() => {
+    setIsAnalyzerFullscreen(true);
+
+    const element = playerPanelRef.current;
+    if (element?.requestFullscreen) {
+      void element.requestFullscreen().catch(() => {
+        // Fullscreen APIが使えない環境ではCSSの疑似全画面で表示します。
+      });
+    }
+  }, []);
+
+  const exitAnalyzerFullscreen = useCallback(() => {
+    setIsAnalyzerFullscreen(false);
+
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("analyzer-fullscreen-open", isAnalyzerFullscreen);
+
+    return () => {
+      document.body.classList.remove("analyzer-fullscreen-open");
+    };
+  }, [isAnalyzerFullscreen]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsAnalyzerFullscreen(false);
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isAnalyzerFullscreen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        exitAnalyzerFullscreen();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [exitAnalyzerFullscreen, isAnalyzerFullscreen]);
 
   useEffect(() => {
     if (copyStatus === "idle") {
@@ -1290,7 +1378,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           return;
         }
 
-        const ratio = Math.min(1, (now - start) / TURN_DURATION_MS);
+        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / animationSpeed));
         pivot.rotation[descriptor.axis] = descriptor.angle * easeInOut(ratio);
 
         if (ratio < 1) {
@@ -1331,7 +1419,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     state.cubeGroup.remove(pivot);
     isAnimatingRef.current = false;
     return true;
-  }, []);
+  }, [animationSpeed]);
 
   const stepNext = useCallback(async () => {
     if (!canUseActiveSequence || currentIndex >= activeMoves.length) {
@@ -1462,6 +1550,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedCrossSolution(null);
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
+    setHelperCaseId(null);
     setCopyStatus("idle");
     setAiNotice(null);
 
@@ -1578,6 +1667,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   };
 
   const f2lLearningCases = useMemo(() => getLearningCasesByCategory("f2l"), []);
+  const ollLearningCases = useMemo(() => getLearningCasesByCategory("oll"), []);
+  const pllLearningCases = useMemo(() => getLearningCasesByCategory("pll"), []);
   const selectedF2lPair =
     f2lCandidates.find((candidate) => candidate.id === selectedF2lPairId) ??
     f2lCandidates[0] ??
@@ -1589,6 +1680,86 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     return getF2lRecommendation(selectedF2lPair, f2lLearningCases);
   }, [f2lLearningCases, selectedF2lPair]);
+  const helperCase = useMemo(() => {
+    const learningCases = [...f2lLearningCases, ...ollLearningCases, ...pllLearningCases];
+
+    return (
+      learningCases.find(
+        (caseItem) =>
+          caseItem.id === helperCaseId || getLearningCaseRouteKey(caseItem) === helperCaseId,
+      ) ??
+      selectedF2lRecommendation?.caseItem ??
+      null
+    );
+  }, [f2lLearningCases, helperCaseId, ollLearningCases, pllLearningCases, selectedF2lRecommendation]);
+  const currentAnalyzerStep = useMemo<AnalyzerStepKey>(() => {
+    if (helperCase?.category === "pll") {
+      return isComplete ? "complete" : "pll";
+    }
+
+    if (helperCase?.category === "oll") {
+      return "oll";
+    }
+
+    if (parsedScramble.moves.length === 0) {
+      return "scramble";
+    }
+
+    if (!selectedCrossSolution) {
+      return "cross";
+    }
+
+    const completedF2lSteps = basicF2lPlan?.steps.length ?? 0;
+
+    if (completedF2lSteps <= 0) {
+      return "f2l1";
+    }
+
+    if ((basicF2lPlan?.unresolvedPairs.length ?? 1) === 0) {
+      return "oll";
+    }
+
+    return `f2l${Math.min(4, completedF2lSteps + 1)}` as AnalyzerStepKey;
+  }, [basicF2lPlan, helperCase?.category, isComplete, parsedScramble.moves.length, selectedCrossSolution]);
+  const analyzerStepItems: Array<{ key: AnalyzerStepKey; label: string }> = [
+    { key: "scramble", label: "Scramble" },
+    { key: "cross", label: "Cross" },
+    { key: "f2l1", label: "F2L 1" },
+    { key: "f2l2", label: "F2L 2" },
+    { key: "f2l3", label: "F2L 3" },
+    { key: "f2l4", label: "F2L 4" },
+    { key: "oll", label: "OLL" },
+    { key: "pll", label: "PLL" },
+    { key: "complete", label: "Complete" },
+  ];
+  const ollCandidates = useMemo<AnalyzerCandidate[]>(
+    () =>
+      ollLearningCases.slice(0, 4).map((caseItem) => ({
+        id: caseItem.id,
+        phase: "oll",
+        name: caseItem.title,
+        algorithm: caseItem.algorithm,
+        moveCount: getAlgorithmMoveCount(caseItem.algorithm),
+        description: caseItem.description,
+        learnCaseId: getLearningCaseRouteKey(caseItem),
+        tags: caseItem.tags,
+      })),
+    [ollLearningCases],
+  );
+  const pllCandidates = useMemo<AnalyzerCandidate[]>(
+    () =>
+      pllLearningCases.slice(0, 4).map((caseItem) => ({
+        id: caseItem.id,
+        phase: "pll",
+        name: caseItem.title,
+        algorithm: caseItem.algorithm,
+        moveCount: getAlgorithmMoveCount(caseItem.algorithm),
+        description: caseItem.description,
+        learnCaseId: getLearningCaseRouteKey(caseItem),
+        tags: caseItem.tags,
+      })),
+    [pllLearningCases],
+  );
   const getCrossSearchFaceColorMap = useCallback(
     (targetCrossColor = settings.crossColor): Record<FaceName, CubeColorName> =>
       faceColorMap[settings.crossTargetFace] === targetCrossColor
@@ -1800,6 +1971,71 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }, 0);
   };
 
+  const playLearningCaseCandidate = (caseItem: LearningCase) => {
+    const prefixAlgorithms = [
+      selectedCrossSolution?.algorithm ?? "",
+      ...(caseItem.category !== "f2l" && basicF2lPlan
+        ? basicF2lPlan.steps.map((step) => step.fullAlgorithm)
+        : []),
+    ];
+    const combinedSolve = [...prefixAlgorithms, caseItem.algorithm]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    setHelperCaseId(getLearningCaseRouteKey(caseItem));
+    setSolveInput(combinedSolve);
+    setPlaybackScrambleInput(scrambleInput);
+    setPlaybackSolveInput(combinedSolve);
+    setPlaybackMode("scramble-solve");
+    resetCubeState();
+    const state = sceneStateRef.current;
+
+    if (state) {
+      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
+    }
+
+    setCurrentIndex(0);
+    setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+  };
+
+  const getAnalyzerCandidateCase = (candidate: AnalyzerCandidate): LearningCase | null => {
+    const cases =
+      candidate.phase === "f2l"
+        ? f2lLearningCases
+        : candidate.phase === "oll"
+          ? ollLearningCases
+          : candidate.phase === "pll"
+            ? pllLearningCases
+            : [];
+
+    return (
+      cases.find(
+        (caseItem) =>
+          caseItem.id === candidate.learnCaseId ||
+          getLearningCaseRouteKey(caseItem) === candidate.learnCaseId,
+      ) ?? null
+    );
+  };
+
+  const playAnalyzerCandidate = (candidate: AnalyzerCandidate) => {
+    const caseItem = getAnalyzerCandidateCase(candidate);
+
+    if (caseItem) {
+      playLearningCaseCandidate(caseItem);
+    }
+  };
+
+  const openAnalyzerCandidateLearn = (candidate: AnalyzerCandidate) => {
+    const caseItem = getAnalyzerCandidateCase(candidate);
+
+    if (caseItem) {
+      onNavigate(
+        `/learn/${caseItem.category}/${encodeURIComponent(getLearningCaseRouteKey(caseItem))}`,
+      );
+    }
+  };
+
   const playF2lRecommendation = (recommendation: F2lRecommendation) => {
     if (!selectedCrossSolution) {
       return;
@@ -1810,6 +2046,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       .filter(Boolean)
       .join(" ");
 
+    setHelperCaseId(getLearningCaseRouteKey(recommendation.caseItem));
     setSolveInput(combinedSolve);
     setPlaybackScrambleInput(scrambleInput);
     setPlaybackSolveInput(combinedSolve);
@@ -1901,6 +2138,29 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           Cross色とターゲット面も保存され、次回も同じ設定で開けます。
         </p>
       </section>
+
+      <nav className="analyzer-step-timeline" aria-label="Analyzer learning flow">
+        {analyzerStepItems.map((step, index) => {
+          const currentIndexInFlow = analyzerStepItems.findIndex(
+            (item) => item.key === currentAnalyzerStep,
+          );
+          const stateClass =
+            step.key === currentAnalyzerStep
+              ? "is-current"
+              : index < currentIndexInFlow
+                ? "is-done"
+                : "";
+
+          return (
+            <span
+              className={["analyzer-step-chip", stateClass].filter(Boolean).join(" ")}
+              key={step.key}
+            >
+              {step.label}
+            </span>
+          );
+        })}
+      </nav>
 
       <div className="analyzer-layout">
         <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
@@ -2536,16 +2796,133 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               </p>
             )}
           </section>
+
+          <section className="analyzer-candidate-section" aria-label="OLL candidate preview">
+            <div className="analyzer-subheading">
+              <div>
+                <p className="eyebrow">OLL Preview</p>
+                <h2>次に見るOLL候補</h2>
+              </div>
+            </div>
+            <p className="analyzer-muted">
+              OLL判定はまだ未実装です。ここではLearnにあるOLLケースを、F2L後の確認候補として表示します。
+            </p>
+            <div className="analyzer-candidate-grid">
+              {ollCandidates.length === 0 ? (
+                <p className="analyzer-muted">
+                  src/assets/learn/oll に画像を追加すると、OLL候補が表示されます。
+                </p>
+              ) : (
+                ollCandidates.map((candidate) => (
+                  <article className="analyzer-candidate-card" key={candidate.id}>
+                    <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
+                    <h3>{candidate.name}</h3>
+                    <code>{candidate.algorithm}</code>
+                    <p>{candidate.description}</p>
+                    <div className="analyzer-f2l-tags">
+                      <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                      {(candidate.tags ?? []).slice(0, 3).map((tag) => (
+                        <span key={`${candidate.id}-${tag}`}>{tag}</span>
+                      ))}
+                    </div>
+                    <div className="analyzer-f2l-actions">
+                      <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
+                        メイン3Dで見る
+                      </button>
+                      <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
+                        Learn詳細
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
+
+          <section className="analyzer-candidate-section" aria-label="PLL candidate preview">
+            <div className="analyzer-subheading">
+              <div>
+                <p className="eyebrow">PLL Preview</p>
+                <h2>最後に見るPLL候補</h2>
+              </div>
+            </div>
+            <p className="analyzer-muted">
+              PLL判定はまだ未実装です。ここではLearnにあるPLLケースを、完成までの学習フロー用に表示します。
+            </p>
+            <div className="analyzer-candidate-grid">
+              {pllCandidates.length === 0 ? (
+                <p className="analyzer-muted">
+                  src/assets/learn/pll に画像を追加すると、PLL候補が表示されます。
+                </p>
+              ) : (
+                pllCandidates.map((candidate) => (
+                  <article className="analyzer-candidate-card" key={candidate.id}>
+                    <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
+                    <h3>{candidate.name}</h3>
+                    <code>{candidate.algorithm}</code>
+                    <p>{candidate.description}</p>
+                    <div className="analyzer-f2l-tags">
+                      <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                      {(candidate.tags ?? []).slice(0, 3).map((tag) => (
+                        <span key={`${candidate.id}-${tag}`}>{tag}</span>
+                      ))}
+                    </div>
+                    <div className="analyzer-f2l-actions">
+                      <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
+                        メイン3Dで見る
+                      </button>
+                      <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
+                        Learn詳細
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
         </section>
 
-        <section className="analyzer-panel analyzer-player-panel" aria-label="Virtual cube">
+        <section
+          ref={playerPanelRef}
+          className={[
+            "analyzer-panel analyzer-player-panel",
+            isAnalyzerFullscreen ? "is-fullscreen" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          aria-label="Virtual cube"
+        >
           <div className="analyzer-player-header">
             <div>
               <p className="eyebrow">3D Cube</p>
               <h2>仮想キューブ</h2>
             </div>
-            <div className="analyzer-step">
-              Step: {currentIndex} / {activeMoves.length}
+            <div className="analyzer-player-actions">
+              <label className="analyzer-speed-control">
+                <span>Speed</span>
+                <select
+                  value={animationSpeed}
+                  onChange={(event) =>
+                    setAnimationSpeed(Number(event.target.value) as AnimationSpeed)
+                  }
+                >
+                  {ANIMATION_SPEED_OPTIONS.map((speed) => (
+                    <option key={speed} value={speed}>
+                      {speed}x
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="analyzer-step">
+                Step: {currentIndex} / {activeMoves.length}
+              </div>
+              <button
+                type="button"
+                className="analyzer-fullscreen-button"
+                onClick={isAnalyzerFullscreen ? exitAnalyzerFullscreen : enterAnalyzerFullscreen}
+              >
+                {isAnalyzerFullscreen ? "閉じる" : "全画面"}
+              </button>
             </div>
           </div>
 
@@ -2613,6 +2990,49 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               ))
             )}
           </div>
+
+          <aside className="analyzer-helper-panel" aria-label="Small learning animation">
+            <div className="analyzer-subheading">
+              <div>
+                <p className="eyebrow">Helper animation</p>
+                <h2>候補単体の補助再生</h2>
+              </div>
+              {helperCase && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onNavigate(
+                      `/learn/${helperCase.category}/${encodeURIComponent(
+                        getLearningCaseRouteKey(helperCase),
+                      )}`,
+                    )
+                  }
+                >
+                  Learn詳細
+                </button>
+              )}
+            </div>
+            {helperCase ? (
+              <>
+                <p className="analyzer-muted">
+                  {helperCase.title} / {helperCase.algorithm}
+                </p>
+                <div className="analyzer-helper-player-frame">
+                  <Suspense fallback={<p className="analyzer-muted">3Dプレイヤーを読み込み中...</p>}>
+                    <AlgorithmPlayer
+                      caseItem={helperCase}
+                      headingLabel="Mini Preview"
+                      headingTitle="補助アニメーション"
+                    />
+                  </Suspense>
+                </div>
+              </>
+            ) : (
+              <p className="analyzer-muted">
+                F2L / OLL / PLL候補を選ぶと、ここに小さな教材アニメーションを表示します。
+              </p>
+            )}
+          </aside>
         </section>
       </div>
     </main>

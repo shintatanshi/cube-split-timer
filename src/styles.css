@@ -1478,6 +1478,7 @@ h2 {
 }
 
 .analyzer-selected-cross button,
+.analyzer-basic-f2l-step-head button,
 .analyzer-f2l-actions button {
   min-height: 34px;
   border: 1px solid var(--border);
@@ -1487,6 +1488,81 @@ h2 {
   color: var(--text-strong);
   cursor: pointer;
   font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.analyzer-basic-f2l-plan {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-muted));
+}
+
+.analyzer-basic-f2l-plan h3,
+.analyzer-basic-f2l-plan p {
+  margin: 0;
+}
+
+.analyzer-basic-f2l-plan p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.analyzer-basic-f2l-heading,
+.analyzer-basic-f2l-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analyzer-basic-f2l-summary {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.analyzer-basic-f2l-summary span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.analyzer-basic-f2l-summary strong {
+  color: var(--text-strong);
+}
+
+.analyzer-basic-f2l-steps {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analyzer-basic-f2l-steps li {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-soft) 58%, transparent);
+}
+
+.analyzer-basic-f2l-steps strong {
+  color: var(--text-strong);
+}
+
+.analyzer-basic-f2l-steps code {
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
   font-weight: 900;
 }
 
@@ -3557,9 +3633,15 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   }
 
   .analyzer-player-header,
-  .analyzer-now {
+  .analyzer-now,
+  .analyzer-basic-f2l-heading,
+  .analyzer-basic-f2l-step-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .analyzer-basic-f2l-summary {
+    text-align: left;
   }
 
   .analyzer-canvas-frame {

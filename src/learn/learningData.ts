@@ -1,5 +1,6 @@
 import type {
   F2lHighlightConfig,
+  F2lTargetSlot,
   LearningCase,
   LearningCategory,
   LearningHighlightConfig,
@@ -7,6 +8,12 @@ import type {
 } from "../types";
 
 type ImageModuleMap = Record<string, string>;
+
+interface F2lCaseOverride {
+  targetSlot?: F2lTargetSlot;
+  highlightMode?: F2lHighlightConfig["highlightMode"];
+  manualHighlight?: F2lHighlightConfig["manualHighlight"];
+}
 
 export const LEARNING_CATEGORIES: LearningCategory[] = ["f2l", "oll", "pll"];
 
@@ -45,6 +52,17 @@ const LEARN_IMAGE_MODULES = {
     query: "?url",
   }),
 } satisfies Record<LearningCategory, ImageModuleMap>;
+
+const F2L_CASE_OVERRIDES: Record<string, F2lCaseOverride> = {
+  // Example:
+  // R_U_Rp: { targetSlot: "FR" },
+  // Lp_Up_L: { targetSlot: "FL" },
+  // Custom manual cubie IDs use solved-position IDs:
+  // Some_Special_Case: {
+  //   highlightMode: "manual",
+  //   manualHighlight: { corner: "corner:1,-1,1", edge: "edge:1,0,1" },
+  // },
+};
 
 function repeatSticker(sticker: LearningSticker, count: number): LearningSticker[] {
   return Array.from({ length: count }, () => sticker);
@@ -107,6 +125,8 @@ function createDefaultF2lHighlight(): F2lHighlightConfig {
     startEdge: "right",
     targetCorner: [1, -1, 1],
     targetEdge: [1, 0, 1],
+    targetSlot: "auto",
+    highlightMode: "auto",
     slot: "right",
     centers: ["U", "F", "R"],
   };
@@ -134,6 +154,28 @@ function createDefaultHighlightConfig(category: LearningCategory): LearningHighl
   };
 }
 
+function applyF2lCaseOverride(
+  config: LearningHighlightConfig,
+  baseName: string,
+): LearningHighlightConfig {
+  if (config.kind !== "f2l") {
+    return config;
+  }
+
+  const override = F2L_CASE_OVERRIDES[baseName];
+
+  if (!override) {
+    return config;
+  }
+
+  return {
+    ...config,
+    targetSlot: override.targetSlot ?? config.targetSlot,
+    highlightMode: override.highlightMode ?? config.highlightMode,
+    manualHighlight: override.manualHighlight ?? config.manualHighlight,
+  };
+}
+
 function createLearningCaseFromImage(
   category: LearningCategory,
   path: string,
@@ -143,6 +185,7 @@ function createLearningCaseFromImage(
   const baseName = removeExtension(fileName);
   const algorithm = fileBaseNameToAlgorithm(baseName);
   const label = LEARNING_CATEGORY_LABELS[category];
+  const highlightConfig = applyF2lCaseOverride(createDefaultHighlightConfig(category), baseName);
 
   return {
     id: makeCaseId(category, baseName),
@@ -162,7 +205,7 @@ function createLearningCaseFromImage(
       path,
     },
     imageUrl,
-    highlightConfig: createDefaultHighlightConfig(category),
+    highlightConfig,
     shape: repeatSticker("empty", 9),
     tags: [label],
   };

@@ -3,6 +3,8 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
 import type {
   CubeCoord,
+  CubeFaceName,
+  F2lSlotName,
   F2lPieceSpot,
   LearningCase,
   LearningSticker,
@@ -24,6 +26,7 @@ interface AlgorithmPlayerProps {
 }
 
 interface Cubie {
+  id: string;
   group: THREE.Group;
   coord: THREE.Vector3;
 }
@@ -41,6 +44,20 @@ interface SceneState {
 
 type SpeedOption = 0.25 | 0.5 | 1 | 1.5 | 2;
 type F2lTargetRole = "corner" | "edge";
+
+interface F2lSlotSpec {
+  name: F2lSlotName;
+  slot: "right" | "left" | "back" | "wrong";
+  cornerCoord: CubeCoord;
+  edgeCoord: CubeCoord;
+  centers: CubeFaceName[];
+}
+
+interface ResolvedF2lFocus {
+  slot: F2lSlotSpec;
+  targetIds: Set<string>;
+  roleById: Map<string, F2lTargetRole>;
+}
 
 interface DragState {
   pointerId: number;
@@ -93,6 +110,39 @@ const SPOT_TO_COORD: Record<F2lPieceSpot, [number, number, number]> = {
   bottomRight: [1, -1, 1],
 };
 
+const F2L_SLOT_SPECS: F2lSlotSpec[] = [
+  {
+    name: "FR",
+    slot: "right",
+    cornerCoord: [1, -1, 1],
+    edgeCoord: [1, 0, 1],
+    centers: ["F", "R", "D"],
+  },
+  {
+    name: "FL",
+    slot: "left",
+    cornerCoord: [-1, -1, 1],
+    edgeCoord: [-1, 0, 1],
+    centers: ["F", "L", "D"],
+  },
+  {
+    name: "BR",
+    slot: "back",
+    cornerCoord: [1, -1, -1],
+    edgeCoord: [1, 0, -1],
+    centers: ["B", "R", "D"],
+  },
+  {
+    name: "BL",
+    slot: "wrong",
+    cornerCoord: [-1, -1, -1],
+    edgeCoord: [-1, 0, -1],
+    centers: ["B", "L", "D"],
+  },
+];
+
+const F2L_SLOT_BY_NAME = new Map(F2L_SLOT_SPECS.map((slot) => [slot.name, slot]));
+
 function loadSpeedPreference(): SpeedOption {
   try {
     const raw = localStorage.getItem(SPEED_STORAGE_KEY);
@@ -136,31 +186,149 @@ function isSameCoord(coord: THREE.Vector3, target: CubeCoord): boolean {
   return coord.x === target[0] && coord.y === target[1] && coord.z === target[2];
 }
 
-function getTargetCoords(caseItem: LearningCase): CubeCoord[] {
-  if (caseItem.highlightConfig.kind !== "f2l") {
-    return [];
+function coordKey(coord: CubeCoord | THREE.Vector3): string {
+  if (coord instanceof THREE.Vector3) {
+    return `${roundCoord(coord.x)},${roundCoord(coord.y)},${roundCoord(coord.z)}`;
   }
 
-  return [
-    caseItem.highlightConfig.targetCorner,
-    caseItem.highlightConfig.targetEdge,
-  ];
+  return coord.join(",");
 }
 
-function getF2lTargetRole(coord: THREE.Vector3, caseItem: LearningCase): F2lTargetRole | null {
+function getCubieIdFromCoord(coord: CubeCoord | THREE.Vector3): string {
+  const values =
+    coord instanceof THREE.Vector3
+      ? [roundCoord(coord.x), roundCoord(coord.y), roundCoord(coord.z)]
+      : coord;
+  const nonZeroCount = values.filter((value) => value !== 0).length;
+  const kind = nonZeroCount === 3 ? "corner" : nonZeroCount === 2 ? "edge" : "other";
+
+  return `${kind}:${values.join(",")}`;
+}
+
+function getSlotFromCoords(cornerCoord: CubeCoord, edgeCoord: CubeCoord): F2lSlotSpec | null {
+  return (
+    F2L_SLOT_SPECS.find(
+      (slot) =>
+        slot.cornerCoord.join(",") === cornerCoord.join(",") &&
+        slot.edgeCoord.join(",") === edgeCoord.join(","),
+    ) ?? null
+  );
+}
+
+function createVirtualCubies() {
+  const cubies: Array<{ id: string; coord: THREE.Vector3 }> = [];
+
+  for (let x = -1; x <= 1; x += 1) {
+    for (let y = -1; y <= 1; y += 1) {
+      for (let z = -1; z <= 1; z += 1) {
+        cubies.push({ id: getCubieIdFromCoord([x, y, z]), coord: new THREE.Vector3(x, y, z) });
+      }
+    }
+  }
+
+  return cubies;
+}
+
+function applyVirtualMove(cubies: Array<{ id: string; coord: THREE.Vector3 }>, move: string) {
+  const descriptor = getMoveDescriptor(move);
+
+  if (!descriptor) {
+    return;
+  }
+
+  const matrix = new THREE.Matrix4().makeRotationAxis(getAxisVector(descriptor.axis), descriptor.angle);
+
+  cubies.forEach((cubie) => {
+    if (!descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis]))) {
+      return;
+    }
+
+    cubie.coord.applyMatrix4(matrix);
+    cubie.coord.set(
+      roundCoord(cubie.coord.x),
+      roundCoord(cubie.coord.y),
+      roundCoord(cubie.coord.z),
+    );
+  });
+}
+
+function inferF2lTargetSlot(moves: string[]): F2lSlotSpec | null {
+  const cubies = createVirtualCubies();
+  invertAlgorithm(moves).forEach((move) => applyVirtualMove(cubies, move));
+  const scoredSlots = F2L_SLOT_SPECS.map((slot) => {
+    const corner = cubies.find((cubie) => cubie.id === getCubieIdFromCoord(slot.cornerCoord));
+    const edge = cubies.find((cubie) => cubie.id === getCubieIdFromCoord(slot.edgeCoord));
+    const cornerMoved = corner && !isSameCoord(corner.coord, slot.cornerCoord);
+    const edgeMoved = edge && !isSameCoord(edge.coord, slot.edgeCoord);
+
+    return {
+      slot,
+      score: (cornerMoved ? 2 : 0) + (edgeMoved ? 2 : 0),
+    };
+  }).sort((a, b) => b.score - a.score);
+
+  return scoredSlots[0]?.score ? scoredSlots[0].slot : null;
+}
+
+function normalizeManualCubieId(value: string | undefined, role: F2lTargetRole): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith(`${role}:`)) {
+    return trimmed;
+  }
+
+  if (/^-?(?:0|1)(?:,-?(?:0|1)){2}$/.test(trimmed)) {
+    return `${role}:${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+function resolveF2lFocus(
+  caseItem: LearningCase,
+  moves: string[],
+  startMode: "inverse" | "solved",
+): ResolvedF2lFocus | null {
   if (caseItem.highlightConfig.kind !== "f2l") {
     return null;
   }
 
-  if (isSameCoord(coord, caseItem.highlightConfig.targetCorner)) {
-    return "corner";
-  }
+  const config = caseItem.highlightConfig;
+  const manualSlot = config.targetSlot !== "auto" ? F2L_SLOT_BY_NAME.get(config.targetSlot) : null;
+  const autoSlot = startMode === "inverse" ? inferF2lTargetSlot(moves) : null;
+  const legacySlot = getSlotFromCoords(config.targetCorner, config.targetEdge);
+  const slot = manualSlot ?? autoSlot ?? legacySlot ?? F2L_SLOT_BY_NAME.get("FR") ?? F2L_SLOT_SPECS[0];
+  const manualCornerId =
+    config.highlightMode === "manual"
+      ? normalizeManualCubieId(config.manualHighlight?.corner, "corner")
+      : null;
+  const manualEdgeId =
+    config.highlightMode === "manual"
+      ? normalizeManualCubieId(config.manualHighlight?.edge, "edge")
+      : null;
+  const cornerId = manualCornerId ?? getCubieIdFromCoord(slot.cornerCoord);
+  const edgeId = manualEdgeId ?? getCubieIdFromCoord(slot.edgeCoord);
+  const roleById = new Map<string, F2lTargetRole>([
+    [cornerId, "corner"],
+    [edgeId, "edge"],
+  ]);
 
-  if (isSameCoord(coord, caseItem.highlightConfig.targetEdge)) {
-    return "edge";
-  }
+  return {
+    slot,
+    roleById,
+    targetIds: new Set([cornerId, edgeId]),
+  };
+}
 
-  return null;
+function getF2lTargetRole(cubieId: string, focus: ResolvedF2lFocus | null): F2lTargetRole | null {
+  return focus?.roleById.get(cubieId) ?? null;
 }
 
 function createStickerMaterial(color: number, opacity: number) {
@@ -225,15 +393,13 @@ function createCubie(
   x: number,
   y: number,
   z: number,
-  caseItem: LearningCase,
-  targetCoords: CubeCoord[],
+  focus: ResolvedF2lFocus | null,
 ): Cubie {
   const coord = new THREE.Vector3(x, y, z);
-  const targetRole = getF2lTargetRole(coord, caseItem);
-  const isF2lFocus =
-    caseItem.highlightConfig.kind === "f2l" &&
-    targetCoords.some((target) => isSameCoord(coord, target));
-  const dimF2l = caseItem.highlightConfig.kind === "f2l" && !isF2lFocus;
+  const id = getCubieIdFromCoord(coord);
+  const targetRole = getF2lTargetRole(id, focus);
+  const isF2lFocus = Boolean(focus?.targetIds.has(id));
+  const dimF2l = Boolean(focus) && !isF2lFocus;
   const opacity = dimF2l ? 0.42 : 1;
   const group = new THREE.Group();
   const body = new THREE.Mesh(
@@ -276,7 +442,7 @@ function createCubie(
     addCubieOutline(group, targetRole);
   }
 
-  return { group, coord };
+  return { id, group, coord };
 }
 
 function disposeObject(object: THREE.Object3D) {
@@ -363,13 +529,13 @@ function addBlockHighlight(group: THREE.Group, spot: F2lPieceSpot) {
   group.add(marker);
 }
 
-function applyHighlights(group: THREE.Group, caseItem: LearningCase) {
+function applyHighlights(group: THREE.Group, caseItem: LearningCase, focus: ResolvedF2lFocus | null) {
   const highlightGroup = new THREE.Group();
   highlightGroup.name = "case-highlights";
   group.add(highlightGroup);
 
   if (caseItem.highlightConfig.kind === "f2l") {
-    addSlotHighlight(highlightGroup, caseItem.highlightConfig.slot);
+    addSlotHighlight(highlightGroup, focus?.slot.slot ?? caseItem.highlightConfig.slot);
     return;
   }
 
@@ -421,6 +587,7 @@ function fitCubeToCanvas(state: SceneState, canvas: HTMLCanvasElement) {
 function createSolvedCubies(
   cubeGroup: THREE.Group,
   caseItem: LearningCase,
+  focus: ResolvedF2lFocus | null,
   { resetView }: CaseStartStateOptions,
 ): Cubie[] {
   cubeGroup.clear();
@@ -431,12 +598,11 @@ function createSolvedCubies(
 
   cubeGroup.position.set(0, 0, 0);
   const cubies: Cubie[] = [];
-  const targetCoords = getTargetCoords(caseItem);
 
   for (let x = -1; x <= 1; x += 1) {
     for (let y = -1; y <= 1; y += 1) {
       for (let z = -1; z <= 1; z += 1) {
-        const cubie = createCubie(x, y, z, caseItem, targetCoords);
+        const cubie = createCubie(x, y, z, focus);
         cubies.push(cubie);
         cubeGroup.add(cubie.group);
       }
@@ -495,11 +661,12 @@ function createCaseStartState(
   startMode: "inverse" | "solved",
   options: CaseStartStateOptions,
 ): Cubie[] {
-  const cubies = createSolvedCubies(cubeGroup, caseItem, options);
+  const focus = resolveF2lFocus(caseItem, moves, startMode);
+  const cubies = createSolvedCubies(cubeGroup, caseItem, focus, options);
   if (startMode === "inverse") {
     invertAlgorithm(moves).forEach((move) => applyMoveInstant(cubeGroup, cubies, move));
   }
-  applyHighlights(cubeGroup, caseItem);
+  applyHighlights(cubeGroup, caseItem, focus);
 
   return cubies;
 }

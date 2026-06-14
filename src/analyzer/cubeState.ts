@@ -1,4 +1,5 @@
-import { getMoveDescriptor } from "../learn/moveNotation";
+import { getMoveDescriptor, parseAlgorithm } from "../learn/moveNotation";
+import { BASIC_F2L_41_CASES, type BasicF2lCase } from "./f2lBasic41";
 
 export type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 export type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
@@ -62,6 +63,31 @@ export interface F2lPairCandidate {
   cornerPosition: string;
   edgePosition: string;
   status: "completed" | "unsolved" | "unknown";
+  note: string;
+}
+
+export type F2lSlotName = "FR" | "FL" | "BR" | "BL";
+
+export interface BasicF2lAnalysisStep {
+  id: string;
+  pairTitle: string;
+  targetSlot: F2lSlotName;
+  extractAlgorithm: string;
+  caseId: string;
+  caseName: string;
+  algorithm: string;
+  fullAlgorithm: string;
+  moveCount: number;
+  score: number;
+  explanation: string;
+  stateAfterStep: CubeState;
+}
+
+export interface BasicF2lAnalysisPlan {
+  steps: BasicF2lAnalysisStep[];
+  totalMoveCount: number;
+  finalState: CubeState;
+  unresolvedPairs: F2lPairCandidate[];
   note: string;
 }
 
@@ -161,11 +187,16 @@ const CROSS_LOCATION_BASE = 24;
 const CROSS_PRUNING_STATE_COUNT = CROSS_LOCATION_BASE ** SIDE_FACES.length;
 const CROSS_PRUNING_UNKNOWN_DISTANCE = 255;
 
-const F2L_SLOT_FACE_PAIRS: Array<[FaceName, FaceName]> = [
-  ["F", "R"],
-  ["R", "B"],
-  ["B", "L"],
-  ["L", "F"],
+const F2L_SLOT_SPECS: Array<{
+  name: F2lSlotName;
+  faces: [FaceName, FaceName];
+  cornerFaces: [TargetFace, FaceName, FaceName];
+  edgeFaces: [FaceName, FaceName];
+}> = [
+  { name: "FR", faces: ["F", "R"], cornerFaces: ["D", "F", "R"], edgeFaces: ["F", "R"] },
+  { name: "BR", faces: ["R", "B"], cornerFaces: ["D", "R", "B"], edgeFaces: ["R", "B"] },
+  { name: "BL", faces: ["B", "L"], cornerFaces: ["D", "B", "L"], edgeFaces: ["B", "L"] },
+  { name: "FL", faces: ["L", "F"], cornerFaces: ["D", "L", "F"], edgeFaces: ["L", "F"] },
 ];
 
 export const CROSS_SEARCH_MAX_DEPTH = 8;
@@ -992,7 +1023,8 @@ export function getF2lPairCandidates(
     return [];
   }
 
-  return F2L_SLOT_FACE_PAIRS.map(([firstFace, secondFace], index) => {
+  return F2L_SLOT_SPECS.map((slotSpec, index) => {
+    const [firstFace, secondFace] = slotSpec.faces;
     const firstColor = state.faceColorMap[firstFace];
     const secondColor = state.faceColorMap[secondFace];
     const cornerColors = [crossColor, firstColor, secondColor];
@@ -1013,7 +1045,7 @@ export function getF2lPairCandidates(
       title: `${getColorJapanese(crossColor)}${getColorJapanese(firstColor)}${getColorJapanese(
         secondColor,
       )} コーナー + ${getColorJapanese(firstColor)}${getColorJapanese(secondColor)} エッジ`,
-      slotLabel: `${firstFace}${secondFace} slot`,
+      slotLabel: `${slotSpec.name} slot`,
       slotFaces: [firstFace, secondFace],
       targetFace,
       cornerColors,
@@ -1027,6 +1059,309 @@ export function getF2lPairCandidates(
           : "対象コーナーとエッジの位置を確認し、Learnの近いケースで手順を復習できます。",
     };
   });
+}
+
+const F2L_EXTRACTION_OPTIONS: Record<F2lSlotName, string[]> = {
+  FR: ["R U R'", "R U' R'", "F' U' F", "F' U F"],
+  FL: ["L' U' L", "L' U L", "F U F'", "F U' F'"],
+  BR: ["R' U' R", "R' U R", "B U B'", "B U' B'"],
+  BL: ["L U L'", "L U' L'", "B' U' B", "B' U B"],
+};
+
+const F2L_SLOT_FACE_MAPS: Record<F2lSlotName, Partial<Record<FaceName, FaceName>>> = {
+  FR: { F: "F", R: "R", B: "B", L: "L" },
+  FL: { F: "F", R: "L", B: "B", L: "R" },
+  BR: { F: "B", R: "R", B: "F", L: "L" },
+  BL: { F: "B", R: "L", B: "F", L: "R" },
+};
+
+function getF2lSlotSpecByFaces(faces: [FaceName, FaceName]) {
+  return (
+    F2L_SLOT_SPECS.find(
+      (slot) =>
+        (slot.faces[0] === faces[0] && slot.faces[1] === faces[1]) ||
+        (slot.faces[0] === faces[1] && slot.faces[1] === faces[0]),
+    ) ?? F2L_SLOT_SPECS[0]
+  );
+}
+
+function getF2lSlotNameFromCoord(coord: Vec3): F2lSlotName | null {
+  if (coord[0] === 1 && coord[2] === 1) {
+    return "FR";
+  }
+
+  if (coord[0] === -1 && coord[2] === 1) {
+    return "FL";
+  }
+
+  if (coord[0] === 1 && coord[2] === -1) {
+    return "BR";
+  }
+
+  if (coord[0] === -1 && coord[2] === -1) {
+    return "BL";
+  }
+
+  return null;
+}
+
+function getF2lPairPieces(state: CubeState, candidate: F2lPairCandidate) {
+  return {
+    corner: getPieceByColors(state, "corner", candidate.cornerColors),
+    edge: getPieceByColors(state, "edge", candidate.edgeColors),
+  };
+}
+
+function areF2lPairPiecesOnU(state: CubeState, candidate: F2lPairCandidate): boolean {
+  const { corner, edge } = getF2lPairPieces(state, candidate);
+
+  return Boolean(corner && edge && corner.coord[1] === 1 && edge.coord[1] === 1);
+}
+
+function isF2lPairSolved(state: CubeState, candidate: F2lPairCandidate): boolean {
+  const slotSpec = getF2lSlotSpecByFaces(candidate.slotFaces);
+
+  return (
+    isPieceSolvedAtFaces(state, "corner", candidate.cornerColors, slotSpec.cornerFaces) &&
+    isPieceSolvedAtFaces(state, "edge", candidate.edgeColors, slotSpec.edgeFaces)
+  );
+}
+
+function parseMoves(algorithm: string): string[] {
+  return parseAlgorithm(algorithm).moves;
+}
+
+function applyAlgorithmString(state: CubeState, algorithm: string): CubeState {
+  return applyAlgorithm(state, parseMoves(algorithm));
+}
+
+function joinAlgorithms(...algorithms: string[]): string {
+  return algorithms
+    .map((algorithm) => algorithm.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function invertSuffix(move: string): string {
+  if (move.endsWith("2")) {
+    return move;
+  }
+
+  if (move.endsWith("'")) {
+    return move.slice(0, -1);
+  }
+
+  return `${move}'`;
+}
+
+function transformMoveToSlot(move: string, slotName: F2lSlotName, mirrorDirections: boolean): string {
+  const parsed = parseAlgorithm(move).parsedMoves[0];
+
+  if (!parsed || parsed.family !== "face") {
+    return move;
+  }
+
+  const baseFace = parsed.base as FaceName;
+  const mappedFace = F2L_SLOT_FACE_MAPS[slotName][baseFace] ?? baseFace;
+  const mappedMove = `${mappedFace}${parsed.suffix}`;
+
+  if (!mirrorDirections || mappedFace === "U" || mappedFace === "D") {
+    return mappedMove;
+  }
+
+  return invertSuffix(mappedMove);
+}
+
+function transformAlgorithmToSlot(
+  algorithm: string,
+  slotName: F2lSlotName,
+  mirrorDirections: boolean,
+): string {
+  return parseMoves(algorithm)
+    .map((move) => transformMoveToSlot(move, slotName, mirrorDirections))
+    .join(" ");
+}
+
+function getBasicF2lAlgorithmVariants(caseItem: BasicF2lCase, slotName: F2lSlotName): string[] {
+  const setups = ["", "U", "U'", "U2"];
+  const baseAlgorithms = [
+    caseItem.alg,
+    transformAlgorithmToSlot(caseItem.alg, slotName, false),
+    transformAlgorithmToSlot(caseItem.alg, slotName, true),
+  ];
+  const variants = new Set<string>();
+
+  baseAlgorithms.forEach((algorithm) => {
+    setups.forEach((setup) => variants.add(joinAlgorithms(setup, algorithm)));
+  });
+
+  return [...variants].filter(Boolean);
+}
+
+function getF2lCandidateScore(algorithm: string): number {
+  const moves = parseMoves(algorithm);
+  const cubeRotations = moves.filter((move) => /^[xyz]/.test(move)).length;
+  const yRotations = moves.filter((move) => /^y/.test(move)).length;
+
+  return moves.length + cubeRotations * 2 + yRotations * 2;
+}
+
+function findExtractionForF2lPair(
+  state: CubeState,
+  candidate: F2lPairCandidate,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): { algorithm: string; state: CubeState } {
+  if (areF2lPairPiecesOnU(state, candidate)) {
+    return { algorithm: "", state };
+  }
+
+  const { corner, edge } = getF2lPairPieces(state, candidate);
+  const candidateSlots = [
+    corner ? getF2lSlotNameFromCoord(corner.coord) : null,
+    edge ? getF2lSlotNameFromCoord(edge.coord) : null,
+    getF2lSlotSpecByFaces(candidate.slotFaces).name,
+  ].filter((slotName, index, slots): slotName is F2lSlotName =>
+    Boolean(slotName && slots.indexOf(slotName) === index),
+  );
+
+  for (const slotName of candidateSlots) {
+    for (const algorithm of F2L_EXTRACTION_OPTIONS[slotName]) {
+      const nextState = applyAlgorithmString(state, algorithm);
+
+      if (isCrossSolved(nextState, crossColor, targetFace) && areF2lPairPiecesOnU(nextState, candidate)) {
+        return { algorithm, state: nextState };
+      }
+    }
+  }
+
+  return { algorithm: "", state };
+}
+
+function findBasicF2lCaseForPair(
+  state: CubeState,
+  candidate: F2lPairCandidate,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): {
+  caseItem: BasicF2lCase;
+  algorithm: string;
+  stateAfterAlgorithm: CubeState;
+  score: number;
+} | null {
+  const slotName = getF2lSlotSpecByFaces(candidate.slotFaces).name;
+  const matches: Array<{
+    caseItem: BasicF2lCase;
+    algorithm: string;
+    stateAfterAlgorithm: CubeState;
+    score: number;
+  }> = [];
+
+  for (const caseItem of BASIC_F2L_41_CASES) {
+    for (const algorithm of getBasicF2lAlgorithmVariants(caseItem, slotName)) {
+      const nextState = applyAlgorithmString(state, algorithm);
+
+      if (
+        isCrossSolved(nextState, crossColor, targetFace) &&
+        isF2lPairSolved(nextState, candidate)
+      ) {
+        matches.push({
+          caseItem,
+          algorithm,
+          stateAfterAlgorithm: nextState,
+          score: getF2lCandidateScore(algorithm),
+        });
+      }
+    }
+  }
+
+  return matches.sort((a, b) => a.score - b.score || a.caseItem.id.localeCompare(b.caseItem.id))[0] ?? null;
+}
+
+function buildBasicF2lStepCandidate(
+  state: CubeState,
+  candidate: F2lPairCandidate,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  stepIndex: number,
+): BasicF2lAnalysisStep | null {
+  const slotName = getF2lSlotSpecByFaces(candidate.slotFaces).name;
+  const extraction = findExtractionForF2lPair(state, candidate, crossColor, targetFace);
+  const match = findBasicF2lCaseForPair(extraction.state, candidate, crossColor, targetFace);
+
+  if (!match) {
+    return null;
+  }
+
+  const fullAlgorithm = joinAlgorithms(extraction.algorithm, match.algorithm);
+  const moveCount = parseMoves(fullAlgorithm).length;
+  const score = getF2lCandidateScore(fullAlgorithm);
+
+  return {
+    id: `f2l-step-${stepIndex}-${candidate.id}`,
+    pairTitle: candidate.title,
+    targetSlot: slotName,
+    extractAlgorithm: extraction.algorithm,
+    caseId: match.caseItem.id,
+    caseName: match.caseItem.name,
+    algorithm: match.algorithm,
+    fullAlgorithm,
+    moveCount,
+    score,
+    stateAfterStep: match.stateAfterAlgorithm,
+    explanation: extraction.algorithm
+      ? "対象ピースがU面に揃っていなかったため、まず取り出してから基本41ケースとして処理します。"
+      : "対象コーナーとエッジをU面から基本41ケースとしてスロットへ入れます。",
+  };
+}
+
+export function analyzeBasicF2lPlan(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): BasicF2lAnalysisPlan {
+  let currentState = cloneCubeState(initialState);
+  const steps: BasicF2lAnalysisStep[] = [];
+
+  for (let stepIndex = 1; stepIndex <= 4; stepIndex += 1) {
+    const unsolvedCandidates = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
+      (candidate) => candidate.status === "unsolved",
+    );
+
+    if (unsolvedCandidates.length === 0) {
+      break;
+    }
+
+    const stepCandidates = unsolvedCandidates
+      .map((candidate) =>
+        buildBasicF2lStepCandidate(currentState, candidate, crossColor, targetFace, stepIndex),
+      )
+      .filter((step): step is BasicF2lAnalysisStep => Boolean(step))
+      .sort((a, b) => a.score - b.score || a.moveCount - b.moveCount);
+
+    const selectedStep = stepCandidates[0];
+    if (!selectedStep) {
+      break;
+    }
+
+    steps.push(selectedStep);
+    currentState = selectedStep.stateAfterStep;
+  }
+
+  const unresolvedPairs = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
+    (candidate) => candidate.status !== "completed",
+  );
+
+  return {
+    steps,
+    finalState: currentState,
+    unresolvedPairs,
+    totalMoveCount: steps.reduce((sum, step) => sum + step.moveCount, 0),
+    note:
+      unresolvedPairs.length === 0
+        ? "基本41候補だけでF2L完成までつながりました。"
+        : "一部のペアは基本41候補だけでは確定できませんでした。追加F2Lや24通り比較で改善できます。",
+  };
 }
 
 export function getColorJapanese(color: CubeColorName): string {

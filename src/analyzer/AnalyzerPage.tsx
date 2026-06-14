@@ -6,10 +6,13 @@ import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
 import {
   CROSS_SEARCH_MAX_DEPTH,
+  analyzeBasicF2lPlan,
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
 import type {
+  BasicF2lAnalysisPlan,
+  BasicF2lAnalysisStep,
   CrossSearchInput,
   CrossSearchResult,
   CrossSolution,
@@ -1502,6 +1505,17 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     return getF2lRecommendation(selectedF2lPair, f2lLearningCases);
   }, [f2lLearningCases, selectedF2lPair]);
+  const basicF2lPlan = useMemo<BasicF2lAnalysisPlan | null>(() => {
+    if (!selectedCrossSolution) {
+      return null;
+    }
+
+    return analyzeBasicF2lPlan(
+      selectedCrossSolution.stateAfterCross,
+      selectedCrossSolution.color,
+      selectedCrossSolution.targetFace,
+    );
+  }, [selectedCrossSolution]);
 
   const getCrossSearchFaceColorMap = useCallback(
     (targetCrossColor = settings.crossColor): Record<FaceName, CubeColorName> =>
@@ -1731,6 +1745,42 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     setCurrentIndex(0);
     setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+  };
+
+  const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
+    if (!selectedCrossSolution || steps.length === 0) {
+      return;
+    }
+
+    const f2lAlgorithm = steps
+      .map((step) => step.fullAlgorithm)
+      .filter(Boolean)
+      .join(" ");
+    const combinedSolve = [selectedCrossSolution.algorithm, f2lAlgorithm]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    setSolveInput(combinedSolve);
+    setPlaybackScrambleInput(scrambleInput);
+    setPlaybackSolveInput(combinedSolve);
+    setPlaybackMode("scramble-solve");
+    resetCubeState();
+    const state = sceneStateRef.current;
+
+    if (state) {
+      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
+    }
+
+    setCurrentIndex(0);
+    setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+  };
+
+  const playBasicF2lStep = (step: BasicF2lAnalysisStep) => {
+    const steps = basicF2lPlan?.steps ?? [];
+    const stepIndex = steps.findIndex((item) => item.id === step.id);
+
+    playBasicF2lSteps(steps.slice(0, stepIndex + 1));
   };
 
   const invalidSummary = [
@@ -2228,6 +2278,63 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     Crossを3Dで再確認
                   </button>
                 </div>
+                {basicF2lPlan && (
+                  <article className="analyzer-basic-f2l-plan">
+                    <div className="analyzer-basic-f2l-heading">
+                      <div>
+                        <p className="eyebrow">Basic F2L 41</p>
+                        <h3>基本41パターン解析</h3>
+                      </div>
+                      <div className="analyzer-basic-f2l-summary">
+                        <span>{basicF2lPlan.steps.length} steps</span>
+                        <strong>{basicF2lPlan.totalMoveCount} moves</strong>
+                      </div>
+                    </div>
+                    <p>{basicF2lPlan.note}</p>
+                    {basicF2lPlan.steps.length > 0 ? (
+                      <>
+                        <ol className="analyzer-basic-f2l-steps">
+                          {basicF2lPlan.steps.map((step, index) => (
+                            <li key={step.id}>
+                              <div className="analyzer-basic-f2l-step-head">
+                                <strong>
+                                  Step {index + 1}: {step.pairTitle}
+                                </strong>
+                                <button type="button" onClick={() => playBasicF2lStep(step)}>
+                                  ここまで3D再生
+                                </button>
+                              </div>
+                              <div className="analyzer-f2l-tags">
+                                <span>Target: {step.targetSlot}</span>
+                                <span>Extract: {step.extractAlgorithm || "なし"}</span>
+                                <span>Case: {step.caseId}</span>
+                                <span>Moves: {step.moveCount}</span>
+                              </div>
+                              <code>{step.algorithm}</code>
+                              <p>{step.explanation}</p>
+                            </li>
+                          ))}
+                        </ol>
+                        <button
+                          className="analyzer-primary-action"
+                          type="button"
+                          onClick={() => playBasicF2lSteps(basicF2lPlan.steps)}
+                        >
+                          F2L解析手順をまとめて3D再生
+                        </button>
+                      </>
+                    ) : (
+                      <p className="analyzer-muted">
+                        基本41候補だけでは、このCross後状態のF2L手順を確定できませんでした。
+                      </p>
+                    )}
+                    {basicF2lPlan.unresolvedPairs.length > 0 && (
+                      <p className="analyzer-muted">
+                        未解決ペア: {basicF2lPlan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
+                      </p>
+                    )}
+                  </article>
+                )}
                 <div className="analyzer-f2l-list">
                   {f2lCandidates.length === 0 ? (
                     <p className="analyzer-muted">F2L候補を判定できませんでした。</p>

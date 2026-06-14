@@ -20,6 +20,8 @@ export type LearningCategory = "f2l" | "oll" | "pll";
 export type LearningStatus = "unlearned" | "learning" | "learned" | "weak";
 
 export type LearningSticker = "empty" | "primary" | "secondary" | "accent" | "muted";
+export type F2lSlotName = "FR" | "FL" | "BR" | "BL";
+export type F2lTargetSlot = "auto" | F2lSlotName;
 
 export type F2lPieceSpot =
   | "topLeft"
@@ -85,6 +87,12 @@ export interface F2lHighlightConfig {
   startEdge: F2lPieceSpot;
   targetCorner: CubeCoord;
   targetEdge: CubeCoord;
+  targetSlot: F2lTargetSlot;
+  highlightMode?: "auto" | "manual";
+  manualHighlight?: {
+    corner?: string;
+    edge?: string;
+  };
   slot: F2lCaseImage["slot"];
   centers: CubeFaceName[];
 }

@@ -22,6 +22,38 @@ export type LearningStatus = "unlearned" | "learning" | "learned" | "weak";
 export type LearningSticker = "empty" | "primary" | "secondary" | "accent" | "muted";
 export type F2lSlotName = "FR" | "FL" | "BR" | "BL";
 export type F2lTargetSlot = "auto" | F2lSlotName;
+export type F2lCaseType =
+  | "basic41"
+  | "advanced"
+  | "backSlot"
+  | "insertVariation"
+  | "extraction"
+  | "rotationless"
+  | "other";
+export type F2lCandidateStatus = "candidate" | "reviewed" | "approved" | "rejected";
+export type F2lCandidateDifficulty = "basic" | "intermediate" | "advanced";
+
+export interface F2lCandidateSource {
+  name: string;
+  url?: string;
+}
+
+export interface F2lCandidate {
+  id: string;
+  caseType: F2lCaseType;
+  name: string;
+  alg: string;
+  inverseAlg?: string;
+  targetSlot: F2lTargetSlot;
+  difficulty: F2lCandidateDifficulty;
+  tags: string[];
+  moveCount: number;
+  score?: number;
+  description: string;
+  source?: F2lCandidateSource[];
+  status: F2lCandidateStatus;
+  notes?: string;
+}
 
 export type F2lPieceSpot =
   | "topLeft"

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  F2lCandidate,
   F2lCaseImage,
   F2lPieceSpot,
   LearningCase,
@@ -18,10 +19,16 @@ import {
   LEARNING_CATEGORY_LABELS,
   getLearningCasesByCategory,
 } from "./learningData";
+import {
+  F2L_CANDIDATES,
+  F2L_CANDIDATE_SUMMARY,
+  findDuplicateF2lCandidates,
+  validateF2lCandidate,
+} from "./f2lCandidateData";
 import { loadLearningProgress, saveLearningProgress } from "./learningProgress";
 import { SUPPORTED_MOVE_SUMMARY } from "./moveNotation";
 
-type LearnSection = "home" | LearningCategory | "practice" | "notation";
+type LearnSection = "home" | LearningCategory | "practice" | "notation" | "f2lCandidates";
 type StatusFilter = "all" | LearningStatus;
 type PracticeCategory = "all" | LearningCategory;
 type NotationGroup = "basic" | "rotation" | "slice" | "wide";
@@ -289,6 +296,10 @@ function getLearnRoute(path: string): LearnRoute {
     return { section: "notation" };
   }
 
+  if (normalizedPath === "/learn/f2l-candidates") {
+    return { section: "f2lCandidates" };
+  }
+
   if (normalizedPath === "/learn/practice") {
     return { section: "practice" };
   }
@@ -366,7 +377,8 @@ function pickRandomCase(cases: LearningCase[], previousId?: string): LearningCas
 export default function LearnPage({ path, onNavigate, onOpenTimer }: LearnPageProps) {
   const route = getLearnRoute(path);
   const section = route.section;
-  const shouldShowLandscapeHint = section === "home" || isLearningCategory(section);
+  const shouldShowLandscapeHint =
+    section === "home" || section === "f2lCandidates" || isLearningCategory(section);
   const [progress, setProgress] = useState<LearningProgressMap>(() => loadLearningProgress());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [practiceCategory, setPracticeCategory] = useState<PracticeCategory>("all");
@@ -473,6 +485,8 @@ export default function LearnPage({ path, onNavigate, onOpenTimer }: LearnPagePr
       )}
 
       {section === "notation" && <NotationPage />}
+
+      {section === "f2lCandidates" && <F2lCandidateReviewPage />}
 
       {section === "practice" && (
         practiceCase ? (
@@ -590,6 +604,7 @@ function LearnTabs({ currentSection, onNavigate }: LearnTabsProps) {
     { section: "f2l", label: "F2L", path: "/learn/f2l" },
     { section: "oll", label: "OLL", path: "/learn/oll" },
     { section: "pll", label: "PLL", path: "/learn/pll" },
+    { section: "f2lCandidates", label: "F2L候補", path: "/learn/f2l-candidates" },
     { section: "notation", label: "回転記号", path: "/learn/notation" },
     { section: "practice", label: "Practice", path: "/learn/practice" },
   ];
@@ -689,6 +704,17 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
         </div>
         <button className="ghost-button" type="button" onClick={() => onNavigate("/learn/notation")}>
           回転記号へ
+        </button>
+      </section>
+
+      <section className="learn-practice-entry" aria-label="F2L candidate review entry">
+        <div>
+          <p className="eyebrow">Review queue</p>
+          <h2>追加F2L候補を確認する</h2>
+          <p>基本41とは別枠で、追加F2L・裏F2L・インサート違いの候補を3Dで確認します。正式DBにはまだ入りません。</p>
+        </div>
+        <button className="ghost-button" type="button" onClick={() => onNavigate("/learn/f2l-candidates")}>
+          候補を見る
         </button>
       </section>
 
@@ -898,6 +924,249 @@ function createNotationLearningCase(notationMove: NotationMove): LearningCase {
     shape: [],
     tags: ["Notation", notationMove.group],
   };
+}
+
+const F2L_CANDIDATE_TYPE_LABELS: Record<F2lCandidate["caseType"], string> = {
+  basic41: "基本41",
+  advanced: "追加F2L",
+  backSlot: "バックスロット",
+  insertVariation: "インサート違い",
+  extraction: "取り出し",
+  rotationless: "回転削減",
+  other: "その他",
+};
+
+const F2L_CANDIDATE_DIFFICULTY_LABELS: Record<F2lCandidate["difficulty"], string> = {
+  basic: "basic",
+  intermediate: "intermediate",
+  advanced: "advanced",
+};
+
+const F2L_CANDIDATE_SLOT_CONFIG: Record<
+  Exclude<F2lCandidate["targetSlot"], "auto">,
+  {
+    slot: F2lCaseImage["slot"];
+    targetCorner: [number, number, number];
+    targetEdge: [number, number, number];
+    centers: Array<"U" | "D" | "F" | "B" | "R" | "L">;
+  }
+> = {
+  FR: { slot: "right", targetCorner: [1, -1, 1], targetEdge: [1, 0, 1], centers: ["D", "F", "R"] },
+  FL: { slot: "left", targetCorner: [-1, -1, 1], targetEdge: [-1, 0, 1], centers: ["D", "F", "L"] },
+  BR: { slot: "back", targetCorner: [1, -1, -1], targetEdge: [1, 0, -1], centers: ["D", "B", "R"] },
+  BL: { slot: "wrong", targetCorner: [-1, -1, -1], targetEdge: [-1, 0, -1], centers: ["D", "B", "L"] },
+};
+
+function getF2lCandidateSlotConfig(candidate: F2lCandidate) {
+  return candidate.targetSlot === "auto"
+    ? F2L_CANDIDATE_SLOT_CONFIG.FR
+    : F2L_CANDIDATE_SLOT_CONFIG[candidate.targetSlot];
+}
+
+function createF2lCandidateLearningCase(candidate: F2lCandidate): LearningCase {
+  const slotConfig = getF2lCandidateSlotConfig(candidate);
+
+  return {
+    id: candidate.id,
+    type: "f2l",
+    category: "f2l",
+    name: candidate.name,
+    title: candidate.name,
+    subtitle: `${F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} / ${candidate.targetSlot}`,
+    algorithm: candidate.alg,
+    alternative: candidate.inverseAlg,
+    description: candidate.description,
+    image: {
+      kind: "asset",
+      category: "f2l",
+      url: "",
+      fileName: "",
+      baseName: candidate.id,
+      path: "",
+    },
+    imageUrl: "",
+    highlightConfig: {
+      kind: "f2l",
+      startCorner: "topRight",
+      startEdge: "top",
+      targetCorner: slotConfig.targetCorner,
+      targetEdge: slotConfig.targetEdge,
+      targetSlot: candidate.targetSlot,
+      highlightMode: "auto",
+      slot: slotConfig.slot,
+      centers: slotConfig.centers,
+    },
+    shape: [],
+    tags: candidate.tags,
+  };
+}
+
+function F2lCandidateReviewPage() {
+  const [selectedId, setSelectedId] = useState(F2L_CANDIDATES[0]?.id ?? "");
+  const selectedCandidate =
+    F2L_CANDIDATES.find((candidate) => candidate.id === selectedId) ??
+    F2L_CANDIDATES[0] ??
+    null;
+  const duplicateGroups = useMemo(() => findDuplicateF2lCandidates(F2L_CANDIDATES), []);
+  const selectedValidation = useMemo(
+    () => (selectedCandidate ? validateF2lCandidate(selectedCandidate) : null),
+    [selectedCandidate],
+  );
+  const selectedAnimationCase = useMemo(
+    () => (selectedCandidate ? createF2lCandidateLearningCase(selectedCandidate) : null),
+    [selectedCandidate],
+  );
+
+  if (!selectedCandidate || !selectedValidation || !selectedAnimationCase) {
+    return (
+      <section className="learn-section-heading" aria-label="F2L candidate empty">
+        <div>
+          <p className="eyebrow">Review queue</p>
+          <h2>F2L候補はまだありません</h2>
+          <p>src/learn/f2lCandidateData.ts に候補を追加すると、ここで確認できます。</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <section className="learn-section-heading" aria-label="F2L candidate review overview">
+        <div>
+          <p className="eyebrow">Review queue</p>
+          <h2>追加F2L候補リスト</h2>
+          <p>
+            ここは正式DBへ入れる前の確認場所です。画像や説明文のコピーは使わず、手順候補だけを3Dで検証します。
+          </p>
+        </div>
+        <div className="learn-total-progress">
+          <strong>{F2L_CANDIDATE_SUMMARY.total}</strong>
+          <span>
+            invalid {F2L_CANDIDATE_SUMMARY.invalid} / duplicate {F2L_CANDIDATE_SUMMARY.duplicates}
+          </span>
+        </div>
+      </section>
+
+      <section className="f2l-candidate-layout" aria-label="F2L candidate review">
+        <div className="f2l-candidate-list" aria-label="F2L candidate list">
+          {F2L_CANDIDATES.map((candidate) => {
+            const validation = validateF2lCandidate(candidate);
+
+            return (
+              <button
+                aria-pressed={candidate.id === selectedCandidate.id}
+                className="f2l-candidate-button"
+                key={candidate.id}
+                type="button"
+                onClick={() => setSelectedId(candidate.id)}
+              >
+                <span>
+                  <strong>{candidate.name}</strong>
+                  <small>
+                    {F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} / {candidate.targetSlot} /{" "}
+                    {candidate.moveCount} moves
+                  </small>
+                </span>
+                <b>{validation.ok ? candidate.status : "要確認"}</b>
+              </button>
+            );
+          })}
+        </div>
+
+        <article className="f2l-candidate-detail">
+          <div className="learn-detail-head">
+            <div>
+              <p className="eyebrow">Candidate detail</p>
+              <h2>{selectedCandidate.name}</h2>
+              <p>{selectedCandidate.description}</p>
+            </div>
+            <span className="status-pill status-learning">{selectedCandidate.status}</span>
+          </div>
+
+          <div className="algorithm-box">
+            <span>候補手順</span>
+            <div className="algorithm-line">
+              <code>{selectedCandidate.alg}</code>
+            </div>
+          </div>
+
+          <div className="algorithm-box algorithm-box-muted">
+            <span>逆手順</span>
+            <code>{selectedCandidate.inverseAlg}</code>
+          </div>
+
+          <dl className="f2l-candidate-meta">
+            <div>
+              <dt>分類</dt>
+              <dd>{F2L_CANDIDATE_TYPE_LABELS[selectedCandidate.caseType]}</dd>
+            </div>
+            <div>
+              <dt>targetSlot</dt>
+              <dd>{selectedCandidate.targetSlot}</dd>
+            </div>
+            <div>
+              <dt>難易度</dt>
+              <dd>{F2L_CANDIDATE_DIFFICULTY_LABELS[selectedCandidate.difficulty]}</dd>
+            </div>
+            <div>
+              <dt>手数</dt>
+              <dd>{selectedCandidate.moveCount}</dd>
+            </div>
+          </dl>
+
+          <div className="learn-tags" aria-label="Candidate tags">
+            {selectedCandidate.tags.map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+
+          <div className="f2l-candidate-source">
+            <strong>source memo</strong>
+            {selectedCandidate.source?.map((source) =>
+              source.url?.startsWith("http") ? (
+                <a href={source.url} key={`${source.name}-${source.url}`} rel="noreferrer" target="_blank">
+                  {source.name}
+                </a>
+              ) : (
+                <span key={source.name}>{source.name}</span>
+              ),
+            )}
+          </div>
+
+          <div className="f2l-candidate-validation">
+            <strong>{selectedValidation.ok ? "検証OK" : "検証エラー"}</strong>
+            <p>
+              正規化: <code>{selectedValidation.normalizedAlg}</code>
+            </p>
+            {selectedValidation.errors.length > 0 && (
+              <ul>
+                {selectedValidation.errors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            )}
+            {duplicateGroups.length > 0 && (
+              <p>重複候補があります。候補データ側で正式採用前に統合してください。</p>
+            )}
+          </div>
+
+          <Suspense
+            fallback={
+              <div className="algorithm-player algorithm-player-loading" role="status">
+                候補プレイヤーを読み込んでいます。
+              </div>
+            }
+          >
+            <AlgorithmPlayer
+              caseItem={selectedAnimationCase}
+              headingLabel="F2L Candidate"
+              headingTitle="候補手順3D確認"
+            />
+          </Suspense>
+        </article>
+      </section>
+    </>
+  );
 }
 
 function NotationPage() {

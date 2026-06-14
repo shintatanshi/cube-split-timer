@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
+import {
+  ANIMATION_SPEED_OPTIONS,
+  CUBE_DETAIL_COLORS,
+  CUBE_FACE_COLORS,
+  loadAnimationSpeed,
+  saveAnimationSpeed,
+  type AnimationSpeed,
+} from "../lib/cubeVisuals";
 import { getMoveDescriptor, parseAlgorithm } from "../learn/moveNotation";
 import type { MoveAxis } from "../learn/moveNotation";
 
@@ -37,6 +45,7 @@ interface DragState {
 
 const TURN_DURATION_MS = 360;
 const PLAY_DELAY_MS = 130;
+const SCRAMBLE_SPEED_STORAGE_KEY = "cubeSplitTimer.scramblePreviewSpeed.v1";
 const SCRAMBLE_MOVE_GROUPS = [
   ["U", "U'", "U2"],
   ["D", "D'", "D2"],
@@ -46,14 +55,7 @@ const SCRAMBLE_MOVE_GROUPS = [
   ["B", "B'", "B2"],
 ];
 
-const FACE_COLORS: Record<FaceName, number> = {
-  U: 0xfff25b,
-  D: 0xf8fafc,
-  F: 0x2563eb,
-  B: 0x16a34a,
-  R: 0xef4444,
-  L: 0xf97316,
-};
+const FACE_COLORS: Record<FaceName, number> = CUBE_FACE_COLORS;
 
 const INITIAL_VIEW_ROTATION = {
   x: -0.18,
@@ -131,7 +133,7 @@ function createCubie(x: number, y: number, z: number): Cubie {
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(0.92, 0.92, 0.92),
     new THREE.MeshStandardMaterial({
-      color: 0x111827,
+      color: CUBE_DETAIL_COLORS.body,
       metalness: 0.02,
       roughness: 0.78,
     }),
@@ -139,7 +141,7 @@ function createCubie(x: number, y: number, z: number): Cubie {
   const outline = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(0.94, 0.94, 0.94)),
     new THREE.LineBasicMaterial({
-      color: 0x334155,
+      color: CUBE_DETAIL_COLORS.edge,
       transparent: true,
       opacity: 0.76,
     }),
@@ -266,8 +268,13 @@ export default function ScramblePreviewPage({
   const [playbackScramble, setPlaybackScramble] = useState(() => getQueryValue("scramble"));
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState<AnimationSpeed>(() =>
+    loadAnimationSpeed([SCRAMBLE_SPEED_STORAGE_KEY]),
+  );
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const playerRef = useRef<HTMLElement | null>(null);
   const sceneStateRef = useRef<SceneState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const animationRunRef = useRef(0);
@@ -331,7 +338,7 @@ export default function ScramblePreviewPage({
           return;
         }
 
-        const ratio = Math.min(1, (now - start) / TURN_DURATION_MS);
+        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / speed));
         pivot.rotation[descriptor.axis] = descriptor.angle * easeInOut(ratio);
 
         if (ratio < 1) {
@@ -372,7 +379,7 @@ export default function ScramblePreviewPage({
     state.cubeGroup.remove(pivot);
     isAnimatingRef.current = false;
     return true;
-  }, []);
+  }, [speed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -551,6 +558,63 @@ export default function ScramblePreviewPage({
     return () => window.clearTimeout(timeoutId);
   }, [copyStatus]);
 
+  useEffect(() => {
+    saveAnimationSpeed(speed);
+  }, [speed]);
+
+  const enterFullscreen = useCallback(() => {
+    setIsFullscreen(true);
+
+    const element = playerRef.current;
+    if (element?.requestFullscreen) {
+      void element.requestFullscreen().catch(() => {
+        // Fullscreen APIが使えない環境ではCSSの疑似全画面で表示します。
+      });
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle("scramble-preview-fullscreen-open", isFullscreen);
+
+    return () => {
+      document.body.classList.remove("scramble-preview-fullscreen-open");
+    };
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        exitFullscreen();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [exitFullscreen, isFullscreen]);
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     const state = sceneStateRef.current;
 
@@ -681,14 +745,44 @@ export default function ScramblePreviewPage({
           )}
         </section>
 
-        <section className="scramble-preview-panel scramble-preview-player">
+        <section
+          ref={playerRef}
+          className={[
+            "scramble-preview-panel scramble-preview-player",
+            isFullscreen ? "is-fullscreen" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <div className="analyzer-player-header">
             <div>
               <p className="eyebrow">3D Animation</p>
               <h2>スクランブル再生</h2>
             </div>
-            <div className="analyzer-step">
-              Step: {currentIndex} / {parsedPlayback.moves.length}
+            <div className="analyzer-player-actions">
+              <label className="analyzer-speed-control">
+                <span>Speed</span>
+                <select
+                  value={speed}
+                  onChange={(event) => setSpeed(Number(event.target.value) as AnimationSpeed)}
+                >
+                  {ANIMATION_SPEED_OPTIONS.map((speedOption) => (
+                    <option key={speedOption} value={speedOption}>
+                      {speedOption}x
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="analyzer-step">
+                Step: {currentIndex} / {parsedPlayback.moves.length}
+              </div>
+              <button
+                type="button"
+                className="analyzer-fullscreen-button"
+                onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+              >
+                {isFullscreen ? "閉じる" : "全画面"}
+              </button>
             </div>
           </div>
 

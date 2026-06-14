@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
+import {
+  ANIMATION_SPEED_OPTIONS,
+  CUBE_DETAIL_COLORS,
+  CUBE_FACE_COLORS,
+  loadAnimationSpeed,
+  saveAnimationSpeed,
+  type AnimationSpeed,
+} from "../lib/cubeVisuals";
 import type {
   CubeCoord,
   CubeFaceName,
@@ -42,7 +50,7 @@ interface SceneState {
   animationStart: number;
 }
 
-type SpeedOption = 0.25 | 0.5 | 1 | 1.5 | 2;
+type SpeedOption = AnimationSpeed;
 type F2lTargetRole = "corner" | "edge";
 
 interface F2lSlotSpec {
@@ -72,7 +80,7 @@ interface CaseStartStateOptions {
 }
 
 const SPEED_STORAGE_KEY = "cubeSplitTimer.learnPlayerSpeed.v1";
-const SPEED_OPTIONS: SpeedOption[] = [0.25, 0.5, 1, 1.5, 2];
+const SPEED_OPTIONS = ANIMATION_SPEED_OPTIONS;
 const BASE_PLAY_DELAY_MS = 180;
 const BASE_TURN_DURATION_MS = 440;
 const AUTO_RESET_DELAY_MS = 2000;
@@ -82,17 +90,12 @@ const INITIAL_VIEW_ROTATION = {
   z: 0,
 };
 const CUBE_COLORS = {
-  U: 0xffe04f,
-  D: 0xf4f7fb,
-  F: 0x347dff,
-  B: 0x32c36c,
-  R: 0xff5b4a,
-  L: 0xff9b42,
-  body: 0x111827,
-  dim: 0x4f5c70,
-  corner: 0xff7b63,
-  edge: 0x58b1ff,
-  slot: 0xffd166,
+  ...CUBE_FACE_COLORS,
+  body: CUBE_DETAIL_COLORS.body,
+  dim: CUBE_DETAIL_COLORS.dim,
+  corner: CUBE_DETAIL_COLORS.f2lCorner,
+  edge: CUBE_DETAIL_COLORS.f2lEdge,
+  slot: CUBE_DETAIL_COLORS.slot,
 };
 
 const NORMAL_CAMERA_DISTANCE = 8.8;
@@ -144,22 +147,11 @@ const F2L_SLOT_SPECS: F2lSlotSpec[] = [
 const F2L_SLOT_BY_NAME = new Map(F2L_SLOT_SPECS.map((slot) => [slot.name, slot]));
 
 function loadSpeedPreference(): SpeedOption {
-  try {
-    const raw = localStorage.getItem(SPEED_STORAGE_KEY);
-    const parsed = Number(raw);
-
-    return SPEED_OPTIONS.includes(parsed as SpeedOption) ? (parsed as SpeedOption) : 1;
-  } catch {
-    return 1;
-  }
+  return loadAnimationSpeed([SPEED_STORAGE_KEY]);
 }
 
 function saveSpeedPreference(speed: SpeedOption): void {
-  try {
-    localStorage.setItem(SPEED_STORAGE_KEY, String(speed));
-  } catch {
-    // Speed preference is nice-to-have; the player should still work.
-  }
+  saveAnimationSpeed(speed);
 }
 
 function easeInOut(t: number): number {

@@ -1,6 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
+import MoveButtonPanel from "../components/MoveButtonPanel";
+import {
+  ANIMATION_SPEED_OPTIONS,
+  CUBE_COLOR_HEX,
+  CUBE_DETAIL_COLORS,
+  loadAnimationSpeed,
+  saveAnimationSpeed,
+  type AnimationSpeed,
+} from "../lib/cubeVisuals";
 import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
 import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
@@ -23,7 +32,6 @@ const AlgorithmPlayer = lazy(() => import("../learn/AlgorithmPlayer"));
 
 type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
-type AnimationSpeed = 0.25 | 0.5 | 1 | 1.5 | 2;
 type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
 type CrossTargetFace = "D" | "U";
@@ -123,7 +131,6 @@ const INITIAL_VIEW_ROTATION = {
 const ANALYZER_SETTINGS_STORAGE_KEY = "cubeSplitTimer.analyzerSettings.v1";
 const ANALYZER_STATE_STORAGE_KEY = "cube-split-timer-analyzer-state";
 const ANALYZER_SPEED_STORAGE_KEY = "cubeSplitTimer.analyzerSpeed.v1";
-const ANIMATION_SPEED_OPTIONS: AnimationSpeed[] = [0.25, 0.5, 1, 1.5, 2];
 const BASIC_SCRAMBLE_MOVES = new Set([
   "U",
   "U'",
@@ -161,12 +168,12 @@ const COLOR_OPTIONS: Array<{ value: CubeColorName; label: string; shortLabel: st
   { value: "orange", label: "Orange", shortLabel: "O" },
 ];
 const COLOR_HEX: Record<CubeColorName, number> = {
-  white: 0xf4f7fb,
-  yellow: 0xffe04f,
-  blue: 0x347dff,
-  green: 0x32c36c,
-  red: 0xff5b4a,
-  orange: 0xff9b42,
+  white: CUBE_COLOR_HEX.white,
+  yellow: CUBE_COLOR_HEX.yellow,
+  blue: CUBE_COLOR_HEX.blue,
+  green: CUBE_COLOR_HEX.green,
+  red: CUBE_COLOR_HEX.red,
+  orange: CUBE_COLOR_HEX.orange,
 };
 const COLOR_VECTORS: Record<CubeColorName, ColorVector> = {
   white: [0, -1, 0],
@@ -201,8 +208,8 @@ const DEFAULT_ANALYZER_SETTINGS: AnalyzerSettings = {
   maxDepth: CROSS_SEARCH_MAX_DEPTH,
 };
 const CUBE_COLORS = {
-  body: 0x111827,
-  edge: 0x253149,
+  body: CUBE_DETAIL_COLORS.body,
+  edge: CUBE_DETAIL_COLORS.edge,
 };
 
 function isCubeColorName(value: unknown): value is CubeColorName {
@@ -343,23 +350,11 @@ function saveAnalyzerSettings(settings: AnalyzerSettings): void {
 }
 
 function loadAnalyzerSpeed(): AnimationSpeed {
-  try {
-    const savedSpeed = Number(localStorage.getItem(ANALYZER_SPEED_STORAGE_KEY));
-
-    return ANIMATION_SPEED_OPTIONS.includes(savedSpeed as AnimationSpeed)
-      ? (savedSpeed as AnimationSpeed)
-      : 1;
-  } catch {
-    return 1;
-  }
+  return loadAnimationSpeed([ANALYZER_SPEED_STORAGE_KEY]);
 }
 
 function saveAnalyzerSpeed(speed: AnimationSpeed): void {
-  try {
-    localStorage.setItem(ANALYZER_SPEED_STORAGE_KEY, String(speed));
-  } catch {
-    // Playback speed is a convenience setting; ignore storage failures.
-  }
+  saveAnimationSpeed(speed);
 }
 
 function copyTextWithFallback(text: string): Promise<void> {
@@ -896,6 +891,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [isPlaying, setIsPlaying] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() => loadAnalyzerSpeed());
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
+  const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
+  const [showManualControls, setShowManualControls] = useState(true);
   const [isSearchingCross, setIsSearchingCross] = useState(false);
   const [crossResults, setCrossResults] = useState<CrossSearchResult[]>(
     () => initialAnalyzerState?.crossResults ?? [],
@@ -1036,8 +1033,60 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const resetPlayback = useCallback(() => {
     setIsPlaying(false);
     setCurrentIndex(0);
+    setManualMoveHistory([]);
     resetCubeToPlaybackStart();
   }, [resetCubeToPlaybackStart]);
+
+  const applyManualMove = useCallback((move: string) => {
+    const state = sceneStateRef.current;
+
+    if (!state || !getMoveDescriptor(move)) {
+      return;
+    }
+
+    setIsPlaying(false);
+    animationRunRef.current += 1;
+    isAnimatingRef.current = false;
+    applyMoveInstant(state.cubeGroup, state.cubies, move);
+    setManualMoveHistory((history) => [...history, move]);
+  }, []);
+
+  const undoManualMove = useCallback(() => {
+    const state = sceneStateRef.current;
+
+    if (!state || manualMoveHistory.length === 0) {
+      return;
+    }
+
+    const lastMove = manualMoveHistory[manualMoveHistory.length - 1];
+    const inverseMove = invertAlgorithm([lastMove])[0];
+
+    if (!inverseMove) {
+      return;
+    }
+
+    setIsPlaying(false);
+    animationRunRef.current += 1;
+    isAnimatingRef.current = false;
+    applyMoveInstant(state.cubeGroup, state.cubies, inverseMove);
+    setManualMoveHistory((history) => history.slice(0, -1));
+  }, [manualMoveHistory]);
+
+  const resetManualMoves = useCallback(() => {
+    const state = sceneStateRef.current;
+
+    if (!state || manualMoveHistory.length === 0) {
+      return;
+    }
+
+    setIsPlaying(false);
+    animationRunRef.current += 1;
+    isAnimatingRef.current = false;
+    invertAlgorithm(manualMoveHistory).forEach((move) => {
+      applyMoveInstant(state.cubeGroup, state.cubies, move);
+    });
+    setManualMoveHistory([]);
+  }, [manualMoveHistory]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1551,6 +1600,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
     setHelperCaseId(null);
+    setManualMoveHistory([]);
     setCopyStatus("idle");
     setAiNotice(null);
 
@@ -1573,6 +1623,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setPlaybackSolveInput(solveInput);
     setPlaybackMode("scramble-solve");
     setIsPlaying(false);
+    setManualMoveHistory([]);
     resetCubeState();
 
     const state = sceneStateRef.current;
@@ -1597,6 +1648,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setPlaybackScrambleInput(scrambleInput);
     setPlaybackSolveInput(solveInput);
     setPlaybackMode("scramble-solve");
+    setManualMoveHistory([]);
     resetCubeState();
     const state = sceneStateRef.current;
 
@@ -1619,6 +1671,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     if (isComplete) {
+      setManualMoveHistory([]);
       resetCubeToPlaybackStart();
       setCurrentIndex(0);
     }
@@ -1783,35 +1836,65 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
   }, [parsedScramble.moves, resetCubeState]);
 
+  const scrollToPlayerPanel = useCallback(() => {
+    window.setTimeout(() => {
+      playerPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, []);
+
+  const selectAnalyzerCandidate = useCallback(
+    (
+      candidate: { algorithm: string; caseItem?: LearningCase | null },
+      options: { play?: boolean; scroll?: boolean } = {},
+    ) => {
+      const algorithm = candidate.algorithm.trim();
+      const moves = parseAlgorithm(algorithm).moves;
+
+      if (candidate.caseItem) {
+        setHelperCaseId(getLearningCaseRouteKey(candidate.caseItem));
+      }
+
+      setSolveInput(algorithm);
+      setPlaybackScrambleInput(scrambleInput);
+      setPlaybackSolveInput(algorithm);
+      setPlaybackMode("scramble-solve");
+      setManualMoveHistory([]);
+      setIsPlaying(false);
+
+      window.setTimeout(() => {
+        applyScrambleInstant();
+        setCurrentIndex(0);
+        setIsPlaying(Boolean(options.play && moves.length > 0));
+
+        if (options.scroll !== false) {
+          scrollToPlayerPanel();
+        }
+      }, 0);
+    },
+    [applyScrambleInstant, scrambleInput, scrollToPlayerPanel],
+  );
+
   const selectCrossSolution = useCallback(
-    (solution: CrossSolution, options: { play?: boolean } = {}) => {
+    (solution: CrossSolution, options: { play?: boolean; scroll?: boolean } = {}) => {
       setSelectedCrossSolution(solution);
       setF2lCandidates(getF2lPairCandidates(solution.stateAfterCross, solution.color, solution.targetFace));
       setSelectedF2lPairId(null);
-      setSolveInput(solution.algorithm);
       setAiNotice(null);
-
-      if (options.play) {
-        setPlaybackScrambleInput(scrambleInput);
-        setPlaybackSolveInput(solution.algorithm);
-        setPlaybackMode("scramble-solve");
-
-        window.setTimeout(() => {
-          applyScrambleInstant();
-          setCurrentIndex(0);
-          setIsPlaying(solution.moves.length > 0);
-        }, 0);
-      }
+      selectAnalyzerCandidate(
+        { algorithm: solution.algorithm },
+        { play: options.play, scroll: options.scroll },
+      );
     },
-    [applyScrambleInstant, parsedScramble.moves.length, scrambleInput],
+    [selectAnalyzerCandidate],
   );
 
   const selectCrossSolutionForF2l = useCallback(
     (solution: CrossSolution) => {
-      selectCrossSolution(solution);
+      selectCrossSolution(solution, { scroll: false });
       setPlaybackScrambleInput(scrambleInput);
       setPlaybackSolveInput(solution.algorithm);
       setPlaybackMode("scramble-solve");
+      setManualMoveHistory([]);
 
       window.setTimeout(() => {
         applyScrambleInstant();
@@ -1923,7 +2006,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       }
 
       setCrossError(null);
-      selectCrossSolution(bestSolution);
+      selectCrossSolution(bestSolution, { scroll: false });
     };
     worker.onerror = () => {
       if (jobId !== crossJobIdRef.current) {
@@ -1955,6 +2038,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const selectF2lPair = (candidate: F2lPairCandidate) => {
     setSelectedF2lPairId(candidate.id);
     setAiNotice(null);
+    setManualMoveHistory([]);
 
     window.setTimeout(() => {
       applyScrambleInstant();
@@ -1984,19 +2068,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       .join(" ");
 
     setHelperCaseId(getLearningCaseRouteKey(caseItem));
-    setSolveInput(combinedSolve);
-    setPlaybackScrambleInput(scrambleInput);
-    setPlaybackSolveInput(combinedSolve);
-    setPlaybackMode("scramble-solve");
-    resetCubeState();
-    const state = sceneStateRef.current;
-
-    if (state) {
-      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
-    }
-
-    setCurrentIndex(0);
-    setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+    selectAnalyzerCandidate({ algorithm: combinedSolve, caseItem }, { play: true });
   };
 
   const getAnalyzerCandidateCase = (candidate: AnalyzerCandidate): LearningCase | null => {
@@ -2046,20 +2118,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       .filter(Boolean)
       .join(" ");
 
-    setHelperCaseId(getLearningCaseRouteKey(recommendation.caseItem));
-    setSolveInput(combinedSolve);
-    setPlaybackScrambleInput(scrambleInput);
-    setPlaybackSolveInput(combinedSolve);
-    setPlaybackMode("scramble-solve");
-    resetCubeState();
-    const state = sceneStateRef.current;
-
-    if (state) {
-      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
-    }
-
-    setCurrentIndex(0);
-    setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+    selectAnalyzerCandidate(
+      { algorithm: combinedSolve, caseItem: recommendation.caseItem },
+      { play: true },
+    );
   };
 
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
@@ -2076,19 +2138,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       .filter(Boolean)
       .join(" ");
 
-    setSolveInput(combinedSolve);
-    setPlaybackScrambleInput(scrambleInput);
-    setPlaybackSolveInput(combinedSolve);
-    setPlaybackMode("scramble-solve");
-    resetCubeState();
-    const state = sceneStateRef.current;
-
-    if (state) {
-      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
-    }
-
-    setCurrentIndex(0);
-    setIsPlaying(parseAlgorithm(combinedSolve).moves.length > 0);
+    selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
   };
 
   const playBasicF2lStep = (step: BasicF2lAnalysisStep) => {
@@ -2969,7 +3019,21 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             <button type="button" onClick={resetCameraView}>
               視点リセット
             </button>
+            <button type="button" onClick={() => setShowManualControls((visible) => !visible)}>
+              {showManualControls ? "回転記号を隠す" : "回転記号を表示"}
+            </button>
           </div>
+
+          {showManualControls && (
+            <MoveButtonPanel
+              onMove={applyManualMove}
+              onUndo={undoManualMove}
+              onResetManual={resetManualMoves}
+              onResetState={resetPlayback}
+              canUndo={manualMoveHistory.length > 0}
+              manualMoveCount={manualMoveHistory.length}
+            />
+          )}
 
           <div className="analyzer-move-list" aria-label="Move list">
             {activeMoves.length === 0 ? (

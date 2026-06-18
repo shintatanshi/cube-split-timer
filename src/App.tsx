@@ -999,6 +999,26 @@ const hasPointerMovedEnoughToScroll = useCallback(
     [clearHoldTimeout, setTimerStatus, startTimer],
   );
 
+  useEffect(() => {
+  const handleWindowTouchEnd = () => {
+    if (timerStateRef.current !== "ready") {
+      return;
+    }
+
+    if (holdSourceRef.current !== "pointer") {
+      return;
+    }
+
+    releaseStartHold("pointer", holdPointerIdRef.current);
+  };
+
+  window.addEventListener("touchend", handleWindowTouchEnd, { passive: true });
+
+  return () => {
+    window.removeEventListener("touchend", handleWindowTouchEnd);
+  };
+}, [releaseStartHold]);
+
   const handleTimerPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!event.isPrimary) {
@@ -1078,13 +1098,12 @@ const handleTimerPointerCancel = useCallback(
       holdSourceRef.current === "pointer" &&
       holdPointerIdRef.current === event.pointerId
     ) {
-      releaseStartHold("pointer", event.pointerId);
       return;
     }
 
     cancelStartHold();
   },
-  [cancelStartHold, releaseStartHold],
+  [cancelStartHold],
 );
 
   useEffect(() => {

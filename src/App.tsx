@@ -937,30 +937,34 @@ export default function App() {
     [beginStartHold, elapsedMs, setTimerStatus],
   );
 
-  const hasPointerMovedEnoughToScroll = useCallback(
-    (pointerId: number, clientX: number, clientY: number) => {
-      const candidate = pointerStartCandidateRef.current;
+const hasPointerMovedEnoughToScroll = useCallback(
+  (pointerId: number, clientX: number, clientY: number) => {
+    const candidate = pointerStartCandidateRef.current;
 
-      if (candidate && candidate.pointerId === pointerId) {
-        const deltaX = clientX - candidate.startX;
-        const deltaY = clientY - candidate.startY;
-        const distance = Math.hypot(deltaX, deltaY);
+    if (candidate && candidate.pointerId === pointerId) {
+      const deltaX = clientX - candidate.startX;
+      const deltaY = clientY - candidate.startY;
+      const distance = Math.hypot(deltaX, deltaY);
 
-        return Math.abs(deltaY) >= POINTER_SCROLL_CANCEL_PX || distance >= POINTER_SCROLL_CANCEL_PX;
+      return Math.abs(deltaY) >= POINTER_SCROLL_CANCEL_PX || distance >= POINTER_SCROLL_CANCEL_PX;
+    }
+
+    if (holdSourceRef.current === "pointer" && holdPointerIdRef.current === pointerId) {
+      if (timerStateRef.current !== "holding") {
+        return false;
       }
 
-      if (holdSourceRef.current === "pointer" && holdPointerIdRef.current === pointerId) {
-        const deltaX = clientX - holdStartXRef.current;
-        const deltaY = clientY - holdStartYRef.current;
-        const distance = Math.hypot(deltaX, deltaY);
+      const deltaX = clientX - holdStartXRef.current;
+      const deltaY = clientY - holdStartYRef.current;
+      const distance = Math.hypot(deltaX, deltaY);
 
-        return Math.abs(deltaY) >= POINTER_SCROLL_CANCEL_PX || distance >= POINTER_SCROLL_CANCEL_PX;
-      }
+      return Math.abs(deltaY) >= POINTER_SCROLL_CANCEL_PX || distance >= POINTER_SCROLL_CANCEL_PX;
+    }
 
-      return false;
-    },
-    [],
-  );
+    return false;
+  },
+  [],
+);
 
   const releaseStartHold = useCallback(
     (source: StartHoldSource, pointerId: number | null = null) => {
@@ -1060,18 +1064,28 @@ export default function App() {
     [clearPointerStartCandidate, releaseStartHold],
   );
 
-  const handleTimerPointerCancel = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      if (!event.isPrimary) {
-        return;
-      }
+const handleTimerPointerCancel = useCallback(
+  (event: ReactPointerEvent<HTMLElement>) => {
+    if (!event.isPrimary) {
+      return;
+    }
 
-      event.preventDefault();
-      event.stopPropagation();
-      cancelStartHold();
-    },
-    [cancelStartHold],
-  );
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (
+      timerStateRef.current === "ready" &&
+      holdSourceRef.current === "pointer" &&
+      holdPointerIdRef.current === event.pointerId
+    ) {
+      releaseStartHold("pointer", event.pointerId);
+      return;
+    }
+
+    cancelStartHold();
+  },
+  [cancelStartHold, releaseStartHold],
+);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

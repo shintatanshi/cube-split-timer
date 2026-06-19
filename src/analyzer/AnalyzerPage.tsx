@@ -18,6 +18,8 @@ import {
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
+import { searchF2lOrders } from "./f2lOrderSearch";
+import type { F2lOrderSearchPlan } from "./f2lSearchTypes";
 import type {
   BasicF2lAnalysisPlan,
   BasicF2lAnalysisStep,
@@ -292,9 +294,9 @@ function buildCrossFaceColorMap(
     preferredFrontColor !== topColor && COLOR_OPPOSITES[preferredFrontColor] !== topColor
       ? preferredFrontColor
       : (COLOR_OPTIONS.find(
-          (option) =>
-            option.value !== topColor && COLOR_OPPOSITES[option.value] !== topColor,
-        )?.value ?? "blue");
+        (option) =>
+          option.value !== topColor && COLOR_OPPOSITES[option.value] !== topColor,
+      )?.value ?? "blue");
 
   return (
     buildFaceColorMap({
@@ -331,8 +333,8 @@ function loadAnalyzerSettings(): AnalyzerSettings {
       showAllCrossColors: Boolean(parsed.showAllCrossColors),
       maxDepth:
         typeof parsed.maxDepth === "number" &&
-        Number.isFinite(parsed.maxDepth) &&
-        parsed.maxDepth >= 1
+          Number.isFinite(parsed.maxDepth) &&
+          parsed.maxDepth >= 1
           ? Math.min(8, Math.max(1, Math.round(parsed.maxDepth)))
           : DEFAULT_ANALYZER_SETTINGS.maxDepth,
     };
@@ -417,8 +419,8 @@ function loadAnalyzerState(): StoredAnalyzerState | null {
       showAllCrossColors: Boolean(settings.showAllCrossColors),
       maxDepth:
         typeof settings.maxDepth === "number" &&
-        Number.isFinite(settings.maxDepth) &&
-        settings.maxDepth >= 1
+          Number.isFinite(settings.maxDepth) &&
+          settings.maxDepth >= 1
           ? Math.min(8, Math.max(1, Math.round(settings.maxDepth)))
           : DEFAULT_ANALYZER_SETTINGS.maxDepth,
     };
@@ -809,11 +811,11 @@ function getF2lRecommendation(
 function isSameCrossSolution(a: CrossSolution | null, b: CrossSolution | null): boolean {
   return Boolean(
     a &&
-      b &&
-      a.color === b.color &&
-      a.targetFace === b.targetFace &&
-      a.algorithm === b.algorithm &&
-      a.moveCount === b.moveCount,
+    b &&
+    a.color === b.color &&
+    a.targetFace === b.targetFace &&
+    a.algorithm === b.algorithm &&
+    a.moveCount === b.moveCount,
   );
 }
 
@@ -906,10 +908,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [f2lCandidates, setF2lCandidates] = useState<F2lPairCandidate[]>(() =>
     initialAnalyzerState?.selectedCrossSolution
       ? getF2lPairCandidates(
-          initialAnalyzerState.selectedCrossSolution.stateAfterCross,
-          initialAnalyzerState.selectedCrossSolution.color,
-          initialAnalyzerState.selectedCrossSolution.targetFace,
-        )
+        initialAnalyzerState.selectedCrossSolution.stateAfterCross,
+        initialAnalyzerState.selectedCrossSolution.color,
+        initialAnalyzerState.selectedCrossSolution.targetFace,
+      )
       : [],
   );
   const [selectedF2lPairId, setSelectedF2lPairId] = useState<string | null>(
@@ -919,6 +921,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(null);
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
+  const [f2lOrderPlans, setF2lOrderPlans] = useState<F2lOrderSearchPlan[]>([]);
+  const [isSearchingF2lOrders, setIsSearchingF2lOrders] = useState(false);
+  const [f2lOrderSearchError, setF2lOrderSearchError] = useState<string | null>(null);
+  const [f2lOrderSearchMessage, setF2lOrderSearchMessage] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
 
@@ -1206,6 +1212,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lPlan(null);
     setBasicF2lError(null);
     setAiNotice(null);
+    setF2lOrderPlans([]);
+    setF2lOrderSearchError(null);
+    setF2lOrderSearchMessage(null);
+    setIsSearchingF2lOrders(false);
   }, [
     scrambleInput,
     settings.crossColor,
@@ -1333,6 +1343,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     setBasicF2lPlan(null);
     setBasicF2lError(null);
+    setF2lOrderPlans([]);
+    setF2lOrderSearchError(null);
+    setF2lOrderSearchMessage(null);
+    setIsSearchingF2lOrders(false);
 
     if (!selectedCrossSolution) {
       setIsAnalyzingBasicF2l(false);
@@ -1600,6 +1614,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
     setHelperCaseId(null);
+    setF2lOrderPlans([]);
+    setF2lOrderSearchError(null);
+    setF2lOrderSearchMessage(null);
+    setIsSearchingF2lOrders(false);
     setManualMoveHistory([]);
     setCopyStatus("idle");
     setAiNotice(null);
@@ -1818,10 +1836,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       faceColorMap[settings.crossTargetFace] === targetCrossColor
         ? faceColorMap
         : buildCrossFaceColorMap(
-            targetCrossColor,
-            settings.crossTargetFace,
-            settings.frontColor,
-          ),
+          targetCrossColor,
+          settings.crossTargetFace,
+          settings.frontColor,
+        ),
     [faceColorMap, settings.crossColor, settings.crossTargetFace, settings.frontColor],
   );
 
@@ -1880,6 +1898,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setF2lCandidates(getF2lPairCandidates(solution.stateAfterCross, solution.color, solution.targetFace));
       setSelectedF2lPairId(null);
       setAiNotice(null);
+      setF2lOrderPlans([]);
+      setF2lOrderSearchError(null);
+      setF2lOrderSearchMessage(null);
+      setIsSearchingF2lOrders(false);
       selectAnalyzerCandidate(
         { algorithm: solution.algorithm },
         { play: options.play, scroll: options.scroll },
@@ -2122,6 +2144,84 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       { algorithm: combinedSolve, caseItem: recommendation.caseItem },
       { play: true },
     );
+  };
+
+  const runConditionalF2lOrderSearch = () => {
+    if (!selectedCrossSolution) {
+      setF2lOrderSearchError("先にCross候補を選択してください。");
+      return;
+    }
+
+    setIsSearchingF2lOrders(true);
+    setF2lOrderPlans([]);
+    setF2lOrderSearchError(null);
+    setF2lOrderSearchMessage(null);
+
+    window.setTimeout(() => {
+      try {
+        const result = searchF2lOrders({
+          state: selectedCrossSolution.stateAfterCross,
+          options: {
+            crossColor: selectedCrossSolution.color,
+            targetFace: selectedCrossSolution.targetFace,
+            maxDepth: 7,
+            maxNodes: 80_000,
+            maxSolutions: 8,
+            maxPlans: 12,
+            protectSolvedSlots: false,
+          },
+        });
+
+        setF2lOrderPlans(result.plans);
+        setF2lOrderSearchMessage(
+          `${result.message} / nodes: ${result.nodes.toLocaleString()}${result.truncated ? " / 探索上限で打ち切りあり" : ""
+          }`,
+        );
+      } catch (error) {
+        setF2lOrderSearchError(
+          error instanceof Error ? error.message : "条件付きF2L探索中にエラーが発生しました。",
+        );
+      } finally {
+        setIsSearchingF2lOrders(false);
+      }
+    }, 0);
+  };
+
+  const playF2lOrderPlan = (plan: F2lOrderSearchPlan) => {
+    if (!selectedCrossSolution || plan.steps.length === 0) {
+      return;
+    }
+
+    const f2lAlgorithm = plan.steps
+      .map((step) => step.algorithm)
+      .filter(Boolean)
+      .join(" ");
+
+    const combinedSolve = [selectedCrossSolution.algorithm, f2lAlgorithm]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
+  };
+
+  const playF2lOrderStep = (plan: F2lOrderSearchPlan, stepIndex: number) => {
+    if (!selectedCrossSolution) {
+      return;
+    }
+
+    const f2lAlgorithm = plan.steps
+      .slice(0, stepIndex + 1)
+      .map((step) => step.algorithm)
+      .filter(Boolean)
+      .join(" ");
+
+    const combinedSolve = [selectedCrossSolution.algorithm, f2lAlgorithm]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
   };
 
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
@@ -2514,119 +2614,119 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             <div className="analyzer-cross-list">
               {crossResults.length === 0
                 ? crossCandidates.map((candidate) => (
-                    <article className="analyzer-cross-item" key={candidate.color}>
+                  <article className="analyzer-cross-item" key={candidate.color}>
+                    <div className="analyzer-cross-main">
+                      <span
+                        className="analyzer-color-swatch"
+                        aria-hidden="true"
+                        style={{
+                          backgroundColor: `#${COLOR_HEX[candidate.color]
+                            .toString(16)
+                            .padStart(6, "0")}`,
+                        }}
+                      />
+                      <div>
+                        <strong>{getColorLabel(candidate.color)} Cross</strong>
+                        <small>{candidate.targetFace}面 target</small>
+                      </div>
+                    </div>
+                    <p className="analyzer-cross-algorithm">
+                      探索ボタンを押すと、CubeState上で最短候補を探します。
+                    </p>
+                    <div className="analyzer-cross-footer">
+                      <span>max {settings.maxDepth} moves</span>
+                    </div>
+                  </article>
+                ))
+                : crossResults.map((result) => (
+                  <article className="analyzer-cross-result" key={result.color}>
+                    <div className="analyzer-cross-result-head">
                       <div className="analyzer-cross-main">
                         <span
                           className="analyzer-color-swatch"
                           aria-hidden="true"
                           style={{
-                            backgroundColor: `#${COLOR_HEX[candidate.color]
+                            backgroundColor: `#${COLOR_HEX[result.color]
                               .toString(16)
                               .padStart(6, "0")}`,
                           }}
                         />
                         <div>
-                          <strong>{getColorLabel(candidate.color)} Cross</strong>
-                          <small>{candidate.targetFace}面 target</small>
+                          <strong>{getColorLabel(result.color)} Cross</strong>
+                          <small>
+                            {result.targetFace}面 / {result.nodes.toLocaleString()} nodes
+                          </small>
                         </div>
                       </div>
-                      <p className="analyzer-cross-algorithm">
-                        探索ボタンを押すと、CubeState上で最短候補を探します。
-                      </p>
-                      <div className="analyzer-cross-footer">
-                        <span>max {settings.maxDepth} moves</span>
-                      </div>
-                    </article>
-                  ))
-                : crossResults.map((result) => (
-                    <article className="analyzer-cross-result" key={result.color}>
-                      <div className="analyzer-cross-result-head">
-                        <div className="analyzer-cross-main">
-                          <span
-                            className="analyzer-color-swatch"
-                            aria-hidden="true"
-                            style={{
-                              backgroundColor: `#${COLOR_HEX[result.color]
-                                .toString(16)
-                                .padStart(6, "0")}`,
-                            }}
-                          />
-                          <div>
-                            <strong>{getColorLabel(result.color)} Cross</strong>
-                            <small>
-                              {result.targetFace}面 / {result.nodes.toLocaleString()} nodes
-                            </small>
-                          </div>
-                        </div>
-                      </div>
+                    </div>
 
-                      {result.solutions.length === 0 ? (
-                        <p className="analyzer-muted">
-                          {result.maxDepth}手以内では候補が見つかりませんでした。
-                        </p>
-                      ) : (
-                        result.solutions.map((solution, index) => (
-                          <div
-                            className={[
-                              "analyzer-cross-item analyzer-cross-solution",
-                              isSameCrossSolution(solution, bestCrossSolution) ? "is-best" : "",
-                              isSameCrossSolution(solution, selectedCrossSolution)
-                                ? "is-selected"
-                                : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                            key={`${result.color}-${solution.algorithm || "solved"}-${index}`}
-                          >
-                            <div className="analyzer-solution-label-row">
-                              {isSameCrossSolution(solution, bestCrossSolution) && (
-                                <span className="analyzer-solution-badge">Best</span>
-                              )}
-                              {isSameCrossSolution(solution, selectedCrossSolution) && (
-                                <span className="analyzer-solution-badge">選択中</span>
-                              )}
-                            </div>
-                            <p className="analyzer-cross-algorithm">
-                              {solution.algorithm || "すでにクロス完成"}
-                            </p>
-                            <div className="analyzer-cross-edge-row">
-                              {solution.solvedEdges.map((edge) => (
-                                <span key={`${solution.id}-${edge.sideFace}`}>
-                                  {getColorJapanese(edge.edgeColor)}
-                                  {getColorJapanese(edge.sideColor)}:{" "}
-                                  {edge.solved ? "OK" : "未完了"}
-                                </span>
-                              ))}
-                            </div>
-                            <div className="analyzer-cross-footer">
-                              <span>{solution.moveCount} moves</span>
-                              <button type="button" onClick={() => selectCrossSolution(solution)}>
-                                この手順を選択
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => selectCrossSolution(solution, { play: true })}
-                              >
-                                3Dで確認
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => selectCrossSolutionForF2l(solution)}
-                              >
-                                F2L候補を見る
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => showAiPlaceholder("Cross手順")}
-                              >
-                                この手順を説明
-                              </button>
-                            </div>
+                    {result.solutions.length === 0 ? (
+                      <p className="analyzer-muted">
+                        {result.maxDepth}手以内では候補が見つかりませんでした。
+                      </p>
+                    ) : (
+                      result.solutions.map((solution, index) => (
+                        <div
+                          className={[
+                            "analyzer-cross-item analyzer-cross-solution",
+                            isSameCrossSolution(solution, bestCrossSolution) ? "is-best" : "",
+                            isSameCrossSolution(solution, selectedCrossSolution)
+                              ? "is-selected"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          key={`${result.color}-${solution.algorithm || "solved"}-${index}`}
+                        >
+                          <div className="analyzer-solution-label-row">
+                            {isSameCrossSolution(solution, bestCrossSolution) && (
+                              <span className="analyzer-solution-badge">Best</span>
+                            )}
+                            {isSameCrossSolution(solution, selectedCrossSolution) && (
+                              <span className="analyzer-solution-badge">選択中</span>
+                            )}
                           </div>
-                        ))
-                      )}
-                    </article>
-                  ))}
+                          <p className="analyzer-cross-algorithm">
+                            {solution.algorithm || "すでにクロス完成"}
+                          </p>
+                          <div className="analyzer-cross-edge-row">
+                            {solution.solvedEdges.map((edge) => (
+                              <span key={`${solution.id}-${edge.sideFace}`}>
+                                {getColorJapanese(edge.edgeColor)}
+                                {getColorJapanese(edge.sideColor)}:{" "}
+                                {edge.solved ? "OK" : "未完了"}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="analyzer-cross-footer">
+                            <span>{solution.moveCount} moves</span>
+                            <button type="button" onClick={() => selectCrossSolution(solution)}>
+                              この手順を選択
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectCrossSolution(solution, { play: true })}
+                            >
+                              3Dで確認
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => selectCrossSolutionForF2l(solution)}
+                            >
+                              F2L候補を見る
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => showAiPlaceholder("Cross手順")}
+                            >
+                              この手順を説明
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </article>
+                ))}
             </div>
 
             <div className="analyzer-study-note">
@@ -2743,6 +2843,104 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     )}
                   </article>
                 )}
+                <article className="analyzer-basic-f2l-plan">
+                  <div className="analyzer-basic-f2l-heading">
+                    <div>
+                      <p className="eyebrow">Conditional F2L Search</p>
+                      <h3>条件付き探索で24順序比較</h3>
+                    </div>
+                    <div className="analyzer-basic-f2l-summary">
+                      <span>max depth 5</span>
+                      <span>max 5 plans</span>
+                    </div>
+                  </div>
+
+                  <p>
+                    Cross後の状態から、F2Lの順番を比較します。Crossと完成済みスロットを守る条件で、
+                    1ペアずつ短い手順を探索します。
+                  </p>
+
+                  <button
+                    className="analyzer-primary-action"
+                    type="button"
+                    onClick={runConditionalF2lOrderSearch}
+                    disabled={isSearchingF2lOrders || !selectedCrossSolution}
+                  >
+                    {isSearchingF2lOrders ? "条件付き探索中..." : "条件付きF2L探索を試す"}
+                  </button>
+
+                  {f2lOrderSearchError && (
+                    <div className="analyzer-error analyzer-error-compact" role="alert">
+                      <p>{f2lOrderSearchError}</p>
+                    </div>
+                  )}
+
+                  {f2lOrderSearchMessage && (
+                    <p className="analyzer-muted">{f2lOrderSearchMessage}</p>
+                  )}
+
+                  {f2lOrderPlans.length > 0 && (
+                    <ol className="analyzer-basic-f2l-steps">
+                      {f2lOrderPlans.map((plan, planIndex) => (
+                        <li key={plan.id}>
+                          <div className="analyzer-basic-f2l-step-head">
+                            <strong>
+                              候補 {planIndex + 1}: {plan.totalMoveCount} moves / order{" "}
+                              {plan.order.join(" → ")}
+                            </strong>
+                            <button type="button" onClick={() => playF2lOrderPlan(plan)}>
+                              この候補を3D再生
+                            </button>
+                          </div>
+
+                          <div className="analyzer-f2l-tags">
+                            <span>Steps: {plan.steps.length}</span>
+                            <span>Score: {plan.totalScore.toFixed(1)}</span>
+                            <span>Nodes: {plan.nodes.toLocaleString()}</span>
+                            <span>未解決: {plan.unresolvedPairs.length}</span>
+                            {plan.truncated && <span>探索打ち切りあり</span>}
+                          </div>
+
+                          <p>{plan.message}</p>
+
+                          {plan.steps.length > 0 ? (
+                            <ol className="analyzer-basic-f2l-steps">
+                              {plan.steps.map((step, stepIndex) => (
+                                <li key={`${plan.id}-${step.stepIndex}-${step.pairId}`}>
+                                  <div className="analyzer-basic-f2l-step-head">
+                                    <strong>
+                                      Step {step.stepIndex}: {step.pairTitle}
+                                    </strong>
+                                    <button type="button" onClick={() => playF2lOrderStep(plan, stepIndex)}>
+                                      ここまで3D再生
+                                    </button>
+                                  </div>
+
+                                  <div className="analyzer-f2l-tags">
+                                    <span>Target: {step.targetSlot}</span>
+                                    <span>Moves: {step.moveCount}</span>
+                                    <span>Score: {step.score.toFixed(1)}</span>
+                                    <span>Nodes: {step.nodes.toLocaleString()}</span>
+                                  </div>
+
+                                  <code>{step.algorithm || "0手"}</code>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : (
+                            <p className="analyzer-muted">この候補ではF2L手順を作れませんでした。</p>
+                          )}
+
+                          {plan.unresolvedPairs.length > 0 && (
+                            <p className="analyzer-muted">
+                              未解決ペア: {plan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
+                            </p>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </article>
                 <div className="analyzer-f2l-list">
                   {f2lCandidates.length === 0 ? (
                     <p className="analyzer-muted">F2L候補を判定できませんでした。</p>

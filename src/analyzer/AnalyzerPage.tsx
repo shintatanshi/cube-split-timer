@@ -19,6 +19,7 @@ import {
   getF2lPairCandidates,
 } from "./cubeState";
 import type {
+  BasicF2lAnalysisPhase,
   BasicF2lAnalysisPlan,
   BasicF2lAnalysisStep,
   BasicF2lOrderAnalysisResult,
@@ -64,7 +65,7 @@ interface CrossSearchWorkerResponse {
 interface F2lAnalysisWorkerResponse {
   jobId: number;
   ok: boolean;
-  phase?: "basic41" | "fallback";
+  phase?: BasicF2lAnalysisPhase;
   done?: boolean;
   plan?: BasicF2lAnalysisPlan;
   orderResult?: BasicF2lOrderAnalysisResult;
@@ -923,6 +924,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(null);
   const [basicF2lOrderPlans, setBasicF2lOrderPlans] = useState<BasicF2lAnalysisPlan[]>([]);
   const [basicF2lComparedOrderCount, setBasicF2lComparedOrderCount] = useState(0);
+  const [basicF2lAnalysisPhase, setBasicF2lAnalysisPhase] = useState<BasicF2lAnalysisPhase | null>(null);
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -1212,6 +1214,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lPlan(null);
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
+    setBasicF2lAnalysisPhase(null);
     setBasicF2lError(null);
     setAiNotice(null);
   }, [
@@ -1341,6 +1344,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lPlan(null);
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
+    setBasicF2lAnalysisPhase(null);
     setBasicF2lError(null);
   }, [selectedCrossSolution]);
 
@@ -1561,6 +1565,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lPlan(null);
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
+    setBasicF2lAnalysisPhase(null);
     setBasicF2lError(null);
     setIsAnalyzingBasicF2l(false);
     setManualMoveHistory([]);
@@ -1896,6 +1901,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lPlan(null);
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
+    setBasicF2lAnalysisPhase(null);
     setBasicF2lError(null);
 
     if (!scrambleInput.trim()) {
@@ -2089,15 +2095,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     );
   };
 
-  const runBasicF2lAnalysis = useCallback(() => {
+  const runBasicF2lAnalysis = useCallback((options: { useLocalSearch?: boolean } = {}) => {
+    const useLocalSearch = Boolean(options.useLocalSearch);
+
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
     const jobId = f2lAnalysisJobIdRef.current + 1;
     f2lAnalysisJobIdRef.current = jobId;
 
-    setBasicF2lPlan(null);
-    setBasicF2lOrderPlans([]);
-    setBasicF2lComparedOrderCount(0);
+    if (!useLocalSearch) {
+      setBasicF2lPlan(null);
+      setBasicF2lOrderPlans([]);
+      setBasicF2lComparedOrderCount(0);
+      setBasicF2lAnalysisPhase(null);
+    }
     setBasicF2lError(null);
 
     if (!selectedCrossSolution) {
@@ -2132,14 +2143,18 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           finishWorker();
         }
         setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
-        setBasicF2lOrderPlans([]);
-        setBasicF2lComparedOrderCount(0);
+        if (!useLocalSearch) {
+          setBasicF2lOrderPlans([]);
+          setBasicF2lComparedOrderCount(0);
+          setBasicF2lAnalysisPhase(null);
+        }
         return;
       }
 
       setBasicF2lPlan(event.data.plan);
       setBasicF2lOrderPlans(event.data.orderResult?.plans ?? []);
       setBasicF2lComparedOrderCount(event.data.orderResult?.comparedOrderCount ?? 0);
+      setBasicF2lAnalysisPhase(event.data.phase ?? (useLocalSearch ? "fallback" : "basic41"));
 
       if (isDone) {
         finishWorker();
@@ -2155,8 +2170,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         f2lAnalysisWorkerRef.current = null;
       }
       setIsAnalyzingBasicF2l(false);
-      setBasicF2lOrderPlans([]);
-      setBasicF2lComparedOrderCount(0);
+      if (!useLocalSearch) {
+        setBasicF2lOrderPlans([]);
+        setBasicF2lComparedOrderCount(0);
+        setBasicF2lAnalysisPhase(null);
+      }
       setBasicF2lError("F2L解析Workerでエラーが発生しました。");
     };
     worker.postMessage({
@@ -2164,6 +2182,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       state: selectedCrossSolution.stateAfterCross,
       crossColor: selectedCrossSolution.color,
       targetFace: selectedCrossSolution.targetFace,
+      useLocalSearch,
     });
   }, [selectedCrossSolution]);
 
@@ -2716,7 +2735,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 <button
                   className="analyzer-primary-action"
                   type="button"
-                  onClick={runBasicF2lAnalysis}
+                  onClick={() => runBasicF2lAnalysis()}
                   disabled={isAnalyzingBasicF2l}
                 >
                   {isAnalyzingBasicF2l ? "F2L解析中..." : "既存手順DBでF2L解析"}
@@ -2724,9 +2743,15 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 {isAnalyzingBasicF2l && (
                   <article className="analyzer-basic-f2l-plan">
                     <p className="eyebrow">Basic F2L 41</p>
-                    <h3>F2L解析中...</h3>
+                    <h3>
+                      {basicF2lAnalysisPhase === "basic41" && basicF2lPlan
+                        ? "未解決ペアを補助探索中..."
+                        : "F2L解析中..."}
+                    </h3>
                     <p>
-                      まず基本41DBだけの候補を表示し、未解決が残る場合だけ補助探索で更新します。
+                      {basicF2lAnalysisPhase === "basic41" && basicF2lPlan
+                        ? "表示中のDB候補を残したまま、未解決ペアだけを詳しく探しています。"
+                        : "既存の基本41DBを使って、F2Lの24順序比較をWorkerで計算しています。"}
                     </p>
                   </article>
                 )}
@@ -2754,6 +2779,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                         </span>
                         <span>order {basicF2lPlan.order.join(" → ")}</span>
                         <span>{basicF2lPlan.steps.length} steps</span>
+                        {basicF2lAnalysisPhase === "fallback" && <span>補助探索あり</span>}
+                        {basicF2lAnalysisPhase === "basic41" && <span>DBのみ</span>}
                         <strong>{basicF2lPlan.totalMoveCount} moves</strong>
                       </div>
                     </div>
@@ -2802,6 +2829,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                       <p className="analyzer-muted">
                         未解決ペア: {basicF2lPlan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
                       </p>
+                    )}
+                    {basicF2lAnalysisPhase === "basic41" && basicF2lPlan.unresolvedPairs.length > 0 && (
+                      <button
+                        className="analyzer-primary-action"
+                        type="button"
+                        onClick={() => runBasicF2lAnalysis({ useLocalSearch: true })}
+                        disabled={isAnalyzingBasicF2l}
+                      >
+                        {isAnalyzingBasicF2l ? "補助探索中..." : "未解決ペアを詳しく探索"}
+                      </button>
                     )}
                   </article>
                 )}

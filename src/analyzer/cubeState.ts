@@ -120,6 +120,13 @@ interface BasicF2lCaseMatch {
   score: number;
 }
 
+interface BasicF2lAlgorithmEntry {
+  caseItem: BasicF2lCase;
+  algorithm: string;
+  moves: string[];
+  score: number;
+}
+
 interface LocalF2lSearchMatch {
   algorithm: string;
   stateAfterAlgorithm: CubeState;
@@ -1119,6 +1126,7 @@ const F2L_SLOT_ROTATION_WRAPPERS: Record<F2lSlotName, Array<[string, string]>> =
   BL: [["y2", "y2"]],
 };
 const BASIC_F2L_ALGORITHM_VARIANTS_CACHE = new Map<string, string[]>();
+const BASIC_F2L_ALGORITHM_INDEX_CACHE = new Map<F2lSlotName, BasicF2lAlgorithmEntry[]>();
 
 const F2L_LOCAL_SEARCH_MOVES: Record<F2lSlotName, string[]> = {
   FR: ["U", "U'", "U2", "R", "R'", "R2", "F", "F'", "F2"],
@@ -1275,8 +1283,35 @@ function getBasicF2lAlgorithmVariants(caseItem: BasicF2lCase, slotName: F2lSlotN
   return variantList;
 }
 
+function getBasicF2lAlgorithmEntries(slotName: F2lSlotName): BasicF2lAlgorithmEntry[] {
+  const cachedEntries = BASIC_F2L_ALGORITHM_INDEX_CACHE.get(slotName);
+
+  if (cachedEntries) {
+    return cachedEntries;
+  }
+
+  const entries = BASIC_F2L_41_CASES.flatMap((caseItem) =>
+    getBasicF2lAlgorithmVariants(caseItem, slotName).map((algorithm) => {
+      const moves = parseMoves(algorithm);
+
+      return {
+        caseItem,
+        algorithm,
+        moves,
+        score: getF2lMoveScore(moves),
+      };
+    }),
+  ).sort((a, b) => a.score - b.score || a.caseItem.id.localeCompare(b.caseItem.id));
+
+  BASIC_F2L_ALGORITHM_INDEX_CACHE.set(slotName, entries);
+  return entries;
+}
+
 function getF2lCandidateScore(algorithm: string): number {
-  const moves = parseMoves(algorithm);
+  return getF2lMoveScore(parseMoves(algorithm));
+}
+
+function getF2lMoveScore(moves: string[]): number {
   const cubeRotations = moves.filter((move) => /^[xyz]/.test(move)).length;
   const yRotations = moves.filter((move) => /^y/.test(move)).length;
 
@@ -1416,37 +1451,29 @@ function findBasicF2lCaseForPair(
   }
 
   const slotName = getF2lSlotNameForCandidate(candidate);
-  const matches: Array<{
-    caseItem: BasicF2lCase;
-    algorithm: string;
-    stateAfterAlgorithm: CubeState;
-    score: number;
-  }> = [];
 
-  for (const caseItem of BASIC_F2L_41_CASES) {
-    for (const algorithm of getBasicF2lAlgorithmVariants(caseItem, slotName)) {
-      const nextState = applyAlgorithmString(state, algorithm);
+  for (const entry of getBasicF2lAlgorithmEntries(slotName)) {
+    const nextState = applyAlgorithm(state, entry.moves);
 
-      if (
-        isCrossSolved(nextState, crossColor, targetFace) &&
-        isF2lPairSolved(nextState, candidate)
-      ) {
-        matches.push({
-          caseItem,
-          algorithm,
-          stateAfterAlgorithm: nextState,
-          score: getF2lCandidateScore(algorithm),
-        });
-      }
+    if (
+      isCrossSolved(nextState, crossColor, targetFace) &&
+      isF2lPairSolved(nextState, candidate)
+    ) {
+      const match: BasicF2lCaseMatch = {
+        caseItem: entry.caseItem,
+        algorithm: entry.algorithm,
+        stateAfterAlgorithm: nextState,
+        score: entry.score,
+      };
+
+      cache?.basicMatches.set(cacheKey, match);
+      return match;
     }
   }
 
-  const bestMatch =
-    matches.sort((a, b) => a.score - b.score || a.caseItem.id.localeCompare(b.caseItem.id))[0] ??
-    null;
-  cache?.basicMatches.set(cacheKey, bestMatch);
+  cache?.basicMatches.set(cacheKey, null);
 
-  return bestMatch;
+  return null;
 }
 
 function findLocalF2lSearchForPair(
@@ -1781,44 +1808,6 @@ export function analyzeBasicF2lOrderPlans(
     createBasicF2lAnalysisCache(),
     options,
   );
-}
-
-export function analyzeBasicF2lOrderPlansProgressively(
-  initialState: CubeState,
-  crossColor: CubeColorName,
-  targetFace: TargetFace,
-  onResult: (
-    phase: BasicF2lAnalysisPhase,
-    result: BasicF2lOrderAnalysisResult,
-    done: boolean,
-  ) => void,
-): void {
-  const cache = createBasicF2lAnalysisCache();
-  const basic41Result = analyzeBasicF2lOrderPlansWithCache(
-    initialState,
-    crossColor,
-    targetFace,
-    cache,
-    { useLocalSearch: false },
-  );
-  const basic41Plan = basic41Result.plans[0];
-  const basic41Done = (basic41Plan?.unresolvedPairs.length ?? 1) === 0;
-
-  onResult("basic41", basic41Result, basic41Done);
-
-  if (basic41Done) {
-    return;
-  }
-
-  const fallbackResult = analyzeBasicF2lOrderPlansWithCache(
-    initialState,
-    crossColor,
-    targetFace,
-    cache,
-    { useLocalSearch: true },
-  );
-
-  onResult("fallback", fallbackResult, true);
 }
 
 export function analyzeBasicF2lPlan(

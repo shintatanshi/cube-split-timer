@@ -1,5 +1,5 @@
 import {
-  analyzeBasicF2lOrderPlansProgressively,
+  analyzeBasicF2lOrderPlans,
   type BasicF2lAnalysisPhase,
   type BasicF2lAnalysisPlan,
   type BasicF2lOrderAnalysisResult,
@@ -13,6 +13,7 @@ interface F2lAnalysisWorkerRequest {
   state: CubeState;
   crossColor: CubeColorName;
   targetFace: TargetFace;
+  useLocalSearch?: boolean;
 }
 
 interface F2lAnalysisWorkerResponse {
@@ -50,14 +51,13 @@ ctx.onmessage = (event: MessageEvent<F2lAnalysisWorkerRequest>) => {
   const { jobId, state, crossColor, targetFace } = event.data;
 
   try {
-    analyzeBasicF2lOrderPlansProgressively(
-      state,
-      crossColor,
-      targetFace,
-      (phase, result, done) => {
-        ctx.postMessage(createResponse(jobId, phase, result, done));
-      },
-    );
+    const useLocalSearch = Boolean(event.data.useLocalSearch);
+    const phase: BasicF2lAnalysisPhase = useLocalSearch ? "fallback" : "basic41";
+    const result = analyzeBasicF2lOrderPlans(state, crossColor, targetFace, {
+      useLocalSearch,
+    });
+
+    ctx.postMessage(createResponse(jobId, phase, result, true));
   } catch (error) {
     const response: F2lAnalysisWorkerResponse = {
       jobId,

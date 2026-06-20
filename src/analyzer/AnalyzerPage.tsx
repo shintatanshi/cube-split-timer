@@ -18,7 +18,6 @@ import {
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
-import type { F2lOrderSearchPlan, F2lOrderSearchResult } from "./f2lSearchTypes";
 import type {
   BasicF2lAnalysisPlan,
   BasicF2lAnalysisStep,
@@ -67,13 +66,6 @@ interface F2lAnalysisWorkerResponse {
   ok: boolean;
   plan?: BasicF2lAnalysisPlan;
   orderResult?: BasicF2lOrderAnalysisResult;
-  error?: string;
-}
-
-interface F2lOrderSearchWorkerResponse {
-  jobId: number;
-  ok: boolean;
-  result?: F2lOrderSearchResult;
   error?: string;
 }
 
@@ -875,8 +867,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const crossJobIdRef = useRef(0);
   const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
   const f2lAnalysisJobIdRef = useRef(0);
-  const f2lOrderSearchWorkerRef = useRef<Worker | null>(null);
-  const f2lOrderSearchJobIdRef = useRef(0);
   const playerPanelRef = useRef<HTMLElement | null>(null);
   const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
   const lastRestoredSceneIdRef = useRef(0);
@@ -933,10 +923,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [basicF2lComparedOrderCount, setBasicF2lComparedOrderCount] = useState(0);
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
-  const [f2lOrderPlans, setF2lOrderPlans] = useState<F2lOrderSearchPlan[]>([]);
-  const [isSearchingF2lOrders, setIsSearchingF2lOrders] = useState(false);
-  const [f2lOrderSearchError, setF2lOrderSearchError] = useState<string | null>(null);
-  const [f2lOrderSearchMessage, setF2lOrderSearchMessage] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
 
@@ -1225,18 +1211,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lError(null);
-    f2lOrderSearchWorkerRef.current?.terminate();
-    f2lOrderSearchWorkerRef.current = null;
-    f2lOrderSearchJobIdRef.current += 1;
-    setIsSearchingF2lOrders(false);
-    setF2lOrderPlans([]);
-    setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage(null);
     setAiNotice(null);
-    setF2lOrderPlans([]);
-    setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage(null);
-    setIsSearchingF2lOrders(false);
   }, [
     scrambleInput,
     settings.crossColor,
@@ -1367,14 +1342,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lComparedOrderCount(0);
     setBasicF2lError(null);
 
-    f2lOrderSearchWorkerRef.current?.terminate();
-    f2lOrderSearchWorkerRef.current = null;
-    f2lOrderSearchJobIdRef.current += 1;
-    setF2lOrderPlans([]);
-    setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage(null);
-    setIsSearchingF2lOrders(false);
-
     if (!selectedCrossSolution) {
       setIsAnalyzingBasicF2l(false);
       return undefined;
@@ -1443,8 +1410,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       crossWorkerRef.current = null;
       f2lAnalysisWorkerRef.current?.terminate();
       f2lAnalysisWorkerRef.current = null;
-      f2lOrderSearchWorkerRef.current?.terminate();
-      f2lOrderSearchWorkerRef.current = null;
     },
     [],
   );
@@ -1633,9 +1598,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     f2lAnalysisWorkerRef.current = null;
     f2lAnalysisJobIdRef.current += 1;
 
-    f2lOrderSearchWorkerRef.current?.terminate();
-    f2lOrderSearchWorkerRef.current = null;
-    f2lOrderSearchJobIdRef.current += 1;
     skipNextSettingsSaveCountRef.current = 2;
     skipNextAnalyzerStateSaveCountRef.current = 2;
     clearAnalyzerState();
@@ -1661,10 +1623,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lComparedOrderCount(0);
     setBasicF2lError(null);
     setIsAnalyzingBasicF2l(false);
-    setF2lOrderPlans([]);
-    setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage(null);
-    setIsSearchingF2lOrders(false);
     setManualMoveHistory([]);
     setCopyStatus("idle");
     setAiNotice(null);
@@ -1945,10 +1903,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setF2lCandidates(getF2lPairCandidates(solution.stateAfterCross, solution.color, solution.targetFace));
       setSelectedF2lPairId(null);
       setAiNotice(null);
-      setF2lOrderPlans([]);
-      setF2lOrderSearchError(null);
-      setF2lOrderSearchMessage(null);
-      setIsSearchingF2lOrders(false);
       selectAnalyzerCandidate(
         { algorithm: solution.algorithm },
         { play: options.play, scroll: options.scroll },
@@ -2193,147 +2147,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       { algorithm: combinedSolve, caseItem: recommendation.caseItem },
       { play: true },
     );
-  };
-
-  const runConditionalF2lOrderSearch = () => {
-    if (!selectedCrossSolution) {
-      setF2lOrderSearchError("先にCross候補を選択してください。");
-      return;
-    }
-
-    if (selectedCrossSolution.targetFace !== "D") {
-      setF2lOrderPlans([]);
-      setF2lOrderSearchError(
-        "条件付きF2L探索は現在D面Crossのみ対応しています。Cross targetをD面にしてCross解析し直してください。",
-      );
-      setF2lOrderSearchMessage(null);
-      setIsSearchingF2lOrders(false);
-      return;
-    }
-
-    f2lOrderSearchWorkerRef.current?.terminate();
-    f2lOrderSearchWorkerRef.current = null;
-
-    const jobId = f2lOrderSearchJobIdRef.current + 1;
-    f2lOrderSearchJobIdRef.current = jobId;
-
-    setIsSearchingF2lOrders(true);
-    setF2lOrderPlans([]);
-    setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage("条件付きF2L探索を開始しました。少し時間がかかる場合があります。");
-
-    const worker = new Worker(new URL("./f2lOrderSearchWorker.ts", import.meta.url), {
-      type: "module",
-    });
-
-    f2lOrderSearchWorkerRef.current = worker;
-
-    worker.onmessage = (event: MessageEvent<F2lOrderSearchWorkerResponse>) => {
-      if (event.data.jobId !== f2lOrderSearchJobIdRef.current) {
-        return;
-      }
-
-      worker.terminate();
-
-      if (f2lOrderSearchWorkerRef.current === worker) {
-        f2lOrderSearchWorkerRef.current = null;
-      }
-
-      setIsSearchingF2lOrders(false);
-
-      if (!event.data.ok || !event.data.result) {
-        setF2lOrderSearchError(event.data.error ?? "条件付きF2L探索中にエラーが発生しました。");
-        setF2lOrderSearchMessage(null);
-        return;
-      }
-
-      const result = event.data.result;
-
-      if (import.meta.env.DEV) {
-        console.info("[conditional-f2l-order-search]", result.diagnostics);
-      }
-
-      setF2lOrderPlans(result.plans);
-      setF2lOrderSearchError(result.plans.length === 0 ? result.message : null);
-      setF2lOrderSearchMessage(
-        `${result.message} / nodes: ${result.nodes.toLocaleString()}${result.truncated ? " / 探索上限で打ち切りあり" : ""
-        }`,
-      );
-    };
-
-    worker.onerror = (event) => {
-      if (jobId !== f2lOrderSearchJobIdRef.current) {
-        return;
-      }
-
-      console.error("[conditional-f2l-order-search] Worker error", event);
-
-      worker.terminate();
-
-      if (f2lOrderSearchWorkerRef.current === worker) {
-        f2lOrderSearchWorkerRef.current = null;
-      }
-
-      setIsSearchingF2lOrders(false);
-      setF2lOrderSearchError("条件付きF2L探索Workerでエラーが発生しました。");
-      setF2lOrderSearchMessage(null);
-    };
-
-    worker.postMessage({
-      jobId,
-      state: selectedCrossSolution.stateAfterCross,
-      options: {
-        crossColor: selectedCrossSolution.color,
-        targetFace: selectedCrossSolution.targetFace,
-        maxDepth: 7,
-        maxNodes: 80_000,
-        maxSolutions: 8,
-        maxPlans: 12,
-        beamWidth: 24,
-        resultLimit: 12,
-        solutionsPerPair: 8,
-        maxDepthLastPair: 8,
-        maxNodesLastPair: 120_000,
-        protectSolvedSlots: true,
-      },
-    });
-  };
-
-  const playF2lOrderPlan = (plan: F2lOrderSearchPlan) => {
-    if (!selectedCrossSolution || plan.steps.length === 0) {
-      return;
-    }
-
-    const f2lAlgorithm = plan.steps
-      .map((step) => step.algorithm)
-      .filter(Boolean)
-      .join(" ");
-
-    const combinedSolve = [selectedCrossSolution.algorithm, f2lAlgorithm]
-      .map((algorithm) => algorithm.trim())
-      .filter(Boolean)
-      .join(" ");
-
-    selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
-  };
-
-  const playF2lOrderStep = (plan: F2lOrderSearchPlan, stepIndex: number) => {
-    if (!selectedCrossSolution) {
-      return;
-    }
-
-    const f2lAlgorithm = plan.steps
-      .slice(0, stepIndex + 1)
-      .map((step) => step.algorithm)
-      .filter(Boolean)
-      .join(" ");
-
-    const combinedSolve = [selectedCrossSolution.algorithm, f2lAlgorithm]
-      .map((algorithm) => algorithm.trim())
-      .filter(Boolean)
-      .join(" ");
-
-    selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
   };
 
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
@@ -3047,105 +2860,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     </ol>
                   </article>
                 )}
-                <article className="analyzer-basic-f2l-plan">
-                  <div className="analyzer-basic-f2l-heading">
-                    <div>
-                      <p className="eyebrow">Experimental DFS Search</p>
-                      <h3>条件付きDFS探索</h3>
-                    </div>
-                    <div className="analyzer-basic-f2l-summary">
-                      <span>max depth 5</span>
-                      <span>max 5 plans</span>
-                    </div>
-                  </div>
-
-                  <p>
-                    基本41DBではなく、Crossと完成済みスロットを守る条件で短い手順を探索する実験用です。
-                    通常の順序比較は上のBasic41ランキングを使います。
-                  </p>
-
-                  <button
-                    className="analyzer-primary-action"
-                    type="button"
-                    onClick={runConditionalF2lOrderSearch}
-                    disabled={isSearchingF2lOrders || !selectedCrossSolution}
-                  >
-                    {isSearchingF2lOrders ? "条件付き探索中..." : "条件付きDFS探索を試す"}
-                  </button>
-
-                  {f2lOrderSearchError && (
-                    <div className="analyzer-error analyzer-error-compact" role="alert">
-                      <p>{f2lOrderSearchError}</p>
-                    </div>
-                  )}
-
-                  {f2lOrderSearchMessage && (
-                    <p className="analyzer-muted">{f2lOrderSearchMessage}</p>
-                  )}
-
-                  {f2lOrderPlans.length > 0 && (
-                    <ol className="analyzer-basic-f2l-steps">
-                      {f2lOrderPlans.map((plan, planIndex) => (
-                        <li key={plan.id}>
-                          <div className="analyzer-basic-f2l-step-head">
-                            <strong>
-                              候補 {planIndex + 1}: {plan.totalMoveCount} moves / order{" "}
-                              {plan.order.join(" → ")}
-                            </strong>
-                            <button type="button" onClick={() => playF2lOrderPlan(plan)}>
-                              この候補を3D再生
-                            </button>
-                          </div>
-
-                          <div className="analyzer-f2l-tags">
-                            <span>Steps: {plan.steps.length}</span>
-                            <span>Score: {plan.totalScore.toFixed(1)}</span>
-                            <span>Nodes: {plan.nodes.toLocaleString()}</span>
-                            <span>未解決: {plan.unresolvedPairs.length}</span>
-                            <span>{plan.isComplete ? "F2L完成" : "未完了"}</span>
-                            {plan.truncated && <span>探索打ち切りあり</span>}
-                          </div>
-
-                          <p>{plan.message}</p>
-
-                          {plan.steps.length > 0 ? (
-                            <ol className="analyzer-basic-f2l-steps">
-                              {plan.steps.map((step, stepIndex) => (
-                                <li key={`${plan.id}-${step.stepIndex}-${step.pairId}`}>
-                                  <div className="analyzer-basic-f2l-step-head">
-                                    <strong>
-                                      Step {step.stepIndex}: {step.pairTitle}
-                                    </strong>
-                                    <button type="button" onClick={() => playF2lOrderStep(plan, stepIndex)}>
-                                      ここまで3D再生
-                                    </button>
-                                  </div>
-
-                                  <div className="analyzer-f2l-tags">
-                                    <span>Target: {step.targetSlot}</span>
-                                    <span>Moves: {step.moveCount}</span>
-                                    <span>Score: {step.score.toFixed(1)}</span>
-                                    <span>Nodes: {step.nodes.toLocaleString()}</span>
-                                  </div>
-
-                                  <code>{step.algorithm || "0手"}</code>
-                                </li>
-                              ))}
-                            </ol>
-                          ) : (
-                            <p className="analyzer-muted">この候補ではF2L手順を作れませんでした。</p>
-                          )}
-
-                          {plan.unresolvedPairs.length > 0 && (
-                            <p className="analyzer-muted">
-                              未解決ペア: {plan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </article>
                 <div className="analyzer-f2l-list">
                   {f2lCandidates.length === 0 ? (
                     <p className="analyzer-muted">

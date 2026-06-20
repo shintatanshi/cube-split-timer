@@ -85,12 +85,20 @@ export interface BasicF2lAnalysisStep {
 }
 
 export interface BasicF2lAnalysisPlan {
+  id: string;
+  order: F2lSlotName[];
   steps: BasicF2lAnalysisStep[];
   totalMoveCount: number;
+  totalScore: number;
   finalState: CubeState;
   unresolvedPairs: F2lPairCandidate[];
   note: string;
   strategy: "greedy" | "permutation";
+}
+
+export interface BasicF2lOrderAnalysisResult {
+  plans: BasicF2lAnalysisPlan[];
+  comparedOrderCount: number;
 }
 
 export interface CrossSearchInput {
@@ -1507,6 +1515,8 @@ function buildBasicF2lStepCandidate(
   return matches.sort((a, b) => a.score - b.score || a.moveCount - b.moveCount)[0] ?? null;
 }
 
+const F2L_ORDER_SLOTS: F2lSlotName[] = ["FR", "FL", "BR", "BL"];
+
 function getF2lPlanRank(plan: BasicF2lAnalysisPlan): number {
   return plan.unresolvedPairs.length * 10_000 + plan.steps.reduce((sum, step) => sum + step.score, 0);
 }
@@ -1533,6 +1543,7 @@ function buildBasicF2lPlan(
 ): BasicF2lAnalysisPlan {
   let currentState = cloneCubeState(initialState);
   const steps: BasicF2lAnalysisStep[] = [];
+  const planOrder = order ?? F2L_ORDER_SLOTS;
 
   for (let stepIndex = 1; stepIndex <= 4; stepIndex += 1) {
     const unsolvedCandidates = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
@@ -1574,12 +1585,17 @@ function buildBasicF2lPlan(
   const unresolvedPairs = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
     (candidate) => candidate.status !== "completed",
   );
+  const totalMoveCount = steps.reduce((sum, step) => sum + step.moveCount, 0);
+  const totalScore = steps.reduce((sum, step) => sum + step.score, 0);
 
   return {
+    id: `${strategy}-${planOrder.join("-")}`,
+    order: planOrder,
     steps,
     finalState: currentState,
     unresolvedPairs,
-    totalMoveCount: steps.reduce((sum, step) => sum + step.moveCount, 0),
+    totalMoveCount,
+    totalScore,
     note:
       unresolvedPairs.length === 0
         ? strategy === "permutation"
@@ -1590,27 +1606,38 @@ function buildBasicF2lPlan(
   };
 }
 
+export function analyzeBasicF2lOrderPlans(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): BasicF2lOrderAnalysisResult {
+  const orders = getF2lSlotPermutations(F2L_ORDER_SLOTS);
+  const plans = orders
+    .map((order) => buildBasicF2lPlan(initialState, crossColor, targetFace, "permutation", order))
+    .sort(
+      (a, b) =>
+        getF2lPlanRank(a) - getF2lPlanRank(b) ||
+        a.totalMoveCount - b.totalMoveCount ||
+        a.order.join("").localeCompare(b.order.join("")),
+    );
+
+  return {
+    plans,
+    comparedOrderCount: orders.length,
+  };
+}
+
 export function analyzeBasicF2lPlan(
   initialState: CubeState,
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): BasicF2lAnalysisPlan {
   const greedyPlan = buildBasicF2lPlan(initialState, crossColor, targetFace, "greedy");
-  const baseSlots = getF2lPairCandidates(initialState, crossColor, targetFace)
-    .filter((candidate) => candidate.status === "unsolved")
-    .map(getF2lSlotNameForCandidate);
-  const uniqueSlots = [...new Set(baseSlots)];
-
-  if (uniqueSlots.length <= 1) {
-    return greedyPlan;
-  }
-
-  const permutationPlans = getF2lSlotPermutations(uniqueSlots).map((order) =>
-    buildBasicF2lPlan(initialState, crossColor, targetFace, "permutation", order),
-  );
-  const bestPermutationPlan = permutationPlans.sort(
-    (a, b) => getF2lPlanRank(a) - getF2lPlanRank(b) || a.totalMoveCount - b.totalMoveCount,
-  )[0];
+  const bestPermutationPlan = analyzeBasicF2lOrderPlans(
+    initialState,
+    crossColor,
+    targetFace,
+  ).plans[0];
 
   if (!bestPermutationPlan) {
     return greedyPlan;

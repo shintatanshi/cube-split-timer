@@ -1,6 +1,8 @@
 import {
   analyzeBasicF2lPlan,
+  analyzeBasicF2lOrderPlans,
   type BasicF2lAnalysisPlan,
+  type BasicF2lOrderAnalysisResult,
   type CubeColorName,
   type CubeState,
   type TargetFace,
@@ -17,6 +19,7 @@ interface F2lAnalysisWorkerResponse {
   jobId: number;
   ok: boolean;
   plan?: BasicF2lAnalysisPlan;
+  orderResult?: BasicF2lOrderAnalysisResult;
   error?: string;
 }
 
@@ -27,10 +30,12 @@ ctx.onmessage = (event: MessageEvent<F2lAnalysisWorkerRequest>) => {
 
   try {
     const plan = analyzeBasicF2lPlan(state, crossColor, targetFace);
+    const orderResult = analyzeBasicF2lOrderPlans(state, crossColor, targetFace);
     const response: F2lAnalysisWorkerResponse = {
       jobId,
       ok: true,
       plan,
+      orderResult,
     };
 
     ctx.postMessage(response);

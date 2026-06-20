@@ -1,5 +1,6 @@
 import {
-  analyzeBasicF2lOrderPlans,
+  analyzeBasicF2lOrderPlansProgressively,
+  type BasicF2lAnalysisPhase,
   type BasicF2lAnalysisPlan,
   type BasicF2lOrderAnalysisResult,
   type CubeColorName,
@@ -17,6 +18,8 @@ interface F2lAnalysisWorkerRequest {
 interface F2lAnalysisWorkerResponse {
   jobId: number;
   ok: boolean;
+  phase?: BasicF2lAnalysisPhase;
+  done: boolean;
   plan?: BasicF2lAnalysisPlan;
   orderResult?: BasicF2lOrderAnalysisResult;
   error?: string;
@@ -24,25 +27,43 @@ interface F2lAnalysisWorkerResponse {
 
 const ctx: Worker = self as unknown as Worker;
 
+function createResponse(
+  jobId: number,
+  phase: BasicF2lAnalysisPhase,
+  orderResult: BasicF2lOrderAnalysisResult,
+  done: boolean,
+): F2lAnalysisWorkerResponse {
+  const plan = orderResult.plans[0];
+
+  return {
+    jobId,
+    ok: Boolean(plan),
+    phase,
+    done,
+    plan,
+    orderResult,
+    error: plan ? undefined : "F2L解析候補を作成できませんでした。",
+  };
+}
+
 ctx.onmessage = (event: MessageEvent<F2lAnalysisWorkerRequest>) => {
   const { jobId, state, crossColor, targetFace } = event.data;
 
   try {
-    const orderResult = analyzeBasicF2lOrderPlans(state, crossColor, targetFace);
-    const plan = orderResult.plans[0];
-    const response: F2lAnalysisWorkerResponse = {
-      jobId,
-      ok: Boolean(plan),
-      plan,
-      orderResult,
-      error: plan ? undefined : "F2L解析候補を作成できませんでした。",
-    };
-
-    ctx.postMessage(response);
+    analyzeBasicF2lOrderPlansProgressively(
+      state,
+      crossColor,
+      targetFace,
+      (phase, result, done) => {
+        ctx.postMessage(createResponse(jobId, phase, result, done));
+      },
+    );
   } catch (error) {
     const response: F2lAnalysisWorkerResponse = {
       jobId,
       ok: false,
+      phase: "fallback",
+      done: true,
       error: error instanceof Error ? error.message : "F2L解析中にエラーが発生しました。",
     };
 

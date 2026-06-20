@@ -64,6 +64,8 @@ interface CrossSearchWorkerResponse {
 interface F2lAnalysisWorkerResponse {
   jobId: number;
   ok: boolean;
+  phase?: "basic41" | "fallback";
+  done?: boolean;
   plan?: BasicF2lAnalysisPlan;
   orderResult?: BasicF2lOrderAnalysisResult;
   error?: string;
@@ -2110,18 +2112,25 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     });
 
     f2lAnalysisWorkerRef.current = worker;
-    worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
-      if (event.data.jobId !== f2lAnalysisJobIdRef.current) {
-        return;
-      }
-
+    const finishWorker = () => {
       worker.terminate();
       if (f2lAnalysisWorkerRef.current === worker) {
         f2lAnalysisWorkerRef.current = null;
       }
       setIsAnalyzingBasicF2l(false);
+    };
+
+    worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
+      if (event.data.jobId !== f2lAnalysisJobIdRef.current) {
+        return;
+      }
+
+      const isDone = event.data.done !== false;
 
       if (!event.data.ok || !event.data.plan) {
+        if (isDone) {
+          finishWorker();
+        }
         setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
         setBasicF2lOrderPlans([]);
         setBasicF2lComparedOrderCount(0);
@@ -2131,6 +2140,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setBasicF2lPlan(event.data.plan);
       setBasicF2lOrderPlans(event.data.orderResult?.plans ?? []);
       setBasicF2lComparedOrderCount(event.data.orderResult?.comparedOrderCount ?? 0);
+
+      if (isDone) {
+        finishWorker();
+      }
     };
     worker.onerror = () => {
       if (jobId !== f2lAnalysisJobIdRef.current) {
@@ -2713,7 +2726,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     <p className="eyebrow">Basic F2L 41</p>
                     <h3>F2L解析中...</h3>
                     <p>
-                      既存の基本41DBを使って、F2Lの24順序比較をWorkerで計算しています。
+                      まず基本41DBだけの候補を表示し、未解決が残る場合だけ補助探索で更新します。
                     </p>
                   </article>
                 )}

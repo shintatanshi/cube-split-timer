@@ -101,6 +101,12 @@ export interface BasicF2lOrderAnalysisResult {
   comparedOrderCount: number;
 }
 
+export type BasicF2lAnalysisPhase = "basic41" | "fallback";
+
+export interface BasicF2lOrderAnalysisOptions {
+  useLocalSearch?: boolean;
+}
+
 interface F2lExtractionCandidate {
   algorithm: string;
   state: CubeState;
@@ -1533,6 +1539,7 @@ function buildBasicF2lStepCandidate(
   targetFace: TargetFace,
   stepIndex: number,
   cache?: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lAnalysisStep | null {
   const slotName = getF2lSlotNameForCandidate(candidate);
   const matches: BasicF2lAnalysisStep[] = [];
@@ -1580,6 +1587,10 @@ function buildBasicF2lStepCandidate(
 
   if (matches.length > 0) {
     return matches.sort((a, b) => a.score - b.score || a.moveCount - b.moveCount)[0];
+  }
+
+  if (options.useLocalSearch === false) {
+    return null;
   }
 
   for (const extraction of extractionCandidates.slice(0, 10)) {
@@ -1645,6 +1656,7 @@ function buildBasicF2lPlan(
   strategy: "greedy" | "permutation",
   order?: F2lSlotName[],
   cache?: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lAnalysisPlan {
   let currentState = cloneCubeState(initialState);
   const steps: BasicF2lAnalysisStep[] = [];
@@ -1680,6 +1692,7 @@ function buildBasicF2lPlan(
           targetFace,
           stepIndex,
           cache,
+          options,
         ),
       )
       .filter((step): step is BasicF2lAnalysisStep => Boolean(step))
@@ -1710,10 +1723,14 @@ function buildBasicF2lPlan(
     totalScore,
     note:
       unresolvedPairs.length === 0
-        ? strategy === "permutation"
-          ? "4ペアの順番を比較し、基本41と短い局所探索でF2L完成までつながりました。"
-          : "基本41候補と短い局所探索でF2L完成までつながりました。"
-        : "一部のペアはまだ確定できませんでした。追加F2L・裏F2L・より深い探索を足すとさらに改善できます。",
+        ? options.useLocalSearch === false
+          ? "4ペアの順番を比較し、基本41と取り出しだけでF2L完成までつながりました。"
+          : strategy === "permutation"
+            ? "4ペアの順番を比較し、基本41と短い局所探索でF2L完成までつながりました。"
+            : "基本41候補と短い局所探索でF2L完成までつながりました。"
+        : options.useLocalSearch === false
+          ? "基本41と取り出しだけで先に比較しました。未解決が残る場合は補助探索で更新します。"
+          : "一部のペアはまだ確定できませんでした。追加F2L・裏F2L・より深い探索を足すとさらに改善できます。",
     strategy,
   };
 }
@@ -1723,11 +1740,20 @@ function analyzeBasicF2lOrderPlansWithCache(
   crossColor: CubeColorName,
   targetFace: TargetFace,
   cache: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lOrderAnalysisResult {
   const orders = getF2lSlotPermutations(F2L_ORDER_SLOTS);
   const plans = orders
     .map((order) =>
-      buildBasicF2lPlan(initialState, crossColor, targetFace, "permutation", order, cache),
+      buildBasicF2lPlan(
+        initialState,
+        crossColor,
+        targetFace,
+        "permutation",
+        order,
+        cache,
+        options,
+      ),
     )
     .sort(
       (a, b) =>
@@ -1746,13 +1772,53 @@ export function analyzeBasicF2lOrderPlans(
   initialState: CubeState,
   crossColor: CubeColorName,
   targetFace: TargetFace,
+  options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lOrderAnalysisResult {
   return analyzeBasicF2lOrderPlansWithCache(
     initialState,
     crossColor,
     targetFace,
     createBasicF2lAnalysisCache(),
+    options,
   );
+}
+
+export function analyzeBasicF2lOrderPlansProgressively(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  onResult: (
+    phase: BasicF2lAnalysisPhase,
+    result: BasicF2lOrderAnalysisResult,
+    done: boolean,
+  ) => void,
+): void {
+  const cache = createBasicF2lAnalysisCache();
+  const basic41Result = analyzeBasicF2lOrderPlansWithCache(
+    initialState,
+    crossColor,
+    targetFace,
+    cache,
+    { useLocalSearch: false },
+  );
+  const basic41Plan = basic41Result.plans[0];
+  const basic41Done = (basic41Plan?.unresolvedPairs.length ?? 1) === 0;
+
+  onResult("basic41", basic41Result, basic41Done);
+
+  if (basic41Done) {
+    return;
+  }
+
+  const fallbackResult = analyzeBasicF2lOrderPlansWithCache(
+    initialState,
+    crossColor,
+    targetFace,
+    cache,
+    { useLocalSearch: true },
+  );
+
+  onResult("fallback", fallbackResult, true);
 }
 
 export function analyzeBasicF2lPlan(
@@ -1768,12 +1834,14 @@ export function analyzeBasicF2lPlan(
     "greedy",
     undefined,
     cache,
+    {},
   );
   const bestPermutationPlan = analyzeBasicF2lOrderPlansWithCache(
     initialState,
     crossColor,
     targetFace,
     cache,
+    {},
   ).plans[0];
 
   if (!bestPermutationPlan) {

@@ -2251,7 +2251,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         maxNodes: 80_000,
         maxSolutions: 8,
         maxPlans: 12,
-        protectSolvedSlots: false,
+        protectSolvedSlots: true,
       },
     });
   };

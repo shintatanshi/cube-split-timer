@@ -1,4 +1,4 @@
-import { isCrossSolved } from "./cubeState";
+import { getF2lPairCandidates, isCrossSolved } from "./cubeState";
 import type {
   CubeColorName,
   CubePiece,
@@ -230,4 +230,27 @@ export function getF2lSearchGuardMessages(
   }
 
   return messages;
+}
+
+export function areProtectedF2lSlotsCompleted(
+  state: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  protectedSlotNames: F2lSlotName[],
+): boolean {
+  if (protectedSlotNames.length === 0) {
+    return true;
+  }
+
+  if (!isCrossSolved(state, crossColor, targetFace)) {
+    return false;
+  }
+
+  const completedSlotNames = new Set(
+    getF2lPairCandidates(state, crossColor, targetFace)
+      .filter((candidate) => candidate.status === "completed")
+      .map((candidate) => getF2lTargetSlotName(candidate)),
+  );
+
+  return protectedSlotNames.every((slotName) => completedSlotNames.has(slotName));
 }

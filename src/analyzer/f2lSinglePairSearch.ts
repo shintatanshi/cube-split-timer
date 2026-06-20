@@ -1,4 +1,5 @@
 import { applyAlgorithm, applyMove, cloneCubeState, isCrossSolved } from "./cubeState";
+
 import type { CubeState, F2lSlotName } from "./cubeState";
 import { getF2lSearchMoves, shouldSkipRepeatedFaceMove } from "./f2lSearchMoves";
 import {
@@ -6,6 +7,7 @@ import {
     getF2lTargetSlotName,
     getSolvedF2lProtectedSlots,
     isF2lSearchGoalState,
+    areProtectedF2lSlotsCompleted,
 } from "./f2lSearchGuards";
 import type {
     F2lProtectedSlot,
@@ -249,6 +251,7 @@ function depthFirstSearch(
 export function searchF2lSinglePair(
     input: F2lSinglePairSearchInput,
 ): F2lSinglePairSearchResult {
+    const protectedSlotNames = input.protectedSlotNames ?? [];
     if (input.options.targetFace !== "D") {
         return createEmptyResult(
             input,

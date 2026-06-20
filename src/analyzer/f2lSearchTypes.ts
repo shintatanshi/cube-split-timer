@@ -22,6 +22,7 @@ export interface F2lSinglePairSearchOptions {
   maxNodes: number;
   maxSolutions: number;
   protectSolvedSlots: boolean;
+
   protectedSlots?: F2lProtectedSlot[];
 }
 
@@ -29,6 +30,7 @@ export interface F2lSinglePairSearchInput {
   state: CubeState;
   pair: F2lPairCandidate;
   options: F2lSinglePairSearchOptions;
+  protectedSlotNames?: F2lSlotName[];
 }
 
 export interface F2lSinglePairSearchSolution {

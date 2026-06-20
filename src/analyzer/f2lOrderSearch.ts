@@ -211,7 +211,10 @@ function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): 
                 pair: nextCandidate,
                 options: {
                     ...input.options,
-                    protectedSlots: undefined,
+                    protectedSlots: partial.steps.map((step) => ({
+                        slotName: step.targetSlot,
+                        reason: "alreadySolved" as const,
+                    })),
                 },
             });
 

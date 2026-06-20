@@ -1334,74 +1334,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   useEffect(() => {
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
-    const jobId = f2lAnalysisJobIdRef.current + 1;
-    f2lAnalysisJobIdRef.current = jobId;
-
+    f2lAnalysisJobIdRef.current += 1;
+    setIsAnalyzingBasicF2l(false);
     setBasicF2lPlan(null);
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lError(null);
-
-    if (!selectedCrossSolution) {
-      setIsAnalyzingBasicF2l(false);
-      return undefined;
-    }
-
-    setIsAnalyzingBasicF2l(true);
-    const worker = new Worker(new URL("./f2lAnalysisWorker.ts", import.meta.url), {
-      type: "module",
-    });
-
-    f2lAnalysisWorkerRef.current = worker;
-    worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
-      if (event.data.jobId !== f2lAnalysisJobIdRef.current) {
-        return;
-      }
-
-      worker.terminate();
-      if (f2lAnalysisWorkerRef.current === worker) {
-        f2lAnalysisWorkerRef.current = null;
-      }
-      setIsAnalyzingBasicF2l(false);
-
-      if (!event.data.ok || !event.data.plan) {
-        setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
-        setBasicF2lOrderPlans([]);
-        setBasicF2lComparedOrderCount(0);
-        return;
-      }
-
-      setBasicF2lPlan(event.data.plan);
-      setBasicF2lOrderPlans(event.data.orderResult?.plans ?? []);
-      setBasicF2lComparedOrderCount(event.data.orderResult?.comparedOrderCount ?? 0);
-    };
-    worker.onerror = () => {
-      if (jobId !== f2lAnalysisJobIdRef.current) {
-        return;
-      }
-
-      worker.terminate();
-      if (f2lAnalysisWorkerRef.current === worker) {
-        f2lAnalysisWorkerRef.current = null;
-      }
-      setIsAnalyzingBasicF2l(false);
-      setBasicF2lOrderPlans([]);
-      setBasicF2lComparedOrderCount(0);
-      setBasicF2lError("F2L解析Workerでエラーが発生しました。");
-    };
-    worker.postMessage({
-      jobId,
-      state: selectedCrossSolution.stateAfterCross,
-      crossColor: selectedCrossSolution.color,
-      targetFace: selectedCrossSolution.targetFace,
-    });
-
-    return () => {
-      worker.terminate();
-      if (f2lAnalysisWorkerRef.current === worker) {
-        f2lAnalysisWorkerRef.current = null;
-      }
-    };
   }, [selectedCrossSolution]);
 
   useEffect(
@@ -2149,6 +2087,73 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     );
   };
 
+  const runBasicF2lAnalysis = useCallback(() => {
+    f2lAnalysisWorkerRef.current?.terminate();
+    f2lAnalysisWorkerRef.current = null;
+    const jobId = f2lAnalysisJobIdRef.current + 1;
+    f2lAnalysisJobIdRef.current = jobId;
+
+    setBasicF2lPlan(null);
+    setBasicF2lOrderPlans([]);
+    setBasicF2lComparedOrderCount(0);
+    setBasicF2lError(null);
+
+    if (!selectedCrossSolution) {
+      setIsAnalyzingBasicF2l(false);
+      setBasicF2lError("先にCross候補を選択してください。");
+      return;
+    }
+
+    setIsAnalyzingBasicF2l(true);
+    const worker = new Worker(new URL("./f2lAnalysisWorker.ts", import.meta.url), {
+      type: "module",
+    });
+
+    f2lAnalysisWorkerRef.current = worker;
+    worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
+      if (event.data.jobId !== f2lAnalysisJobIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+      if (f2lAnalysisWorkerRef.current === worker) {
+        f2lAnalysisWorkerRef.current = null;
+      }
+      setIsAnalyzingBasicF2l(false);
+
+      if (!event.data.ok || !event.data.plan) {
+        setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
+        setBasicF2lOrderPlans([]);
+        setBasicF2lComparedOrderCount(0);
+        return;
+      }
+
+      setBasicF2lPlan(event.data.plan);
+      setBasicF2lOrderPlans(event.data.orderResult?.plans ?? []);
+      setBasicF2lComparedOrderCount(event.data.orderResult?.comparedOrderCount ?? 0);
+    };
+    worker.onerror = () => {
+      if (jobId !== f2lAnalysisJobIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+      if (f2lAnalysisWorkerRef.current === worker) {
+        f2lAnalysisWorkerRef.current = null;
+      }
+      setIsAnalyzingBasicF2l(false);
+      setBasicF2lOrderPlans([]);
+      setBasicF2lComparedOrderCount(0);
+      setBasicF2lError("F2L解析Workerでエラーが発生しました。");
+    };
+    worker.postMessage({
+      jobId,
+      state: selectedCrossSolution.stateAfterCross,
+      crossColor: selectedCrossSolution.color,
+      targetFace: selectedCrossSolution.targetFace,
+    });
+  }, [selectedCrossSolution]);
+
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
     if (!selectedCrossSolution || steps.length === 0) {
       return;
@@ -2695,12 +2700,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     Crossを3Dで再確認
                   </button>
                 </div>
+                <button
+                  className="analyzer-primary-action"
+                  type="button"
+                  onClick={runBasicF2lAnalysis}
+                  disabled={isAnalyzingBasicF2l}
+                >
+                  {isAnalyzingBasicF2l ? "F2L解析中..." : "既存手順DBでF2L解析"}
+                </button>
                 {isAnalyzingBasicF2l && (
                   <article className="analyzer-basic-f2l-plan">
                     <p className="eyebrow">Basic F2L 41</p>
                     <h3>F2L解析中...</h3>
                     <p>
-                      Cross結果は表示済みです。F2Lの24順序比較とフォールバック探索だけWorkerで計算しています。
+                      既存の基本41DBを使って、F2Lの24順序比較をWorkerで計算しています。
                     </p>
                   </article>
                 )}

@@ -18,8 +18,7 @@ import {
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
-import { searchF2lOrders } from "./f2lOrderSearch";
-import type { F2lOrderSearchPlan } from "./f2lSearchTypes";
+import type { F2lOrderSearchPlan, F2lOrderSearchResult } from "./f2lSearchTypes";
 import type {
   BasicF2lAnalysisPlan,
   BasicF2lAnalysisStep,
@@ -66,6 +65,13 @@ interface F2lAnalysisWorkerResponse {
   jobId: number;
   ok: boolean;
   plan?: BasicF2lAnalysisPlan;
+  error?: string;
+}
+
+interface F2lOrderSearchWorkerResponse {
+  jobId: number;
+  ok: boolean;
+  result?: F2lOrderSearchResult;
   error?: string;
 }
 
@@ -867,6 +873,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const crossJobIdRef = useRef(0);
   const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
   const f2lAnalysisJobIdRef = useRef(0);
+  const f2lOrderSearchWorkerRef = useRef<Worker | null>(null);
+  const f2lOrderSearchJobIdRef = useRef(0);
   const playerPanelRef = useRef<HTMLElement | null>(null);
   const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
   const lastRestoredSceneIdRef = useRef(0);
@@ -1211,6 +1219,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setIsAnalyzingBasicF2l(false);
     setBasicF2lPlan(null);
     setBasicF2lError(null);
+    f2lOrderSearchWorkerRef.current?.terminate();
+    f2lOrderSearchWorkerRef.current = null;
+    f2lOrderSearchJobIdRef.current += 1;
+    setIsSearchingF2lOrders(false);
+    setF2lOrderPlans([]);
+    setF2lOrderSearchError(null);
+    setF2lOrderSearchMessage(null);
     setAiNotice(null);
     setF2lOrderPlans([]);
     setF2lOrderSearchError(null);
@@ -1343,6 +1358,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     setBasicF2lPlan(null);
     setBasicF2lError(null);
+
+    f2lOrderSearchWorkerRef.current?.terminate();
+    f2lOrderSearchWorkerRef.current = null;
+    f2lOrderSearchJobIdRef.current += 1;
     setF2lOrderPlans([]);
     setF2lOrderSearchError(null);
     setF2lOrderSearchMessage(null);
@@ -1410,6 +1429,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       crossWorkerRef.current = null;
       f2lAnalysisWorkerRef.current?.terminate();
       f2lAnalysisWorkerRef.current = null;
+      f2lOrderSearchWorkerRef.current?.terminate();
+      f2lOrderSearchWorkerRef.current = null;
     },
     [],
   );
@@ -1594,6 +1615,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     crossWorkerRef.current?.terminate();
     crossWorkerRef.current = null;
     crossJobIdRef.current += 1;
+    f2lAnalysisWorkerRef.current?.terminate();
+    f2lAnalysisWorkerRef.current = null;
+    f2lAnalysisJobIdRef.current += 1;
+
+    f2lOrderSearchWorkerRef.current?.terminate();
+    f2lOrderSearchWorkerRef.current = null;
+    f2lOrderSearchJobIdRef.current += 1;
     skipNextSettingsSaveCountRef.current = 2;
     skipNextAnalyzerStateSaveCountRef.current = 2;
     clearAnalyzerState();
@@ -2152,39 +2180,80 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return;
     }
 
+    f2lOrderSearchWorkerRef.current?.terminate();
+    f2lOrderSearchWorkerRef.current = null;
+
+    const jobId = f2lOrderSearchJobIdRef.current + 1;
+    f2lOrderSearchJobIdRef.current = jobId;
+
     setIsSearchingF2lOrders(true);
     setF2lOrderPlans([]);
     setF2lOrderSearchError(null);
-    setF2lOrderSearchMessage(null);
+    setF2lOrderSearchMessage("条件付きF2L探索を開始しました。少し時間がかかる場合があります。");
 
-    window.setTimeout(() => {
-      try {
-        const result = searchF2lOrders({
-          state: selectedCrossSolution.stateAfterCross,
-          options: {
-            crossColor: selectedCrossSolution.color,
-            targetFace: selectedCrossSolution.targetFace,
-            maxDepth: 7,
-            maxNodes: 80_000,
-            maxSolutions: 8,
-            maxPlans: 12,
-            protectSolvedSlots: false,
-          },
-        });
+    const worker = new Worker(new URL("./f2lOrderSearchWorker.ts", import.meta.url), {
+      type: "module",
+    });
 
-        setF2lOrderPlans(result.plans);
-        setF2lOrderSearchMessage(
-          `${result.message} / nodes: ${result.nodes.toLocaleString()}${result.truncated ? " / 探索上限で打ち切りあり" : ""
-          }`,
-        );
-      } catch (error) {
-        setF2lOrderSearchError(
-          error instanceof Error ? error.message : "条件付きF2L探索中にエラーが発生しました。",
-        );
-      } finally {
-        setIsSearchingF2lOrders(false);
+    f2lOrderSearchWorkerRef.current = worker;
+
+    worker.onmessage = (event: MessageEvent<F2lOrderSearchWorkerResponse>) => {
+      if (event.data.jobId !== f2lOrderSearchJobIdRef.current) {
+        return;
       }
-    }, 0);
+
+      worker.terminate();
+
+      if (f2lOrderSearchWorkerRef.current === worker) {
+        f2lOrderSearchWorkerRef.current = null;
+      }
+
+      setIsSearchingF2lOrders(false);
+
+      if (!event.data.ok || !event.data.result) {
+        setF2lOrderSearchError(event.data.error ?? "条件付きF2L探索中にエラーが発生しました。");
+        setF2lOrderSearchMessage(null);
+        return;
+      }
+
+      const result = event.data.result;
+
+      setF2lOrderPlans(result.plans);
+      setF2lOrderSearchMessage(
+        `${result.message} / nodes: ${result.nodes.toLocaleString()}${result.truncated ? " / 探索上限で打ち切りあり" : ""
+        }`,
+      );
+    };
+
+    worker.onerror = () => {
+      if (jobId !== f2lOrderSearchJobIdRef.current) {
+        return;
+      }
+
+      worker.terminate();
+
+      if (f2lOrderSearchWorkerRef.current === worker) {
+        f2lOrderSearchWorkerRef.current = null;
+      }
+
+      setIsSearchingF2lOrders(false);
+      setF2lOrderSearchError("条件付きF2L探索Workerでエラーが発生しました。");
+      setF2lOrderSearchMessage(null);
+    };
+
+    worker.postMessage({
+      jobId,
+      state: selectedCrossSolution.stateAfterCross,
+      options: {
+        crossColor: selectedCrossSolution.color,
+        targetFace: selectedCrossSolution.targetFace,
+        maxDepth: 7,
+        maxNodes: 80_000,
+        maxSolutions: 8,
+        maxPlans: 12,
+        protectSolvedSlots: false,
+      },
+    });
   };
 
   const playF2lOrderPlan = (plan: F2lOrderSearchPlan) => {

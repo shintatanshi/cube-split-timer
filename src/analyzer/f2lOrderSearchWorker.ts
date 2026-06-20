@@ -26,6 +26,10 @@ ctx.onmessage = (event: MessageEvent<F2lOrderSearchWorkerRequest>) => {
       options,
     });
 
+    if (import.meta.env.DEV) {
+      console.info("[conditional-f2l-order-search]", result.diagnostics);
+    }
+
     const response: F2lOrderSearchWorkerResponse = {
       jobId,
       ok: true,
@@ -34,6 +38,8 @@ ctx.onmessage = (event: MessageEvent<F2lOrderSearchWorkerRequest>) => {
 
     ctx.postMessage(response);
   } catch (error) {
+    console.error("[conditional-f2l-order-search] worker error", error);
+
     const response: F2lOrderSearchWorkerResponse = {
       jobId,
       ok: false,

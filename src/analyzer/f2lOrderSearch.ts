@@ -1,13 +1,17 @@
-import { cloneCubeState, getF2lPairCandidates } from "./cubeState";
+import { cloneCubeState, getF2lPairCandidates, isCrossSolved } from "./cubeState";
 import type { CubeState, F2lPairCandidate, F2lSlotName } from "./cubeState";
-import { getF2lTargetSlotName } from "./f2lSearchGuards";
+import { getF2lTargetSlotName, isF2lSearchGoalState, isF2lSlotSolved } from "./f2lSearchGuards";
 import { searchF2lSinglePair } from "./f2lSinglePairSearch";
 import type {
     F2lOrderSearchInput,
+    F2lOrderSearchDiagnostics,
     F2lOrderSearchPlan,
     F2lOrderSearchResult,
     F2lOrderSearchStep,
+    F2lOrderSearchStepDiagnostics,
+    F2lProtectedSlot,
     F2lSinglePairSearchOptions,
+    F2lSinglePairSearchResult,
     F2lSinglePairSearchSolution,
 } from "./f2lSearchTypes";
 
@@ -18,6 +22,39 @@ interface PartialF2lOrderPlan {
     truncated: boolean;
     message: string;
     stopped: boolean;
+}
+
+interface ExpandedF2lOrderPlans {
+    plans: F2lOrderSearchPlan[];
+    diagnostics: F2lOrderSearchStepDiagnostics[];
+}
+
+const ALL_F2L_SLOTS: F2lSlotName[] = ["FR", "FL", "BR", "BL"];
+
+function getBeamWidth(input: F2lOrderSearchInput): number {
+    return Math.max(1, input.options.beamWidth ?? input.options.maxPlans);
+}
+
+function getResultLimit(input: F2lOrderSearchInput): number {
+    return Math.max(1, input.options.resultLimit ?? input.options.maxPlans);
+}
+
+function getSolutionsPerPair(input: F2lOrderSearchInput): number {
+    return Math.max(1, input.options.solutionsPerPair ?? input.options.maxSolutions);
+}
+
+function createOrderDiagnostics(
+    input: F2lOrderSearchInput,
+    orderCount: number,
+    steps: F2lOrderSearchStepDiagnostics[] = [],
+): F2lOrderSearchDiagnostics {
+    return {
+        orderCount,
+        beamWidth: getBeamWidth(input),
+        resultLimit: getResultLimit(input),
+        solutionsPerPair: getSolutionsPerPair(input),
+        steps,
+    };
 }
 
 function getUniqueUnsolvedSlots(state: CubeState, options: F2lSinglePairSearchOptions): F2lSlotName[] {
@@ -82,6 +119,7 @@ function createStep(
         score: solution.score,
         stateAfter: solution.stateAfter,
         nodes: solution.nodes,
+        diagnostics: solution.diagnostics,
     };
 }
 
@@ -109,7 +147,7 @@ function getPartialRank(partial: PartialF2lOrderPlan, options: F2lSinglePairSear
 }
 
 function getPlanRank(plan: F2lOrderSearchPlan): number {
-    return plan.unresolvedPairs.length * 100_000 + plan.totalScore;
+    return plan.unresolvedPairs.length * 100_000 + (plan.isComplete ? 0 : 50_000) + plan.totalScore;
 }
 
 function getPlanSignature(plan: F2lOrderSearchPlan): string {
@@ -142,12 +180,26 @@ function toFinalPlan(
     const unresolvedPairs = getUnresolvedPairs(partial.currentState, input.options);
     const totalMoveCount = getTotalMoveCount(partial.steps);
     const totalScore = getTotalScore(partial.steps);
+    const allSlotsSolved = ALL_F2L_SLOTS.every((slotName) =>
+        isF2lSlotSolved(
+            partial.currentState,
+            slotName,
+            input.options.crossColor,
+            input.options.targetFace,
+        ),
+    );
+    const crossSolved = isCrossSolved(
+        partial.currentState,
+        input.options.crossColor,
+        input.options.targetFace,
+    );
+    const isComplete = unresolvedPairs.length === 0 && crossSolved && allSlotsSolved;
 
     let message = partial.message;
 
     if (!message) {
         message =
-            unresolvedPairs.length === 0
+            isComplete
                 ? "この順番でF2L 4ペアがすべて完成しました。"
                 : "この順番では一部のF2Lペアが未解決のまま残りました。";
     }
@@ -160,15 +212,67 @@ function toFinalPlan(
         totalScore,
         finalState: partial.currentState,
         unresolvedPairs,
+        isComplete,
         nodes: partial.nodes,
         truncated: partial.truncated,
         message,
     };
 }
 
-function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): F2lOrderSearchPlan[] {
-    const beamWidth = Math.max(1, input.options.maxPlans);
-    const solutionLimit = Math.max(1, input.options.maxSolutions);
+function getProtectedSlotsForPartial(partial: PartialF2lOrderPlan): F2lProtectedSlot[] {
+    return partial.steps.map((step) => ({
+        slotName: step.targetSlot,
+        reason: "alreadySolved" as const,
+    }));
+}
+
+function createStepDiagnostics(
+    order: F2lSlotName[],
+    stepIndex: number,
+    protectedSlots: F2lProtectedSlot[],
+    result: F2lSinglePairSearchResult,
+): F2lOrderSearchStepDiagnostics {
+    return {
+        order,
+        stepIndex,
+        targetSlot: result.targetSlot,
+        protectedSlots,
+        status: result.status,
+        message: result.message,
+        nodes: result.nodes,
+        maxDepth: result.maxDepth,
+        maxNodes: result.maxNodes,
+        extractionStartCount: result.diagnostics.extractionStartCount,
+        truncated: result.truncated,
+        failureCounts: result.diagnostics.failureCounts,
+    };
+}
+
+function getSinglePairOptions(
+    input: F2lOrderSearchInput,
+    partial: PartialF2lOrderPlan,
+    protectedSlots: F2lProtectedSlot[],
+): F2lSinglePairSearchOptions {
+    const unresolvedCount = getUnresolvedPairs(partial.currentState, input.options).length;
+    const isLastPair = unresolvedCount <= 1;
+
+    return {
+        ...input.options,
+        maxDepth: isLastPair
+            ? input.options.maxDepthLastPair ?? input.options.maxDepth
+            : input.options.maxDepth,
+        maxNodes: isLastPair
+            ? input.options.maxNodesLastPair ?? input.options.maxNodes
+            : input.options.maxNodes,
+        maxSolutions: getSolutionsPerPair(input),
+        protectedSlots,
+    };
+}
+
+function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): ExpandedF2lOrderPlans {
+    const beamWidth = getBeamWidth(input);
+    const solutionLimit = getSolutionsPerPair(input);
+    const diagnostics: F2lOrderSearchStepDiagnostics[] = [];
 
     let partials: PartialF2lOrderPlan[] = [
         {
@@ -206,19 +310,20 @@ function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): 
                 continue;
             }
 
+            const protectedSlots = getProtectedSlotsForPartial(partial);
+            const singlePairOptions = getSinglePairOptions(input, partial, protectedSlots);
             const result = searchF2lSinglePair({
                 state: partial.currentState,
                 pair: nextCandidate,
-                options: {
-                    ...input.options,
-                    protectedSlots: partial.steps.map((step) => ({
-                        slotName: step.targetSlot,
-                        reason: "alreadySolved" as const,
-                    })),
-                },
+                options: singlePairOptions,
             });
+            diagnostics.push(createStepDiagnostics(order, stepIndex, protectedSlots, result));
 
-            const solutions = result.solutions.slice(0, solutionLimit);
+            const solutions = result.solutions
+                .filter((solution) =>
+                    isF2lSearchGoalState(solution.stateAfter, nextCandidate, singlePairOptions),
+                )
+                .slice(0, solutionLimit);
 
             if (solutions.length === 0) {
                 nextPartials.push({
@@ -226,7 +331,7 @@ function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): 
                     nodes: partial.nodes + result.nodes,
                     truncated: partial.truncated || result.truncated,
                     stopped: true,
-                    message: `${nextCandidate.title} の手順が見つからなかったため、この順番は途中で終了しました。`,
+                    message: `${nextCandidate.title} の手順が見つからなかったため、この順番は途中で終了しました。${result.message ? ` ${result.message}` : ""}`,
                 });
                 continue;
             }
@@ -258,10 +363,13 @@ function expandPlansForOrder(input: F2lOrderSearchInput, order: F2lSlotName[]): 
         }
     }
 
-    return partials
-        .map((partial, index) => toFinalPlan(input, order, partial, index))
-        .sort((a, b) => getPlanRank(a) - getPlanRank(b) || a.totalMoveCount - b.totalMoveCount)
-        .slice(0, beamWidth);
+    return {
+        plans: partials
+            .map((partial, index) => toFinalPlan(input, order, partial, index))
+            .sort((a, b) => getPlanRank(a) - getPlanRank(b) || a.totalMoveCount - b.totalMoveCount)
+            .slice(0, beamWidth),
+        diagnostics,
+    };
 }
 
 export function searchF2lOrders(input: F2lOrderSearchInput): F2lOrderSearchResult {
@@ -271,6 +379,7 @@ export function searchF2lOrders(input: F2lOrderSearchInput): F2lOrderSearchResul
             nodes: 0,
             truncated: false,
             message: "現在のF2L順番探索はD面Crossのみ対応しています。",
+            diagnostics: createOrderDiagnostics(input, 0),
         };
     }
 
@@ -287,6 +396,7 @@ export function searchF2lOrders(input: F2lOrderSearchInput): F2lOrderSearchResul
                     totalScore: 0,
                     finalState: cloneCubeState(input.state),
                     unresolvedPairs: [],
+                    isComplete: true,
                     nodes: 0,
                     truncated: false,
                     message: "F2Lはすでに完成しています。",
@@ -295,22 +405,29 @@ export function searchF2lOrders(input: F2lOrderSearchInput): F2lOrderSearchResul
             nodes: 0,
             truncated: false,
             message: "F2Lはすでに完成しています。",
+            diagnostics: createOrderDiagnostics(input, 0),
         };
     }
 
     const orders = getPermutations(baseSlots);
+    const expanded = orders.map((order) => expandPlansForOrder(input, order));
+    const allPlans = expanded.flatMap((entry) => entry.plans);
+    const stepDiagnostics = expanded.flatMap((entry) => entry.diagnostics);
 
-    const plans = dedupePlans(orders.flatMap((order) => expandPlansForOrder(input, order)))
+    const plans = dedupePlans(allPlans)
         .sort((a, b) => getPlanRank(a) - getPlanRank(b) || a.totalMoveCount - b.totalMoveCount)
-        .slice(0, Math.max(1, input.options.maxPlans));
+        .slice(0, getResultLimit(input));
+    const searchedNodes = stepDiagnostics.reduce((sum, step) => sum + step.nodes, 0);
+    const diagnostics = createOrderDiagnostics(input, orders.length, stepDiagnostics);
 
     return {
         plans,
-        nodes: plans.reduce((sum, plan) => sum + plan.nodes, 0),
-        truncated: plans.some((plan) => plan.truncated),
+        nodes: searchedNodes,
+        truncated: stepDiagnostics.some((step) => step.truncated),
         message:
-            plans[0]?.unresolvedPairs.length === 0
+            plans[0]?.isComplete
                 ? `${orders.length}通りのF2L順番を比較しました。`
                 : `${orders.length}通りを比較しましたが、未解決ペアが残る候補があります。`,
+        diagnostics,
     };
 }

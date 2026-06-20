@@ -1,4 +1,4 @@
-import { getF2lPairCandidates, isCrossSolved } from "./cubeState";
+import { isCrossSolved } from "./cubeState";
 import type {
   CubeColorName,
   CubePiece,
@@ -181,24 +181,39 @@ export function isF2lSearchGoalState(
   pair: F2lPairCandidate,
   options: F2lSinglePairSearchOptions,
 ): boolean {
-  if (!isCrossSolved(state, options.crossColor, options.targetFace)) {
-    return false;
-  }
+  return getF2lSearchGoalCheck(state, pair, options).isGoal;
+}
 
-  if (!isF2lPairSolvedInTargetSlot(state, pair)) {
-    return false;
-  }
+export function getF2lSearchGoalCheck(
+  state: CubeState,
+  pair: F2lPairCandidate,
+  options: F2lSinglePairSearchOptions,
+): {
+  crossSolved: boolean;
+  targetPairSolved: boolean;
+  protectedSlotsSolved: boolean;
+  brokenProtectedSlots: F2lProtectedSlot[];
+  isGoal: boolean;
+} {
+  const crossSolved = isCrossSolved(state, options.crossColor, options.targetFace);
+  const targetPairSolved = isF2lPairSolvedInTargetSlot(state, pair);
+  const brokenProtectedSlots = options.protectSolvedSlots
+    ? getBrokenProtectedF2lSlots(
+        state,
+        options.protectedSlots ?? [],
+        options.crossColor,
+        options.targetFace,
+      )
+    : [];
+  const protectedSlotsSolved = brokenProtectedSlots.length === 0;
 
-  if (!options.protectSolvedSlots) {
-    return true;
-  }
-
-  return areProtectedF2lSlotsStillSolved(
-    state,
-    options.protectedSlots ?? [],
-    options.crossColor,
-    options.targetFace,
-  );
+  return {
+    crossSolved,
+    targetPairSolved,
+    protectedSlotsSolved,
+    brokenProtectedSlots,
+    isGoal: crossSolved && targetPairSolved && protectedSlotsSolved,
+  };
 }
 
 export function getF2lSearchGuardMessages(
@@ -230,27 +245,4 @@ export function getF2lSearchGuardMessages(
   }
 
   return messages;
-}
-
-export function areProtectedF2lSlotsCompleted(
-  state: CubeState,
-  crossColor: CubeColorName,
-  targetFace: TargetFace,
-  protectedSlotNames: F2lSlotName[],
-): boolean {
-  if (protectedSlotNames.length === 0) {
-    return true;
-  }
-
-  if (!isCrossSolved(state, crossColor, targetFace)) {
-    return false;
-  }
-
-  const completedSlotNames = new Set(
-    getF2lPairCandidates(state, crossColor, targetFace)
-      .filter((candidate) => candidate.status === "completed")
-      .map((candidate) => getF2lTargetSlotName(candidate)),
-  );
-
-  return protectedSlotNames.every((slotName) => completedSlotNames.has(slotName));
 }

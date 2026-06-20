@@ -2180,6 +2180,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return;
     }
 
+    if (selectedCrossSolution.targetFace !== "D") {
+      setF2lOrderPlans([]);
+      setF2lOrderSearchError(
+        "条件付きF2L探索は現在D面Crossのみ対応しています。Cross targetをD面にしてCross解析し直してください。",
+      );
+      setF2lOrderSearchMessage(null);
+      setIsSearchingF2lOrders(false);
+      return;
+    }
+
     f2lOrderSearchWorkerRef.current?.terminate();
     f2lOrderSearchWorkerRef.current = null;
 
@@ -2218,17 +2228,24 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
       const result = event.data.result;
 
+      if (import.meta.env.DEV) {
+        console.info("[conditional-f2l-order-search]", result.diagnostics);
+      }
+
       setF2lOrderPlans(result.plans);
+      setF2lOrderSearchError(result.plans.length === 0 ? result.message : null);
       setF2lOrderSearchMessage(
         `${result.message} / nodes: ${result.nodes.toLocaleString()}${result.truncated ? " / 探索上限で打ち切りあり" : ""
         }`,
       );
     };
 
-    worker.onerror = () => {
+    worker.onerror = (event) => {
       if (jobId !== f2lOrderSearchJobIdRef.current) {
         return;
       }
+
+      console.error("[conditional-f2l-order-search] Worker error", event);
 
       worker.terminate();
 
@@ -2251,6 +2268,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         maxNodes: 80_000,
         maxSolutions: 8,
         maxPlans: 12,
+        beamWidth: 24,
+        resultLimit: 12,
+        solutionsPerPair: 8,
+        maxDepthLastPair: 8,
+        maxNodesLastPair: 120_000,
         protectSolvedSlots: true,
       },
     });
@@ -2967,6 +2989,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                             <span>Score: {plan.totalScore.toFixed(1)}</span>
                             <span>Nodes: {plan.nodes.toLocaleString()}</span>
                             <span>未解決: {plan.unresolvedPairs.length}</span>
+                            <span>{plan.isComplete ? "F2L完成" : "未完了"}</span>
                             {plan.truncated && <span>探索打ち切りあり</span>}
                           </div>
 
@@ -3012,7 +3035,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 </article>
                 <div className="analyzer-f2l-list">
                   {f2lCandidates.length === 0 ? (
-                    <p className="analyzer-muted">F2L候補を判定できませんでした。</p>
+                    <p className="analyzer-muted">
+                      {selectedCrossSolution.targetFace === "D"
+                        ? "F2L候補を判定できませんでした。"
+                        : "現在のF2L解析はD面Crossのみ対応しています。Cross targetをD面にしてCross解析し直してください。"}
+                    </p>
                   ) : (
                     f2lCandidates.map((candidate) => (
                       <button

@@ -30,7 +30,36 @@ export interface F2lSinglePairSearchInput {
   state: CubeState;
   pair: F2lPairCandidate;
   options: F2lSinglePairSearchOptions;
-  protectedSlotNames?: F2lSlotName[];
+}
+
+export interface F2lSearchGoalFailureCounts {
+  cross: number;
+  targetPair: number;
+  protectedSlots: number;
+}
+
+export interface F2lExtractionStartDiagnostic {
+  prefix: string;
+  prefixMoveCount: number;
+  pairScore: number;
+  nodes: number;
+  maxDepthSearched: number;
+  solutionsFound: number;
+  localBudgetHit: boolean;
+}
+
+export interface F2lSinglePairSearchDiagnostics {
+  targetSlot: F2lSlotName;
+  protectedSlots: F2lProtectedSlot[];
+  maxDepth: number;
+  maxNodes: number;
+  extractionStartCount: number;
+  searchedStartCount: number;
+  nodes: number;
+  truncated: boolean;
+  failureCounts: F2lSearchGoalFailureCounts;
+  startDiagnostics: F2lExtractionStartDiagnostic[];
+  resultReason: string;
 }
 
 export interface F2lSinglePairSearchSolution {
@@ -46,6 +75,7 @@ export interface F2lSinglePairSearchSolution {
   stateAfter: CubeState;
   nodes: number;
   protectedSlots: F2lProtectedSlot[];
+  diagnostics: F2lSinglePairSearchDiagnostics;
 }
 
 export interface F2lSinglePairSearchResult {
@@ -59,6 +89,7 @@ export interface F2lSinglePairSearchResult {
   maxNodes: number;
   truncated: boolean;
   message: string;
+  diagnostics: F2lSinglePairSearchDiagnostics;
 }
 
 export interface F2lOrderSearchStep {
@@ -72,6 +103,7 @@ export interface F2lOrderSearchStep {
   score: number;
   stateAfter: CubeState;
   nodes: number;
+  diagnostics: F2lSinglePairSearchDiagnostics;
 }
 
 export interface F2lOrderSearchPlan {
@@ -82,6 +114,7 @@ export interface F2lOrderSearchPlan {
   totalScore: number;
   finalState: CubeState;
   unresolvedPairs: F2lPairCandidate[];
+  isComplete: boolean;
   nodes: number;
   truncated: boolean;
   message: string;
@@ -89,6 +122,11 @@ export interface F2lOrderSearchPlan {
 
 export interface F2lOrderSearchOptions extends F2lSinglePairSearchOptions {
   maxPlans: number;
+  beamWidth?: number;
+  resultLimit?: number;
+  solutionsPerPair?: number;
+  maxDepthLastPair?: number;
+  maxNodesLastPair?: number;
 }
 
 export interface F2lOrderSearchInput {
@@ -101,4 +139,28 @@ export interface F2lOrderSearchResult {
   nodes: number;
   truncated: boolean;
   message: string;
+  diagnostics: F2lOrderSearchDiagnostics;
+}
+
+export interface F2lOrderSearchStepDiagnostics {
+  order: F2lSlotName[];
+  stepIndex: number;
+  targetSlot: F2lSlotName;
+  protectedSlots: F2lProtectedSlot[];
+  status: F2lSearchStatus;
+  message: string;
+  nodes: number;
+  maxDepth: number;
+  maxNodes: number;
+  extractionStartCount: number;
+  truncated: boolean;
+  failureCounts: F2lSearchGoalFailureCounts;
+}
+
+export interface F2lOrderSearchDiagnostics {
+  orderCount: number;
+  beamWidth: number;
+  resultLimit: number;
+  solutionsPerPair: number;
+  steps: F2lOrderSearchStepDiagnostics[];
 }

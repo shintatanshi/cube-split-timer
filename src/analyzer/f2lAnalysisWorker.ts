@@ -1,5 +1,4 @@
 import {
-  analyzeBasicF2lPlan,
   analyzeBasicF2lOrderPlans,
   type BasicF2lAnalysisPlan,
   type BasicF2lOrderAnalysisResult,
@@ -29,13 +28,14 @@ ctx.onmessage = (event: MessageEvent<F2lAnalysisWorkerRequest>) => {
   const { jobId, state, crossColor, targetFace } = event.data;
 
   try {
-    const plan = analyzeBasicF2lPlan(state, crossColor, targetFace);
     const orderResult = analyzeBasicF2lOrderPlans(state, crossColor, targetFace);
+    const plan = orderResult.plans[0];
     const response: F2lAnalysisWorkerResponse = {
       jobId,
-      ok: true,
+      ok: Boolean(plan),
       plan,
       orderResult,
+      error: plan ? undefined : "F2L解析候補を作成できませんでした。",
     };
 
     ctx.postMessage(response);

@@ -101,6 +101,32 @@ export interface BasicF2lOrderAnalysisResult {
   comparedOrderCount: number;
 }
 
+interface F2lExtractionCandidate {
+  algorithm: string;
+  state: CubeState;
+  score: number;
+}
+
+interface BasicF2lCaseMatch {
+  caseItem: BasicF2lCase;
+  algorithm: string;
+  stateAfterAlgorithm: CubeState;
+  score: number;
+}
+
+interface LocalF2lSearchMatch {
+  algorithm: string;
+  stateAfterAlgorithm: CubeState;
+  score: number;
+  nodes: number;
+}
+
+interface BasicF2lAnalysisCache {
+  extractionCandidates: Map<string, F2lExtractionCandidate[]>;
+  basicMatches: Map<string, BasicF2lCaseMatch | null>;
+  localSearches: Map<string, LocalF2lSearchMatch | null>;
+}
+
 export interface CrossSearchInput {
   crossColor: CubeColorName;
   targetFace: TargetFace;
@@ -1086,6 +1112,7 @@ const F2L_SLOT_ROTATION_WRAPPERS: Record<F2lSlotName, Array<[string, string]>> =
   BR: [["y", "y'"]],
   BL: [["y2", "y2"]],
 };
+const BASIC_F2L_ALGORITHM_VARIANTS_CACHE = new Map<string, string[]>();
 
 const F2L_LOCAL_SEARCH_MOVES: Record<F2lSlotName, string[]> = {
   FR: ["U", "U'", "U2", "R", "R'", "R2", "F", "F'", "F2"],
@@ -1212,6 +1239,13 @@ function transformAlgorithmToSlot(
 }
 
 function getBasicF2lAlgorithmVariants(caseItem: BasicF2lCase, slotName: F2lSlotName): string[] {
+  const cacheKey = `${caseItem.id}:${slotName}`;
+  const cachedVariants = BASIC_F2L_ALGORITHM_VARIANTS_CACHE.get(cacheKey);
+
+  if (cachedVariants) {
+    return cachedVariants;
+  }
+
   const baseAlgorithms = [
     caseItem.alg,
     transformAlgorithmToSlot(caseItem.alg, slotName, false),
@@ -1229,7 +1263,10 @@ function getBasicF2lAlgorithmVariants(caseItem: BasicF2lCase, slotName: F2lSlotN
     });
   });
 
-  return [...variants].filter(Boolean);
+  const variantList = [...variants].filter(Boolean);
+  BASIC_F2L_ALGORITHM_VARIANTS_CACHE.set(cacheKey, variantList);
+
+  return variantList;
 }
 
 function getF2lCandidateScore(algorithm: string): number {
@@ -1258,6 +1295,37 @@ function getF2lSlotNameForCandidate(candidate: F2lPairCandidate): F2lSlotName {
   return getF2lSlotSpecByFaces(candidate.slotFaces).name;
 }
 
+function createBasicF2lAnalysisCache(): BasicF2lAnalysisCache {
+  return {
+    extractionCandidates: new Map(),
+    basicMatches: new Map(),
+    localSearches: new Map(),
+  };
+}
+
+function getF2lPairCacheKey(candidate: F2lPairCandidate): string {
+  return [
+    candidate.id,
+    candidate.slotFaces.join(""),
+    candidate.cornerColors.join("-"),
+    candidate.edgeColors.join("-"),
+  ].join(":");
+}
+
+function getBasicF2lCacheKey(
+  state: CubeState,
+  candidate: F2lPairCandidate,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): string {
+  return [
+    getCubeStateSignature(state),
+    getF2lPairCacheKey(candidate),
+    crossColor,
+    targetFace,
+  ].join("::");
+}
+
 function getCandidateSlotNamesForExtraction(state: CubeState, candidate: F2lPairCandidate): F2lSlotName[] {
   const { corner, edge } = getF2lPairPieces(state, candidate);
   const targetSlot = getF2lSlotNameForCandidate(candidate);
@@ -1281,7 +1349,15 @@ function getExtractionCandidatesForF2lPair(
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
-): Array<{ algorithm: string; state: CubeState; score: number }> {
+  cache?: BasicF2lAnalysisCache,
+): F2lExtractionCandidate[] {
+  const cacheKey = cache ? getBasicF2lCacheKey(state, candidate, crossColor, targetFace) : "";
+  const cachedCandidates = cache?.extractionCandidates.get(cacheKey);
+
+  if (cachedCandidates) {
+    return cachedCandidates;
+  }
+
   const candidates = new Map<string, { algorithm: string; state: CubeState; score: number }>();
   const addCandidate = (algorithm: string, nextState: CubeState) => {
     if (!isCrossSolved(nextState, crossColor, targetFace)) {
@@ -1314,7 +1390,10 @@ function getExtractionCandidatesForF2lPair(
     }
   }
 
-  return [...candidates.values()].sort((a, b) => a.score - b.score);
+  const sortedCandidates = [...candidates.values()].sort((a, b) => a.score - b.score);
+  cache?.extractionCandidates.set(cacheKey, sortedCandidates);
+
+  return sortedCandidates;
 }
 
 function findBasicF2lCaseForPair(
@@ -1322,12 +1401,14 @@ function findBasicF2lCaseForPair(
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
-): {
-  caseItem: BasicF2lCase;
-  algorithm: string;
-  stateAfterAlgorithm: CubeState;
-  score: number;
-  } | null {
+  cache?: BasicF2lAnalysisCache,
+): BasicF2lCaseMatch | null {
+  const cacheKey = cache ? getBasicF2lCacheKey(state, candidate, crossColor, targetFace) : "";
+
+  if (cache?.basicMatches.has(cacheKey)) {
+    return cache.basicMatches.get(cacheKey) ?? null;
+  }
+
   const slotName = getF2lSlotNameForCandidate(candidate);
   const matches: Array<{
     caseItem: BasicF2lCase;
@@ -1354,7 +1435,12 @@ function findBasicF2lCaseForPair(
     }
   }
 
-  return matches.sort((a, b) => a.score - b.score || a.caseItem.id.localeCompare(b.caseItem.id))[0] ?? null;
+  const bestMatch =
+    matches.sort((a, b) => a.score - b.score || a.caseItem.id.localeCompare(b.caseItem.id))[0] ??
+    null;
+  cache?.basicMatches.set(cacheKey, bestMatch);
+
+  return bestMatch;
 }
 
 function findLocalF2lSearchForPair(
@@ -1362,7 +1448,14 @@ function findLocalF2lSearchForPair(
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
-): { algorithm: string; stateAfterAlgorithm: CubeState; score: number; nodes: number } | null {
+  cache?: BasicF2lAnalysisCache,
+): LocalF2lSearchMatch | null {
+  const cacheKey = cache ? getBasicF2lCacheKey(state, candidate, crossColor, targetFace) : "";
+
+  if (cache?.localSearches.has(cacheKey)) {
+    return cache.localSearches.get(cacheKey) ?? null;
+  }
+
   const slotName = getF2lSlotNameForCandidate(candidate);
   const moves = F2L_LOCAL_SEARCH_MOVES[slotName];
   const nodeCounter = { count: 0 };
@@ -1424,10 +1517,12 @@ function findLocalF2lSearchForPair(
     const result = search(state, depth, [], null, seenPath);
 
     if (result) {
+      cache?.localSearches.set(cacheKey, result);
       return result;
     }
   }
 
+  cache?.localSearches.set(cacheKey, null);
   return null;
 }
 
@@ -1437,6 +1532,7 @@ function buildBasicF2lStepCandidate(
   crossColor: CubeColorName,
   targetFace: TargetFace,
   stepIndex: number,
+  cache?: BasicF2lAnalysisCache,
 ): BasicF2lAnalysisStep | null {
   const slotName = getF2lSlotNameForCandidate(candidate);
   const matches: BasicF2lAnalysisStep[] = [];
@@ -1445,10 +1541,17 @@ function buildBasicF2lStepCandidate(
     candidate,
     crossColor,
     targetFace,
+    cache,
   );
 
   for (const extraction of extractionCandidates) {
-    const basicMatch = findBasicF2lCaseForPair(extraction.state, candidate, crossColor, targetFace);
+    const basicMatch = findBasicF2lCaseForPair(
+      extraction.state,
+      candidate,
+      crossColor,
+      targetFace,
+      cache,
+    );
 
     if (basicMatch) {
       const fullAlgorithm = joinAlgorithms(extraction.algorithm, basicMatch.algorithm);
@@ -1485,6 +1588,7 @@ function buildBasicF2lStepCandidate(
       candidate,
       crossColor,
       targetFace,
+      cache,
     );
 
     if (localSearchMatch) {
@@ -1540,6 +1644,7 @@ function buildBasicF2lPlan(
   targetFace: TargetFace,
   strategy: "greedy" | "permutation",
   order?: F2lSlotName[],
+  cache?: BasicF2lAnalysisCache,
 ): BasicF2lAnalysisPlan {
   let currentState = cloneCubeState(initialState);
   const steps: BasicF2lAnalysisStep[] = [];
@@ -1568,7 +1673,14 @@ function buildBasicF2lPlan(
 
     const stepCandidates = candidatesToTry
       .map((candidate) =>
-        buildBasicF2lStepCandidate(currentState, candidate, crossColor, targetFace, stepIndex),
+        buildBasicF2lStepCandidate(
+          currentState,
+          candidate,
+          crossColor,
+          targetFace,
+          stepIndex,
+          cache,
+        ),
       )
       .filter((step): step is BasicF2lAnalysisStep => Boolean(step))
       .sort((a, b) => a.score - b.score || a.moveCount - b.moveCount);
@@ -1606,14 +1718,17 @@ function buildBasicF2lPlan(
   };
 }
 
-export function analyzeBasicF2lOrderPlans(
+function analyzeBasicF2lOrderPlansWithCache(
   initialState: CubeState,
   crossColor: CubeColorName,
   targetFace: TargetFace,
+  cache: BasicF2lAnalysisCache,
 ): BasicF2lOrderAnalysisResult {
   const orders = getF2lSlotPermutations(F2L_ORDER_SLOTS);
   const plans = orders
-    .map((order) => buildBasicF2lPlan(initialState, crossColor, targetFace, "permutation", order))
+    .map((order) =>
+      buildBasicF2lPlan(initialState, crossColor, targetFace, "permutation", order, cache),
+    )
     .sort(
       (a, b) =>
         getF2lPlanRank(a) - getF2lPlanRank(b) ||
@@ -1627,16 +1742,38 @@ export function analyzeBasicF2lOrderPlans(
   };
 }
 
+export function analyzeBasicF2lOrderPlans(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): BasicF2lOrderAnalysisResult {
+  return analyzeBasicF2lOrderPlansWithCache(
+    initialState,
+    crossColor,
+    targetFace,
+    createBasicF2lAnalysisCache(),
+  );
+}
+
 export function analyzeBasicF2lPlan(
   initialState: CubeState,
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): BasicF2lAnalysisPlan {
-  const greedyPlan = buildBasicF2lPlan(initialState, crossColor, targetFace, "greedy");
-  const bestPermutationPlan = analyzeBasicF2lOrderPlans(
+  const cache = createBasicF2lAnalysisCache();
+  const greedyPlan = buildBasicF2lPlan(
     initialState,
     crossColor,
     targetFace,
+    "greedy",
+    undefined,
+    cache,
+  );
+  const bestPermutationPlan = analyzeBasicF2lOrderPlansWithCache(
+    initialState,
+    crossColor,
+    targetFace,
+    cache,
   ).plans[0];
 
   if (!bestPermutationPlan) {

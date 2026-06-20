@@ -60,7 +60,7 @@ interface SearchContext {
   solutions: F2lSinglePairSearchSolution[];
   nodeCounter: SearchNodeCounter;
   diagnostics: F2lSinglePairSearchDiagnostics;
-  bestStateDepths: Map<string, number>;
+  stateRemainingDepths: Map<string, number>;
 }
 
 function joinAlgorithms(...algorithms: string[]): string {
@@ -362,17 +362,17 @@ function recordGoalFailure(
 function shouldVisitState(
   context: SearchContext,
   signature: string,
-  pathLength: number,
+  depthRemaining: number,
   lastMove: string | null,
 ): boolean {
   const cacheKey = `${signature}|${lastMove ?? ""}`;
-  const bestDepth = context.bestStateDepths.get(cacheKey);
+  const bestRemainingDepth = context.stateRemainingDepths.get(cacheKey);
 
-  if (bestDepth !== undefined && bestDepth <= pathLength) {
+  if (bestRemainingDepth !== undefined && bestRemainingDepth >= depthRemaining) {
     return false;
   }
 
-  context.bestStateDepths.set(cacheKey, pathLength);
+  context.stateRemainingDepths.set(cacheKey, depthRemaining);
   return true;
 }
 
@@ -431,9 +431,9 @@ function depthFirstSearch(
 
     const nextState = applyMove(currentState, move);
     const signature = getCubeStateSignature(nextState);
-    const nextPathLength = path.length + 1;
+    const nextDepthRemaining = depthRemaining - 1;
 
-    if (seenPath.has(signature) || !shouldVisitState(context, signature, nextPathLength, move)) {
+    if (seenPath.has(signature) || !shouldVisitState(context, signature, nextDepthRemaining, move)) {
       continue;
     }
 
@@ -515,7 +515,7 @@ export function searchF2lSinglePair(
     solutions: [],
     nodeCounter,
     diagnostics,
-    bestStateDepths: new Map<string, number>(),
+    stateRemainingDepths: new Map<string, number>(),
   };
 
   const extractionStarts = getExtractionStartStates(context.input, targetSlot).slice(

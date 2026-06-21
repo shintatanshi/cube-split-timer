@@ -1,4 +1,5 @@
 import {
+  analyzeBasicF2lBestOrderPlan,
   analyzeBasicF2lOrderPlans,
   type BasicF2lAnalysisPhase,
   type BasicF2lAnalysisPlan,
@@ -14,6 +15,7 @@ interface F2lAnalysisWorkerRequest {
   crossColor: CubeColorName;
   targetFace: TargetFace;
   useLocalSearch?: boolean;
+  includeAllPlans?: boolean;
 }
 
 interface F2lAnalysisWorkerResponse {
@@ -52,9 +54,44 @@ ctx.onmessage = (event: MessageEvent<F2lAnalysisWorkerRequest>) => {
 
   try {
     const useLocalSearch = Boolean(event.data.useLocalSearch);
+    const includeAllPlans = Boolean(event.data.includeAllPlans);
+    const analyzer = includeAllPlans
+      ? analyzeBasicF2lOrderPlans
+      : analyzeBasicF2lBestOrderPlan;
+
+    if (!useLocalSearch && !includeAllPlans) {
+      const basicResult = analyzeBasicF2lBestOrderPlan(state, crossColor, targetFace, {
+        useLocalSearch: false,
+        useBasicF2lLegacyFallback: false,
+      });
+      const basicPlan = basicResult.plans[0];
+
+      if (!basicPlan) {
+        ctx.postMessage(createResponse(jobId, "basic41", basicResult, true));
+        return;
+      }
+
+      const shouldRunFallback = basicPlan.unresolvedPairs.length > 0;
+
+      ctx.postMessage(createResponse(jobId, "basic41", basicResult, !shouldRunFallback));
+
+      if (!shouldRunFallback) {
+        return;
+      }
+
+      const fallbackResult = analyzeBasicF2lBestOrderPlan(state, crossColor, targetFace, {
+        useLocalSearch: true,
+        useBasicF2lLegacyFallback: false,
+      });
+
+      ctx.postMessage(createResponse(jobId, "fallback", fallbackResult, true));
+      return;
+    }
+
     const phase: BasicF2lAnalysisPhase = useLocalSearch ? "fallback" : "basic41";
-    const result = analyzeBasicF2lOrderPlans(state, crossColor, targetFace, {
+    const result = analyzer(state, crossColor, targetFace, {
       useLocalSearch,
+      useBasicF2lLegacyFallback: false,
     });
 
     ctx.postMessage(createResponse(jobId, phase, result, true));

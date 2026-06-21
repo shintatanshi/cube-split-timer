@@ -1,4 +1,4 @@
-import { getMoveDescriptor, parseAlgorithm } from "../learn/moveNotation";
+import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
 import { BASIC_F2L_41_CASES, type BasicF2lCase } from "./f2lBasic41";
 
 export type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
@@ -105,18 +105,34 @@ export type BasicF2lAnalysisPhase = "basic41" | "fallback";
 
 export interface BasicF2lOrderAnalysisOptions {
   useLocalSearch?: boolean;
+  useBasicF2lLegacyFallback?: boolean;
+}
+
+interface FastCubeState {
+  faceColorMap: Record<FaceName, CubeColorName>;
+  pieceIds: string[];
+  pieceKinds: PieceKind[];
+  pieceIndexById: Map<string, number>;
+  coords: Int8Array;
+  stickerOffsets: Uint8Array;
+  stickerColors: CubeColorName[][];
+  stickerFaces: Uint8Array;
 }
 
 interface F2lExtractionCandidate {
   algorithm: string;
-  state: CubeState;
+  moves: string[];
+  moveCount: number;
+  fastState: FastCubeState;
   score: number;
 }
 
 interface BasicF2lCaseMatch {
   caseItem: BasicF2lCase;
   algorithm: string;
-  stateAfterAlgorithm: CubeState;
+  moves: string[];
+  moveCount: number;
+  fastStateAfterAlgorithm: FastCubeState;
   score: number;
 }
 
@@ -124,19 +140,40 @@ interface BasicF2lAlgorithmEntry {
   caseItem: BasicF2lCase;
   algorithm: string;
   moves: string[];
+  moveCount: number;
+  score: number;
+}
+
+interface F2lExtractionEntry {
+  algorithm: string;
+  moves: string[];
+  moveCount: number;
   score: number;
 }
 
 interface LocalF2lSearchMatch {
   algorithm: string;
+  moves: string[];
+  moveCount: number;
   stateAfterAlgorithm: CubeState;
   score: number;
   nodes: number;
 }
 
+interface BasicF2lStepBuildResult {
+  step: BasicF2lAnalysisStep;
+  fastStateAfterStep: FastCubeState;
+}
+
+interface BasicF2lStepCandidateBuild extends Omit<BasicF2lAnalysisStep, "stateAfterStep"> {
+  fastStateAfterStep: FastCubeState;
+  stateAfterStep?: CubeState;
+}
+
 interface BasicF2lAnalysisCache {
   extractionCandidates: Map<string, F2lExtractionCandidate[]>;
   basicMatches: Map<string, BasicF2lCaseMatch | null>;
+  fastAlgorithms: Map<string, FastCubeState>;
   localSearches: Map<string, LocalF2lSearchMatch | null>;
 }
 
@@ -187,6 +224,19 @@ const FACE_VECTORS: Record<FaceName, Vec3> = {
   R: [1, 0, 0],
   L: [-1, 0, 0],
 };
+
+const FACE_CODE_BY_NAME: Record<FaceName, number> = {
+  U: 0,
+  D: 1,
+  F: 2,
+  B: 3,
+  R: 4,
+  L: 5,
+};
+
+const FACE_NAME_BY_CODE: FaceName[] = ["U", "D", "F", "B", "R", "L"];
+
+const FACE_VECTOR_BY_CODE: Vec3[] = FACE_NAME_BY_CODE.map((face) => FACE_VECTORS[face]);
 
 const VECTOR_FACES = new Map<string, FaceName>(
   Object.entries(FACE_VECTORS).map(([face, vector]) => [vectorKey(vector), face as FaceName]),
@@ -252,6 +302,17 @@ export const CROSS_SEARCH_MAX_DEPTH = 8;
 export const CROSS_SEARCH_NODE_LIMIT = 1_200_000;
 
 const CROSS_PRUNING_TABLES = new Map<TargetFace, CrossPruningTable>();
+const MOVE_DESCRIPTOR_CACHE = new Map<string, ReturnType<typeof getMoveDescriptor>>();
+
+function getCachedMoveDescriptor(move: string): ReturnType<typeof getMoveDescriptor> {
+  if (MOVE_DESCRIPTOR_CACHE.has(move)) {
+    return MOVE_DESCRIPTOR_CACHE.get(move) ?? null;
+  }
+
+  const descriptor = getMoveDescriptor(move);
+  MOVE_DESCRIPTOR_CACHE.set(move, descriptor);
+  return descriptor;
+}
 
 function vectorKey(vector: Vec3): string {
   return vector.join(",");
@@ -309,6 +370,22 @@ function getCoordLabel(coord: Vec3): string {
     .filter(([, vector]) => vector[0] * coord[0] + vector[1] * coord[1] + vector[2] * coord[2] > 0)
     .map(([face]) => face)
     .join("");
+}
+
+function getFastCoordLabel(state: FastCubeState, pieceIndex: number | null): string {
+  if (pieceIndex === null) {
+    return "不明";
+  }
+
+  const coordOffset = pieceIndex * 3;
+
+  return (
+    getCoordLabel([
+      state.coords[coordOffset],
+      state.coords[coordOffset + 1],
+      state.coords[coordOffset + 2],
+    ]) || "center"
+  );
 }
 
 const EDGE_COORDS: Vec3[] = [];
@@ -482,16 +559,14 @@ export function cloneCubeState(state: CubeState): CubeState {
   };
 }
 
-export function applyMove(state: CubeState, move: string): CubeState {
-  const descriptor = getMoveDescriptor(move);
+function applyMoveToMutableState(state: CubeState, move: string): void {
+  const descriptor = getCachedMoveDescriptor(move);
 
   if (!descriptor) {
-    return cloneCubeState(state);
+    return;
   }
 
-  const nextState = cloneCubeState(state);
-
-  nextState.pieces.forEach((piece) => {
+  state.pieces.forEach((piece) => {
     const layerCoord = getAxisCoord(piece.coord, descriptor.axis);
 
     if (!descriptor.layers.includes(layerCoord)) {
@@ -504,19 +579,206 @@ export function applyMove(state: CubeState, move: string): CubeState {
       face: getFaceFromVector(rotateVector(FACE_VECTORS[sticker.face], descriptor.axis, descriptor.angle)),
     }));
   });
+}
+
+export function applyMove(state: CubeState, move: string): CubeState {
+  const nextState = cloneCubeState(state);
+  applyMoveToMutableState(nextState, move);
 
   return nextState;
 }
 
 export function applyAlgorithm(state: CubeState, moves: string[]): CubeState {
-  return moves.reduce((nextState, move) => applyMove(nextState, move), state);
+  const nextState = cloneCubeState(state);
+
+  moves.forEach((move) => applyMoveToMutableState(nextState, move));
+
+  return nextState;
 }
 
-function hasColors(piece: CubePiece, colors: CubeColorName[]): boolean {
-  return (
-    piece.stickers.length === colors.length &&
-    colors.every((color) => piece.stickers.some((sticker) => sticker.color === color))
-  );
+function getFaceCodeFromVector(vector: Vec3): number {
+  if (vector[1] === 1) {
+    return FACE_CODE_BY_NAME.U;
+  }
+
+  if (vector[1] === -1) {
+    return FACE_CODE_BY_NAME.D;
+  }
+
+  if (vector[2] === 1) {
+    return FACE_CODE_BY_NAME.F;
+  }
+
+  if (vector[2] === -1) {
+    return FACE_CODE_BY_NAME.B;
+  }
+
+  if (vector[0] === 1) {
+    return FACE_CODE_BY_NAME.R;
+  }
+
+  return FACE_CODE_BY_NAME.L;
+}
+
+function rotateFaceCode(faceCode: number, axis: "x" | "y" | "z", angle: number): number {
+  return getFaceCodeFromVector(rotateVector(FACE_VECTOR_BY_CODE[faceCode], axis, angle));
+}
+
+function createPieceIndexById(pieceIds: string[]): Map<string, number> {
+  return new Map(pieceIds.map((id, index) => [id, index]));
+}
+
+function toFastCubeState(state: CubeState): FastCubeState {
+  const stickerOffsets = new Uint8Array(state.pieces.length + 1);
+  let stickerCount = 0;
+
+  state.pieces.forEach((piece, index) => {
+    stickerOffsets[index] = stickerCount;
+    stickerCount += piece.stickers.length;
+  });
+  stickerOffsets[state.pieces.length] = stickerCount;
+
+  const pieceIds = state.pieces.map((piece) => piece.id);
+  const coords = new Int8Array(state.pieces.length * 3);
+  const stickerFaces = new Uint8Array(stickerCount);
+  const stickerColors = state.pieces.map((piece) => piece.stickers.map((sticker) => sticker.color));
+
+  state.pieces.forEach((piece, pieceIndex) => {
+    const coordOffset = pieceIndex * 3;
+    coords[coordOffset] = piece.coord[0];
+    coords[coordOffset + 1] = piece.coord[1];
+    coords[coordOffset + 2] = piece.coord[2];
+
+    piece.stickers.forEach((sticker, stickerIndex) => {
+      stickerFaces[stickerOffsets[pieceIndex] + stickerIndex] = FACE_CODE_BY_NAME[sticker.face];
+    });
+  });
+
+  return {
+    faceColorMap: { ...state.faceColorMap },
+    pieceIds,
+    pieceKinds: state.pieces.map((piece) => piece.kind),
+    pieceIndexById: createPieceIndexById(pieceIds),
+    coords,
+    stickerOffsets,
+    stickerColors,
+    stickerFaces,
+  };
+}
+
+function cloneFastCubeState(state: FastCubeState): FastCubeState {
+  return {
+    ...state,
+    faceColorMap: { ...state.faceColorMap },
+    coords: new Int8Array(state.coords),
+    stickerFaces: new Uint8Array(state.stickerFaces),
+  };
+}
+
+function fastToCubeState(state: FastCubeState): CubeState {
+  return {
+    faceColorMap: { ...state.faceColorMap },
+    pieces: state.pieceIds.map((id, pieceIndex) => {
+      const coordOffset = pieceIndex * 3;
+      const stickerStart = state.stickerOffsets[pieceIndex];
+      const stickerEnd = state.stickerOffsets[pieceIndex + 1];
+
+      return {
+        id,
+        kind: state.pieceKinds[pieceIndex],
+        coord: [
+          state.coords[coordOffset],
+          state.coords[coordOffset + 1],
+          state.coords[coordOffset + 2],
+        ] as Vec3,
+        stickers: state.stickerColors[pieceIndex].map((color, stickerIndex) => ({
+          color,
+          face: FACE_NAME_BY_CODE[state.stickerFaces[stickerStart + stickerIndex]],
+        })),
+      };
+    }),
+  };
+}
+
+function applyFastMoveToMutableState(state: FastCubeState, move: string): void {
+  const descriptor = getCachedMoveDescriptor(move);
+
+  if (!descriptor) {
+    return;
+  }
+
+  const axisIndex = descriptor.axis === "x" ? 0 : descriptor.axis === "y" ? 1 : 2;
+  const cos = Math.round(Math.cos(descriptor.angle));
+  const sin = Math.round(Math.sin(descriptor.angle));
+
+  for (let pieceIndex = 0; pieceIndex < state.pieceIds.length; pieceIndex += 1) {
+    const coordOffset = pieceIndex * 3;
+
+    if (!descriptor.layers.includes(state.coords[coordOffset + axisIndex])) {
+      continue;
+    }
+
+    const x = state.coords[coordOffset];
+    const y = state.coords[coordOffset + 1];
+    const z = state.coords[coordOffset + 2];
+
+    if (descriptor.axis === "x") {
+      state.coords[coordOffset + 1] = roundCoord(y * cos - z * sin);
+      state.coords[coordOffset + 2] = roundCoord(y * sin + z * cos);
+    } else if (descriptor.axis === "y") {
+      state.coords[coordOffset] = roundCoord(x * cos + z * sin);
+      state.coords[coordOffset + 2] = roundCoord(-x * sin + z * cos);
+    } else {
+      state.coords[coordOffset] = roundCoord(x * cos - y * sin);
+      state.coords[coordOffset + 1] = roundCoord(x * sin + y * cos);
+    }
+
+    for (
+      let stickerIndex = state.stickerOffsets[pieceIndex];
+      stickerIndex < state.stickerOffsets[pieceIndex + 1];
+      stickerIndex += 1
+    ) {
+      state.stickerFaces[stickerIndex] = rotateFaceCode(
+        state.stickerFaces[stickerIndex],
+        descriptor.axis,
+        descriptor.angle,
+      );
+    }
+  }
+}
+
+function applyFastAlgorithm(state: FastCubeState, moves: string[]): FastCubeState {
+  const nextState = cloneFastCubeState(state);
+
+  moves.forEach((move) => applyFastMoveToMutableState(nextState, move));
+
+  return nextState;
+}
+
+function applyCachedFastAlgorithm(
+  state: FastCubeState,
+  moves: string[],
+  cache?: BasicF2lAnalysisCache,
+): FastCubeState {
+  if (moves.length === 0) {
+    return state;
+  }
+
+  if (!cache) {
+    return applyFastAlgorithm(state, moves);
+  }
+
+  const cacheKey = `${getFastCubeStateSignature(state)}::${moves.join(" ")}`;
+  const cachedState = cache.fastAlgorithms.get(cacheKey);
+
+  if (cachedState) {
+    return cachedState;
+  }
+
+  const nextState = applyFastAlgorithm(state, moves);
+  cache.fastAlgorithms.set(cacheKey, nextState);
+
+  return nextState;
 }
 
 function getPieceByColors(
@@ -524,11 +786,46 @@ function getPieceByColors(
   kind: PieceKind,
   colors: CubeColorName[],
 ): CubePiece | null {
-  return state.pieces.find((piece) => piece.kind === kind && hasColors(piece, colors)) ?? null;
+  const pieceId = [...colors].sort().join("-");
+
+  return state.pieces.find((piece) => piece.kind === kind && piece.id === pieceId) ?? null;
+}
+
+function getFastPieceIndexByColors(
+  state: FastCubeState,
+  kind: PieceKind,
+  colors: CubeColorName[],
+): number | null {
+  const pieceIndex = state.pieceIndexById.get([...colors].sort().join("-"));
+
+  return pieceIndex !== undefined && state.pieceKinds[pieceIndex] === kind ? pieceIndex : null;
 }
 
 function getStickerFace(piece: CubePiece | null, color: CubeColorName): FaceName | null {
   return piece?.stickers.find((sticker) => sticker.color === color)?.face ?? null;
+}
+
+function getFastStickerFace(
+  state: FastCubeState,
+  pieceIndex: number | null,
+  color: CubeColorName,
+): FaceName | null {
+  if (pieceIndex === null) {
+    return null;
+  }
+
+  const stickerStart = state.stickerOffsets[pieceIndex];
+  const stickerEnd = state.stickerOffsets[pieceIndex + 1];
+
+  for (let stickerIndex = stickerStart; stickerIndex < stickerEnd; stickerIndex += 1) {
+    const colorIndex = stickerIndex - stickerStart;
+
+    if (state.stickerColors[pieceIndex][colorIndex] === color) {
+      return FACE_NAME_BY_CODE[state.stickerFaces[stickerIndex]];
+    }
+  }
+
+  return null;
 }
 
 function sameCoord(a: Vec3, b: Vec3): boolean {
@@ -562,6 +859,36 @@ function isPieceSolvedAtFaces(
   );
 }
 
+function isFastPieceSolvedAtFaces(
+  state: FastCubeState,
+  kind: PieceKind,
+  colors: CubeColorName[],
+  faces: FaceName[],
+): boolean {
+  const pieceIndex = getFastPieceIndexByColors(state, kind, colors);
+
+  if (pieceIndex === null) {
+    return false;
+  }
+
+  const coordOffset = pieceIndex * 3;
+  const expectedCoord = faces.reduce<Vec3>(
+    (coord, face) => addVectors(coord, FACE_VECTORS[face]),
+    [0, 0, 0],
+  );
+
+  return (
+    state.coords[coordOffset] === expectedCoord[0] &&
+    state.coords[coordOffset + 1] === expectedCoord[1] &&
+    state.coords[coordOffset + 2] === expectedCoord[2] &&
+    colors.every((color) => {
+      const targetFace = faces.find((face) => state.faceColorMap[face] === color);
+
+      return targetFace !== undefined && getFastStickerFace(state, pieceIndex, color) === targetFace;
+    })
+  );
+}
+
 export function getCrossEdgeStatuses(
   state: CubeState,
   crossColor: CubeColorName,
@@ -591,7 +918,44 @@ export function isCrossSolved(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): boolean {
-  return getCrossEdgeStatuses(state, crossColor, targetFace).every((edge) => edge.solved);
+  return SIDE_FACES.every((sideFace) => {
+    const sideColor = state.faceColorMap[sideFace];
+    const piece = getPieceByColors(state, "edge", [crossColor, sideColor]);
+    const expectedCoord = addVectors(FACE_VECTORS[targetFace], FACE_VECTORS[sideFace]);
+
+    return (
+      Boolean(piece) &&
+      sameCoord(piece?.coord ?? [9, 9, 9], expectedCoord) &&
+      getStickerFace(piece, crossColor) === targetFace &&
+      getStickerFace(piece, sideColor) === sideFace
+    );
+  });
+}
+
+function isFastCrossSolved(
+  state: FastCubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): boolean {
+  return SIDE_FACES.every((sideFace) => {
+    const sideColor = state.faceColorMap[sideFace];
+    const pieceIndex = getFastPieceIndexByColors(state, "edge", [crossColor, sideColor]);
+
+    if (pieceIndex === null) {
+      return false;
+    }
+
+    const coordOffset = pieceIndex * 3;
+    const expectedCoord = addVectors(FACE_VECTORS[targetFace], FACE_VECTORS[sideFace]);
+
+    return (
+      state.coords[coordOffset] === expectedCoord[0] &&
+      state.coords[coordOffset + 1] === expectedCoord[1] &&
+      state.coords[coordOffset + 2] === expectedCoord[2] &&
+      getFastStickerFace(state, pieceIndex, crossColor) === targetFace &&
+      getFastStickerFace(state, pieceIndex, sideColor) === sideFace
+    );
+  });
 }
 
 function getMoveFace(move: string): FaceName {
@@ -775,7 +1139,7 @@ function cloneCrossEdges(edges: CrossEdgePieceState[]): CrossEdgePieceState[] {
 }
 
 function applyMoveToCrossEdges(edges: CrossEdgePieceState[], move: string): CrossEdgePieceState[] {
-  const descriptor = getMoveDescriptor(move);
+  const descriptor = getCachedMoveDescriptor(move);
   const nextEdges = cloneCrossEdges(edges);
 
   if (!descriptor) {
@@ -1110,6 +1474,60 @@ export function getF2lPairCandidates(
   });
 }
 
+function getFastF2lPairCandidates(
+  state: FastCubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): F2lPairCandidate[] {
+  if (targetFace !== "D") {
+    return [];
+  }
+
+  return F2L_SLOT_SPECS.map((slotSpec, index) => {
+    const [firstFace, secondFace] = slotSpec.faces;
+    const firstColor = state.faceColorMap[firstFace];
+    const secondColor = state.faceColorMap[secondFace];
+    const cornerColors = [crossColor, firstColor, secondColor];
+    const edgeColors = [firstColor, secondColor];
+    const cornerIndex = getFastPieceIndexByColors(state, "corner", cornerColors);
+    const edgeIndex = getFastPieceIndexByColors(state, "edge", edgeColors);
+    const cornerSolved = isFastPieceSolvedAtFaces(state, "corner", cornerColors, [
+      targetFace,
+      firstFace,
+      secondFace,
+    ]);
+    const edgeSolved = isFastPieceSolvedAtFaces(state, "edge", edgeColors, [
+      firstFace,
+      secondFace,
+    ]);
+    const status =
+      cornerIndex !== null && edgeIndex !== null
+        ? cornerSolved && edgeSolved
+          ? "completed"
+          : "unsolved"
+        : "unknown";
+
+    return {
+      id: `${firstFace}${secondFace}-${index}`,
+      title: `${getColorJapanese(crossColor)}${getColorJapanese(firstColor)}${getColorJapanese(
+        secondColor,
+      )} コーナー + ${getColorJapanese(firstColor)}${getColorJapanese(secondColor)} エッジ`,
+      slotLabel: `${slotSpec.name} slot`,
+      slotFaces: [firstFace, secondFace],
+      targetFace,
+      cornerColors,
+      edgeColors,
+      cornerPosition: getFastCoordLabel(state, cornerIndex),
+      edgePosition: getFastCoordLabel(state, edgeIndex),
+      status,
+      note:
+        status === "completed"
+          ? "このスロットは完成済みです。別のペアを探しましょう。"
+          : "対象コーナーとエッジの位置を確認し、Learnの近いケースで手順を復習できます。",
+    };
+  });
+}
+
 const F2L_EXTRACTION_OPTIONS: Record<F2lSlotName, string[]> = {
   FR: ["R U R'", "R U' R'", "R U2 R'", "F' U' F", "F' U F", "F' U2 F"],
   FL: ["L' U' L", "L' U L", "L' U2 L", "F U F'", "F U' F'", "F U2 F'"],
@@ -1125,8 +1543,11 @@ const F2L_SLOT_ROTATION_WRAPPERS: Record<F2lSlotName, Array<[string, string]>> =
   BR: [["y", "y'"]],
   BL: [["y2", "y2"]],
 };
+const F2L_EXTRACTION_ENTRY_CACHE = new Map<F2lSlotName, F2lExtractionEntry[]>();
 const BASIC_F2L_ALGORITHM_VARIANTS_CACHE = new Map<string, string[]>();
 const BASIC_F2L_ALGORITHM_INDEX_CACHE = new Map<F2lSlotName, BasicF2lAlgorithmEntry[]>();
+const BASIC_F2L_REVERSE_INDEX_CACHE = new Map<string, Map<string, BasicF2lAlgorithmEntry[]>>();
+const SOLVED_FAST_STATE_CACHE = new Map<string, FastCubeState>();
 
 const F2L_LOCAL_SEARCH_MOVES: Record<F2lSlotName, string[]> = {
   FR: ["U", "U'", "U2", "R", "R'", "R2", "F", "F'", "F2"],
@@ -1182,10 +1603,28 @@ function getF2lPairPieces(state: CubeState, candidate: F2lPairCandidate) {
   };
 }
 
+function getFastF2lPairPieceIndexes(state: FastCubeState, candidate: F2lPairCandidate) {
+  return {
+    cornerIndex: getFastPieceIndexByColors(state, "corner", candidate.cornerColors),
+    edgeIndex: getFastPieceIndexByColors(state, "edge", candidate.edgeColors),
+  };
+}
+
 function areF2lPairPiecesOnU(state: CubeState, candidate: F2lPairCandidate): boolean {
   const { corner, edge } = getF2lPairPieces(state, candidate);
 
   return Boolean(corner && edge && corner.coord[1] === 1 && edge.coord[1] === 1);
+}
+
+function areFastF2lPairPiecesOnU(state: FastCubeState, candidate: F2lPairCandidate): boolean {
+  const { cornerIndex, edgeIndex } = getFastF2lPairPieceIndexes(state, candidate);
+
+  return Boolean(
+    cornerIndex !== null &&
+      edgeIndex !== null &&
+      state.coords[cornerIndex * 3 + 1] === 1 &&
+      state.coords[edgeIndex * 3 + 1] === 1,
+  );
 }
 
 function isF2lPairSolved(state: CubeState, candidate: F2lPairCandidate): boolean {
@@ -1197,12 +1636,17 @@ function isF2lPairSolved(state: CubeState, candidate: F2lPairCandidate): boolean
   );
 }
 
-function parseMoves(algorithm: string): string[] {
-  return parseAlgorithm(algorithm).moves;
+function isFastF2lPairSolved(state: FastCubeState, candidate: F2lPairCandidate): boolean {
+  const slotSpec = getF2lSlotSpecByFaces(candidate.slotFaces);
+
+  return (
+    isFastPieceSolvedAtFaces(state, "corner", candidate.cornerColors, slotSpec.cornerFaces) &&
+    isFastPieceSolvedAtFaces(state, "edge", candidate.edgeColors, slotSpec.edgeFaces)
+  );
 }
 
-function applyAlgorithmString(state: CubeState, algorithm: string): CubeState {
-  return applyAlgorithm(state, parseMoves(algorithm));
+function parseMoves(algorithm: string): string[] {
+  return parseAlgorithm(algorithm).moves;
 }
 
 function joinAlgorithms(...algorithms: string[]): string {
@@ -1298,6 +1742,7 @@ function getBasicF2lAlgorithmEntries(slotName: F2lSlotName): BasicF2lAlgorithmEn
         caseItem,
         algorithm,
         moves,
+        moveCount: moves.length,
         score: getF2lMoveScore(moves),
       };
     }),
@@ -1307,8 +1752,33 @@ function getBasicF2lAlgorithmEntries(slotName: F2lSlotName): BasicF2lAlgorithmEn
   return entries;
 }
 
-function getF2lCandidateScore(algorithm: string): number {
-  return getF2lMoveScore(parseMoves(algorithm));
+function getF2lExtractionEntries(slotName: F2lSlotName): F2lExtractionEntry[] {
+  const cachedEntries = F2L_EXTRACTION_ENTRY_CACHE.get(slotName);
+
+  if (cachedEntries) {
+    return cachedEntries;
+  }
+
+  const entries = F2L_EXTRACTION_OPTIONS[slotName]
+    .flatMap((extraction) =>
+      F2L_U_SETUPS.flatMap((beforeU) =>
+        F2L_U_SETUPS.map((afterU) => {
+          const algorithm = joinAlgorithms(beforeU, extraction, afterU);
+          const moves = parseMoves(algorithm);
+
+          return {
+            algorithm,
+            moves,
+            moveCount: moves.length,
+            score: getF2lMoveScore(moves),
+          };
+        }),
+      ),
+    )
+    .sort((a, b) => a.score - b.score);
+
+  F2L_EXTRACTION_ENTRY_CACHE.set(slotName, entries);
+  return entries;
 }
 
 function getF2lMoveScore(moves: string[]): number {
@@ -1320,16 +1790,86 @@ function getF2lMoveScore(moves: string[]): number {
 
 function getCubeStateSignature(state: CubeState): string {
   return state.pieces
-    .map((piece) => {
-      const stickers = piece.stickers
-        .map((sticker) => `${sticker.color}:${sticker.face}`)
-        .sort()
-        .join(",");
-
-      return `${piece.id}:${piece.coord.join(",")}:${stickers}`;
-    })
-    .sort()
+    .map(
+      (piece) =>
+        `${piece.id}:${piece.coord.join(",")}:${piece.stickers
+          .map((sticker) => sticker.face)
+          .join("")}`,
+    )
     .join("|");
+}
+
+function getFastCubeStateSignature(state: FastCubeState): string {
+  return `${state.coords.join(",")}|${state.stickerFaces.join("")}`;
+}
+
+function getFaceColorMapCacheKey(faceColorMap: Record<FaceName, CubeColorName>): string {
+  return FACE_NAME_BY_CODE.map((face) => `${face}:${faceColorMap[face]}`).join("|");
+}
+
+function getSolvedFastCubeState(faceColorMap: Record<FaceName, CubeColorName>): FastCubeState {
+  const cacheKey = getFaceColorMapCacheKey(faceColorMap);
+  const cachedState = SOLVED_FAST_STATE_CACHE.get(cacheKey);
+
+  if (cachedState) {
+    return cachedState;
+  }
+
+  const solvedState = toFastCubeState(createSolvedCubeState(faceColorMap));
+  SOLVED_FAST_STATE_CACHE.set(cacheKey, solvedState);
+
+  return solvedState;
+}
+
+function getFastStickerFaceCode(
+  state: FastCubeState,
+  pieceIndex: number | null,
+  color: CubeColorName,
+): number {
+  if (pieceIndex === null) {
+    return -1;
+  }
+
+  const stickerStart = state.stickerOffsets[pieceIndex];
+  const stickerEnd = state.stickerOffsets[pieceIndex + 1];
+
+  for (let stickerIndex = stickerStart; stickerIndex < stickerEnd; stickerIndex += 1) {
+    const colorIndex = stickerIndex - stickerStart;
+
+    if (state.stickerColors[pieceIndex][colorIndex] === color) {
+      return state.stickerFaces[stickerIndex];
+    }
+  }
+
+  return -1;
+}
+
+function getFastF2lPairStateKey(
+  state: FastCubeState,
+  candidate: F2lPairCandidate,
+): string | null {
+  const { cornerIndex, edgeIndex } = getFastF2lPairPieceIndexes(state, candidate);
+
+  if (cornerIndex === null || edgeIndex === null) {
+    return null;
+  }
+
+  const cornerOffset = cornerIndex * 3;
+  const edgeOffset = edgeIndex * 3;
+
+  return [
+    state.coords[cornerOffset],
+    state.coords[cornerOffset + 1],
+    state.coords[cornerOffset + 2],
+    getFastStickerFaceCode(state, cornerIndex, candidate.cornerColors[0]),
+    getFastStickerFaceCode(state, cornerIndex, candidate.cornerColors[1]),
+    getFastStickerFaceCode(state, cornerIndex, candidate.cornerColors[2]),
+    state.coords[edgeOffset],
+    state.coords[edgeOffset + 1],
+    state.coords[edgeOffset + 2],
+    getFastStickerFaceCode(state, edgeIndex, candidate.edgeColors[0]),
+    getFastStickerFaceCode(state, edgeIndex, candidate.edgeColors[1]),
+  ].join(",");
 }
 
 function getF2lSlotNameForCandidate(candidate: F2lPairCandidate): F2lSlotName {
@@ -1340,6 +1880,7 @@ function createBasicF2lAnalysisCache(): BasicF2lAnalysisCache {
   return {
     extractionCandidates: new Map(),
     basicMatches: new Map(),
+    fastAlgorithms: new Map(),
     localSearches: new Map(),
   };
 }
@@ -1367,6 +1908,87 @@ function getBasicF2lCacheKey(
   ].join("::");
 }
 
+function getFastBasicF2lCacheKey(
+  state: FastCubeState,
+  candidate: F2lPairCandidate,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): string {
+  return [
+    getFastCubeStateSignature(state),
+    getF2lPairCacheKey(candidate),
+    crossColor,
+    targetFace,
+  ].join("::");
+}
+
+function getFastF2lPairCandidateBySlot(
+  state: FastCubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  slotName: F2lSlotName,
+): F2lPairCandidate | null {
+  return (
+    getFastF2lPairCandidates(state, crossColor, targetFace).find(
+      (candidate) => getF2lSlotNameForCandidate(candidate) === slotName,
+    ) ?? null
+  );
+}
+
+function getBasicF2lReverseIndex(
+  faceColorMap: Record<FaceName, CubeColorName>,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  slotName: F2lSlotName,
+): Map<string, BasicF2lAlgorithmEntry[]> {
+  const cacheKey = [
+    getFaceColorMapCacheKey(faceColorMap),
+    crossColor,
+    targetFace,
+    slotName,
+  ].join("::");
+  const cachedIndex = BASIC_F2L_REVERSE_INDEX_CACHE.get(cacheKey);
+
+  if (cachedIndex) {
+    return cachedIndex;
+  }
+
+  const index = new Map<string, BasicF2lAlgorithmEntry[]>();
+  const solvedState = getSolvedFastCubeState(faceColorMap);
+  const targetCandidate = getFastF2lPairCandidateBySlot(
+    solvedState,
+    crossColor,
+    targetFace,
+    slotName,
+  );
+
+  if (!targetCandidate) {
+    BASIC_F2L_REVERSE_INDEX_CACHE.set(cacheKey, index);
+    return index;
+  }
+
+  for (const entry of getBasicF2lAlgorithmEntries(slotName)) {
+    const startState = applyFastAlgorithm(solvedState, invertAlgorithm(entry.moves));
+    const stateKey = getFastF2lPairStateKey(startState, targetCandidate);
+
+    if (!stateKey || !isFastCrossSolved(startState, crossColor, targetFace)) {
+      continue;
+    }
+
+    const entries = index.get(stateKey) ?? [];
+
+    if (!entries.some((existingEntry) => existingEntry.algorithm === entry.algorithm)) {
+      entries.push(entry);
+      entries.sort((a, b) => a.score - b.score || a.moveCount - b.moveCount);
+      index.set(stateKey, entries);
+    }
+  }
+
+  BASIC_F2L_REVERSE_INDEX_CACHE.set(cacheKey, index);
+
+  return index;
+}
+
 function getCandidateSlotNamesForExtraction(state: CubeState, candidate: F2lPairCandidate): F2lSlotName[] {
   const { corner, edge } = getF2lPairPieces(state, candidate);
   const targetSlot = getF2lSlotNameForCandidate(candidate);
@@ -1385,48 +2007,87 @@ function getCandidateSlotNamesForExtraction(state: CubeState, candidate: F2lPair
   );
 }
 
+function getFastCandidateSlotNamesForExtraction(
+  state: FastCubeState,
+  candidate: F2lPairCandidate,
+): F2lSlotName[] {
+  const { cornerIndex, edgeIndex } = getFastF2lPairPieceIndexes(state, candidate);
+  const targetSlot = getF2lSlotNameForCandidate(candidate);
+  const getCoordSlot = (pieceIndex: number | null) => {
+    if (pieceIndex === null) {
+      return null;
+    }
+
+    const coordOffset = pieceIndex * 3;
+
+    return getF2lSlotNameFromCoord([
+      state.coords[coordOffset],
+      state.coords[coordOffset + 1],
+      state.coords[coordOffset + 2],
+    ]);
+  };
+  const slots = [
+    getCoordSlot(cornerIndex),
+    getCoordSlot(edgeIndex),
+    targetSlot,
+    "FR",
+    "FL",
+    "BR",
+    "BL",
+  ];
+
+  return slots.filter((slotName, index, values): slotName is F2lSlotName =>
+    Boolean(slotName && values.indexOf(slotName) === index),
+  );
+}
+
 function getExtractionCandidatesForF2lPair(
-  state: CubeState,
+  fastState: FastCubeState,
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
   cache?: BasicF2lAnalysisCache,
 ): F2lExtractionCandidate[] {
-  const cacheKey = cache ? getBasicF2lCacheKey(state, candidate, crossColor, targetFace) : "";
+  const cacheKey = cache ? getFastBasicF2lCacheKey(fastState, candidate, crossColor, targetFace) : "";
   const cachedCandidates = cache?.extractionCandidates.get(cacheKey);
 
   if (cachedCandidates) {
     return cachedCandidates;
   }
 
-  const candidates = new Map<string, { algorithm: string; state: CubeState; score: number }>();
-  const addCandidate = (algorithm: string, nextState: CubeState) => {
-    if (!isCrossSolved(nextState, crossColor, targetFace)) {
+  const candidates = new Map<string, F2lExtractionCandidate>();
+  const addCandidate = (
+    algorithm: string,
+    moves: string[],
+    nextFastState: FastCubeState,
+    score: number,
+  ) => {
+    if (!isFastCrossSolved(nextFastState, crossColor, targetFace)) {
       return;
     }
 
-    const key = `${algorithm}::${getCubeStateSignature(nextState)}`;
-    const score = getF2lCandidateScore(algorithm);
+    const key = `${algorithm}::${getFastCubeStateSignature(nextFastState)}`;
     const existing = candidates.get(key);
 
     if (!existing || score < existing.score) {
-      candidates.set(key, { algorithm, state: nextState, score });
+      candidates.set(key, {
+        algorithm,
+        moves,
+        moveCount: moves.length,
+        fastState: nextFastState,
+        score,
+      });
     }
   };
 
-  addCandidate("", state);
+  addCandidate("", [], fastState, 0);
 
-  for (const slotName of getCandidateSlotNamesForExtraction(state, candidate)) {
-    for (const extraction of F2L_EXTRACTION_OPTIONS[slotName]) {
-      for (const beforeU of F2L_U_SETUPS) {
-        for (const afterU of F2L_U_SETUPS) {
-          const algorithm = joinAlgorithms(beforeU, extraction, afterU);
-          const nextState = applyAlgorithmString(state, algorithm);
+  for (const slotName of getFastCandidateSlotNamesForExtraction(fastState, candidate)) {
+    for (const extraction of getF2lExtractionEntries(slotName)) {
+      const nextFastState = applyCachedFastAlgorithm(fastState, extraction.moves, cache);
 
-          if (areF2lPairPiecesOnU(nextState, candidate)) {
-            addCandidate(algorithm, nextState);
-          }
-        }
+      if (areFastF2lPairPiecesOnU(nextFastState, candidate)) {
+        addCandidate(extraction.algorithm, extraction.moves, nextFastState, extraction.score);
       }
     }
   }
@@ -1438,34 +2099,73 @@ function getExtractionCandidatesForF2lPair(
 }
 
 function findBasicF2lCaseForPair(
-  state: CubeState,
+  state: FastCubeState,
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
   cache?: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lCaseMatch | null {
-  const cacheKey = cache ? getBasicF2lCacheKey(state, candidate, crossColor, targetFace) : "";
+  const cacheKey = cache
+    ? [getFastCubeStateSignature(state), getF2lPairCacheKey(candidate), crossColor, targetFace].join(
+        "::",
+      )
+    : "";
 
   if (cache?.basicMatches.has(cacheKey)) {
     return cache.basicMatches.get(cacheKey) ?? null;
   }
 
   const slotName = getF2lSlotNameForCandidate(candidate);
+  const stateKey = getFastF2lPairStateKey(state, candidate);
+  const entries = stateKey
+    ? getBasicF2lReverseIndex(state.faceColorMap, crossColor, targetFace, slotName).get(stateKey) ??
+      []
+    : [];
+  const useLegacyFallback = options.useBasicF2lLegacyFallback !== false;
 
-  for (const entry of getBasicF2lAlgorithmEntries(slotName)) {
-    const nextState = applyAlgorithm(state, entry.moves);
+  const createMatchFromEntry = (entry: BasicF2lAlgorithmEntry): BasicF2lCaseMatch | null => {
+    const nextState = applyCachedFastAlgorithm(state, entry.moves, cache);
 
     if (
-      isCrossSolved(nextState, crossColor, targetFace) &&
-      isF2lPairSolved(nextState, candidate)
+      !isFastCrossSolved(nextState, crossColor, targetFace) ||
+      !isFastF2lPairSolved(nextState, candidate)
     ) {
-      const match: BasicF2lCaseMatch = {
-        caseItem: entry.caseItem,
-        algorithm: entry.algorithm,
-        stateAfterAlgorithm: nextState,
-        score: entry.score,
-      };
+      return null;
+    }
 
+    return {
+      caseItem: entry.caseItem,
+      algorithm: entry.algorithm,
+      moves: entry.moves,
+      moveCount: entry.moveCount,
+      fastStateAfterAlgorithm: nextState,
+      score: entry.score,
+    };
+  };
+
+  for (const entry of entries) {
+    const match = createMatchFromEntry(entry);
+
+    if (match) {
+      cache?.basicMatches.set(cacheKey, match);
+      return match;
+    }
+  }
+
+  if (!useLegacyFallback) {
+    cache?.basicMatches.set(cacheKey, null);
+    return null;
+  }
+
+  for (const entry of getBasicF2lAlgorithmEntries(slotName)) {
+    if (entries.some((indexedEntry) => indexedEntry.algorithm === entry.algorithm)) {
+      continue;
+    }
+
+    const match = createMatchFromEntry(entry);
+
+    if (match) {
       cache?.basicMatches.set(cacheKey, match);
       return match;
     }
@@ -1499,7 +2199,7 @@ function findLocalF2lSearchForPair(
     path: string[],
     lastMove: string | null,
     seenPath: Set<string>,
-  ): { algorithm: string; stateAfterAlgorithm: CubeState; score: number; nodes: number } | null => {
+  ): LocalF2lSearchMatch | null => {
     if (nodeCounter.count >= F2L_LOCAL_SEARCH_NODE_LIMIT) {
       return null;
     }
@@ -1507,12 +2207,15 @@ function findLocalF2lSearchForPair(
     nodeCounter.count += 1;
 
     if (path.length > 0 && isCrossSolved(currentState, crossColor, targetFace) && isF2lPairSolved(currentState, candidate)) {
+      const moves = [...path];
       const algorithm = path.join(" ");
 
       return {
         algorithm,
+        moves,
+        moveCount: moves.length,
         stateAfterAlgorithm: currentState,
-        score: getF2lCandidateScore(algorithm) + 4,
+        score: getF2lMoveScore(moves),
         nodes: nodeCounter.count,
       };
     }
@@ -1559,19 +2262,54 @@ function findLocalF2lSearchForPair(
   return null;
 }
 
+function createBasicF2lStepBuildResult(
+  candidate: BasicF2lStepCandidateBuild,
+): BasicF2lStepBuildResult {
+  return {
+    step: {
+      id: candidate.id,
+      pairTitle: candidate.pairTitle,
+      targetSlot: candidate.targetSlot,
+      extractAlgorithm: candidate.extractAlgorithm,
+      caseId: candidate.caseId,
+      caseName: candidate.caseName,
+      method: candidate.method,
+      algorithm: candidate.algorithm,
+      fullAlgorithm: candidate.fullAlgorithm,
+      moveCount: candidate.moveCount,
+      score: candidate.score,
+      explanation: candidate.explanation,
+      stateAfterStep:
+        candidate.stateAfterStep ?? fastToCubeState(candidate.fastStateAfterStep),
+    },
+    fastStateAfterStep: candidate.fastStateAfterStep,
+  };
+}
+
 function buildBasicF2lStepCandidate(
   state: CubeState,
+  fastState: FastCubeState,
   candidate: F2lPairCandidate,
   crossColor: CubeColorName,
   targetFace: TargetFace,
   stepIndex: number,
   cache?: BasicF2lAnalysisCache,
   options: BasicF2lOrderAnalysisOptions = {},
-): BasicF2lAnalysisStep | null {
+): BasicF2lStepBuildResult | null {
   const slotName = getF2lSlotNameForCandidate(candidate);
-  const matches: BasicF2lAnalysisStep[] = [];
+  let bestStep: BasicF2lStepCandidateBuild | null = null;
+  let matchIndex = 0;
+  const addStepCandidate = (step: BasicF2lStepCandidateBuild) => {
+    if (
+      !bestStep ||
+      step.score < bestStep.score ||
+      (step.score === bestStep.score && step.moveCount < bestStep.moveCount)
+    ) {
+      bestStep = step;
+    }
+  };
   const extractionCandidates = getExtractionCandidatesForF2lPair(
-    state,
+    fastState,
     candidate,
     crossColor,
     targetFace,
@@ -1580,20 +2318,21 @@ function buildBasicF2lStepCandidate(
 
   for (const extraction of extractionCandidates) {
     const basicMatch = findBasicF2lCaseForPair(
-      extraction.state,
+      extraction.fastState,
       candidate,
       crossColor,
       targetFace,
       cache,
+      options,
     );
 
     if (basicMatch) {
       const fullAlgorithm = joinAlgorithms(extraction.algorithm, basicMatch.algorithm);
-      const moveCount = parseMoves(fullAlgorithm).length;
-      const score = getF2lCandidateScore(fullAlgorithm);
+      const moveCount = extraction.moveCount + basicMatch.moveCount;
+      const score = extraction.score + basicMatch.score;
 
-      matches.push({
-        id: `f2l-step-${stepIndex}-${candidate.id}-${matches.length}`,
+      addStepCandidate({
+        id: `f2l-step-${stepIndex}-${candidate.id}-${matchIndex}`,
         pairTitle: candidate.title,
         targetSlot: slotName,
         extractAlgorithm: extraction.algorithm,
@@ -1604,16 +2343,17 @@ function buildBasicF2lStepCandidate(
         fullAlgorithm,
         moveCount,
         score,
-        stateAfterStep: basicMatch.stateAfterAlgorithm,
+        fastStateAfterStep: basicMatch.fastStateAfterAlgorithm,
         explanation: extraction.algorithm
           ? "対象ピースをU面へ取り出し、基本41ケースとして処理します。"
           : "対象コーナーとエッジを基本41ケースとしてスロットへ入れます。",
       });
+      matchIndex += 1;
     }
   }
 
-  if (matches.length > 0) {
-    return matches.sort((a, b) => a.score - b.score || a.moveCount - b.moveCount)[0];
+  if (bestStep) {
+    return createBasicF2lStepBuildResult(bestStep);
   }
 
   if (options.useLocalSearch === false) {
@@ -1622,7 +2362,7 @@ function buildBasicF2lStepCandidate(
 
   for (const extraction of extractionCandidates.slice(0, 10)) {
     const localSearchMatch = findLocalF2lSearchForPair(
-      extraction.state,
+      fastToCubeState(extraction.fastState),
       candidate,
       crossColor,
       targetFace,
@@ -1630,12 +2370,13 @@ function buildBasicF2lStepCandidate(
     );
 
     if (localSearchMatch) {
+      const fastStateAfterStep = toFastCubeState(localSearchMatch.stateAfterAlgorithm);
       const fullAlgorithm = joinAlgorithms(extraction.algorithm, localSearchMatch.algorithm);
-      const moveCount = parseMoves(fullAlgorithm).length;
-      const score = getF2lCandidateScore(fullAlgorithm) + 6;
+      const moveCount = extraction.moveCount + localSearchMatch.moveCount;
+      const score = extraction.score + localSearchMatch.score + 6;
 
-      matches.push({
-        id: `f2l-step-${stepIndex}-${candidate.id}-local-${matches.length}`,
+      addStepCandidate({
+        id: `f2l-step-${stepIndex}-${candidate.id}-local-${matchIndex}`,
         pairTitle: candidate.title,
         targetSlot: slotName,
         extractAlgorithm: extraction.algorithm,
@@ -1646,21 +2387,35 @@ function buildBasicF2lStepCandidate(
         fullAlgorithm,
         moveCount,
         score,
+        fastStateAfterStep,
         stateAfterStep: localSearchMatch.stateAfterAlgorithm,
         explanation: extraction.algorithm
           ? "基本41の完全一致が弱い状態だったため、取り出し後に短い局所探索でペアを解きます。"
           : "基本41の候補で確定できない状態だったため、短い局所探索でペアを解きます。",
       });
+      matchIndex += 1;
     }
   }
 
-  return matches.sort((a, b) => a.score - b.score || a.moveCount - b.moveCount)[0] ?? null;
+  if (!bestStep) {
+    return null;
+  }
+
+  return createBasicF2lStepBuildResult(bestStep);
 }
 
 const F2L_ORDER_SLOTS: F2lSlotName[] = ["FR", "FL", "BR", "BL"];
 
 function getF2lPlanRank(plan: BasicF2lAnalysisPlan): number {
   return plan.unresolvedPairs.length * 10_000 + plan.steps.reduce((sum, step) => sum + step.score, 0);
+}
+
+function compareBasicF2lPlans(a: BasicF2lAnalysisPlan, b: BasicF2lAnalysisPlan): number {
+  return (
+    getF2lPlanRank(a) - getF2lPlanRank(b) ||
+    a.totalMoveCount - b.totalMoveCount ||
+    a.order.join("").localeCompare(b.order.join(""))
+  );
 }
 
 function getF2lSlotPermutations(slots: F2lSlotName[]): F2lSlotName[][] {
@@ -1676,7 +2431,9 @@ function getF2lSlotPermutations(slots: F2lSlotName[]): F2lSlotName[][] {
   );
 }
 
-function buildBasicF2lPlan(
+const F2L_ORDER_PERMUTATIONS = getF2lSlotPermutations(F2L_ORDER_SLOTS);
+
+function tryBuildBasicF2lPlan(
   initialState: CubeState,
   crossColor: CubeColorName,
   targetFace: TargetFace,
@@ -1684,13 +2441,19 @@ function buildBasicF2lPlan(
   order?: F2lSlotName[],
   cache?: BasicF2lAnalysisCache,
   options: BasicF2lOrderAnalysisOptions = {},
-): BasicF2lAnalysisPlan {
+  rankCutoff?: number,
+): BasicF2lAnalysisPlan | null {
   let currentState = cloneCubeState(initialState);
+  let currentFastState = toFastCubeState(currentState);
   const steps: BasicF2lAnalysisStep[] = [];
   const planOrder = order ?? F2L_ORDER_SLOTS;
 
   for (let stepIndex = 1; stepIndex <= 4; stepIndex += 1) {
-    const unsolvedCandidates = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
+    const unsolvedCandidates = getFastF2lPairCandidates(
+      currentFastState,
+      crossColor,
+      targetFace,
+    ).filter(
       (candidate) => candidate.status === "unsolved",
     );
 
@@ -1714,6 +2477,7 @@ function buildBasicF2lPlan(
       .map((candidate) =>
         buildBasicF2lStepCandidate(
           currentState,
+          currentFastState,
           candidate,
           crossColor,
           targetFace,
@@ -1722,19 +2486,32 @@ function buildBasicF2lPlan(
           options,
         ),
       )
-      .filter((step): step is BasicF2lAnalysisStep => Boolean(step))
-      .sort((a, b) => a.score - b.score || a.moveCount - b.moveCount);
+      .filter((result): result is BasicF2lStepBuildResult => Boolean(result))
+      .sort((a, b) => a.step.score - b.step.score || a.step.moveCount - b.step.moveCount);
 
-    const selectedStep = stepCandidates[0];
-    if (!selectedStep) {
+    const selectedResult = stepCandidates[0];
+    if (!selectedResult) {
       break;
     }
 
+    const selectedStep = selectedResult.step;
     steps.push(selectedStep);
     currentState = selectedStep.stateAfterStep;
+    currentFastState = selectedResult.fastStateAfterStep;
+
+    if (
+      rankCutoff !== undefined &&
+      steps.reduce((sum, step) => sum + step.score, 0) > rankCutoff
+    ) {
+      return null;
+    }
   }
 
-  const unresolvedPairs = getF2lPairCandidates(currentState, crossColor, targetFace).filter(
+  const unresolvedPairs = getFastF2lPairCandidates(
+    currentFastState,
+    crossColor,
+    targetFace,
+  ).filter(
     (candidate) => candidate.status !== "completed",
   );
   const totalMoveCount = steps.reduce((sum, step) => sum + step.moveCount, 0);
@@ -1762,6 +2539,32 @@ function buildBasicF2lPlan(
   };
 }
 
+function buildBasicF2lPlan(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  strategy: "greedy" | "permutation",
+  order?: F2lSlotName[],
+  cache?: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
+): BasicF2lAnalysisPlan {
+  const plan = tryBuildBasicF2lPlan(
+    initialState,
+    crossColor,
+    targetFace,
+    strategy,
+    order,
+    cache,
+    options,
+  );
+
+  if (!plan) {
+    throw new Error("F2Lプランの作成に失敗しました。");
+  }
+
+  return plan;
+}
+
 function analyzeBasicF2lOrderPlansWithCache(
   initialState: CubeState,
   crossColor: CubeColorName,
@@ -1769,10 +2572,9 @@ function analyzeBasicF2lOrderPlansWithCache(
   cache: BasicF2lAnalysisCache,
   options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lOrderAnalysisResult {
-  const orders = getF2lSlotPermutations(F2L_ORDER_SLOTS);
-  const plans = orders
+  const plans = F2L_ORDER_PERMUTATIONS
     .map((order) =>
-      buildBasicF2lPlan(
+      tryBuildBasicF2lPlan(
         initialState,
         crossColor,
         targetFace,
@@ -1782,16 +2584,44 @@ function analyzeBasicF2lOrderPlansWithCache(
         options,
       ),
     )
-    .sort(
-      (a, b) =>
-        getF2lPlanRank(a) - getF2lPlanRank(b) ||
-        a.totalMoveCount - b.totalMoveCount ||
-        a.order.join("").localeCompare(b.order.join("")),
-    );
+    .filter((plan): plan is BasicF2lAnalysisPlan => Boolean(plan))
+    .sort(compareBasicF2lPlans);
 
   return {
     plans,
-    comparedOrderCount: orders.length,
+    comparedOrderCount: F2L_ORDER_PERMUTATIONS.length,
+  };
+}
+
+function analyzeBasicF2lBestOrderPlanWithCache(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  cache: BasicF2lAnalysisCache,
+  options: BasicF2lOrderAnalysisOptions = {},
+): BasicF2lOrderAnalysisResult {
+  let bestPlan: BasicF2lAnalysisPlan | null = null;
+
+  for (const order of F2L_ORDER_PERMUTATIONS) {
+    const plan = tryBuildBasicF2lPlan(
+      initialState,
+      crossColor,
+      targetFace,
+      "permutation",
+      order,
+      cache,
+      options,
+      bestPlan ? getF2lPlanRank(bestPlan) : undefined,
+    );
+
+    if (plan && (!bestPlan || compareBasicF2lPlans(plan, bestPlan) < 0)) {
+      bestPlan = plan;
+    }
+  }
+
+  return {
+    plans: bestPlan ? [bestPlan] : [],
+    comparedOrderCount: F2L_ORDER_PERMUTATIONS.length,
   };
 }
 
@@ -1802,6 +2632,21 @@ export function analyzeBasicF2lOrderPlans(
   options: BasicF2lOrderAnalysisOptions = {},
 ): BasicF2lOrderAnalysisResult {
   return analyzeBasicF2lOrderPlansWithCache(
+    initialState,
+    crossColor,
+    targetFace,
+    createBasicF2lAnalysisCache(),
+    options,
+  );
+}
+
+export function analyzeBasicF2lBestOrderPlan(
+  initialState: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+  options: BasicF2lOrderAnalysisOptions = {},
+): BasicF2lOrderAnalysisResult {
+  return analyzeBasicF2lBestOrderPlanWithCache(
     initialState,
     crossColor,
     targetFace,

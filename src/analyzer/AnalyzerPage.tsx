@@ -925,7 +925,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [basicF2lOrderPlans, setBasicF2lOrderPlans] = useState<BasicF2lAnalysisPlan[]>([]);
   const [basicF2lComparedOrderCount, setBasicF2lComparedOrderCount] = useState(0);
   const [basicF2lAnalysisPhase, setBasicF2lAnalysisPhase] = useState<BasicF2lAnalysisPhase | null>(null);
+  const [showBasicF2lOrderDetails, setShowBasicF2lOrderDetails] = useState(false);
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
+  const [isLoadingBasicF2lOrderDetails, setIsLoadingBasicF2lOrderDetails] = useState(false);
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
@@ -994,6 +996,32 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const canUseScramble = unsupportedScrambleTokens.length === 0 && canUseOrientation;
   const canUseActiveSequence = activeInvalidTokens.length === 0 && canUseOrientation;
   const isComplete = activeMoves.length > 0 && currentIndex >= activeMoves.length;
+  const otherBasicF2lOrderPlans = useMemo(
+    () => basicF2lOrderPlans.filter((plan) => plan.id !== basicF2lPlan?.id),
+    [basicF2lOrderPlans, basicF2lPlan?.id],
+  );
+  const canLoadMoreBasicF2lOrderPlans = Boolean(
+    basicF2lPlan && basicF2lComparedOrderCount > basicF2lOrderPlans.length,
+  );
+  const basicF2lLoadingTitle = isLoadingBasicF2lOrderDetails
+    ? "他の順序候補を計算中..."
+    : basicF2lAnalysisPhase === "basic41" && basicF2lPlan
+      ? "未解決ペアを補助探索中..."
+      : "F2L解析中...";
+  const basicF2lLoadingDescription = isLoadingBasicF2lOrderDetails
+    ? "最短順序は残したまま、表示用の別順序候補だけを追加で計算しています。"
+    : basicF2lAnalysisPhase === "basic41" && basicF2lPlan
+      ? "表示中のDB候補を残したまま、未解決ペアだけを詳しく探しています。"
+      : "既存の基本41DBを使って、F2Lの最短順序だけをWorkerで先に計算しています。";
+  const moreBasicF2lOrderButtonLabel = isLoadingBasicF2lOrderDetails
+    ? "他の順序候補を計算中..."
+    : showBasicF2lOrderDetails
+      ? "他の順序候補を閉じる"
+      : `他の順序候補をもっと見る（${
+          otherBasicF2lOrderPlans.length > 0
+            ? otherBasicF2lOrderPlans.length
+            : Math.max(0, basicF2lComparedOrderCount - 1)
+        }件）`;
 
   const resetCubeState = useCallback(() => {
     const state = sceneStateRef.current;
@@ -1215,6 +1243,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lAnalysisPhase(null);
+    setShowBasicF2lOrderDetails(false);
+    setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
     setAiNotice(null);
   }, [
@@ -1345,6 +1375,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lAnalysisPhase(null);
+    setShowBasicF2lOrderDetails(false);
+    setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
   }, [selectedCrossSolution]);
 
@@ -1566,6 +1598,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lAnalysisPhase(null);
+    setShowBasicF2lOrderDetails(false);
+    setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
     setIsAnalyzingBasicF2l(false);
     setManualMoveHistory([]);
@@ -1902,6 +1936,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lOrderPlans([]);
     setBasicF2lComparedOrderCount(0);
     setBasicF2lAnalysisPhase(null);
+    setShowBasicF2lOrderDetails(false);
+    setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
 
     if (!scrambleInput.trim()) {
@@ -2095,24 +2131,29 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     );
   };
 
-  const runBasicF2lAnalysis = useCallback((options: { useLocalSearch?: boolean } = {}) => {
+  const runBasicF2lAnalysis = useCallback((options: { useLocalSearch?: boolean; includeAllPlans?: boolean } = {}) => {
     const useLocalSearch = Boolean(options.useLocalSearch);
+    const includeAllPlans = Boolean(options.includeAllPlans);
 
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
     const jobId = f2lAnalysisJobIdRef.current + 1;
     f2lAnalysisJobIdRef.current = jobId;
 
-    if (!useLocalSearch) {
+    if (!useLocalSearch && !includeAllPlans) {
       setBasicF2lPlan(null);
       setBasicF2lOrderPlans([]);
       setBasicF2lComparedOrderCount(0);
       setBasicF2lAnalysisPhase(null);
+      setShowBasicF2lOrderDetails(false);
+      setIsLoadingBasicF2lOrderDetails(false);
     }
+    setIsLoadingBasicF2lOrderDetails(includeAllPlans);
     setBasicF2lError(null);
 
     if (!selectedCrossSolution) {
       setIsAnalyzingBasicF2l(false);
+      setIsLoadingBasicF2lOrderDetails(false);
       setBasicF2lError("先にCross候補を選択してください。");
       return;
     }
@@ -2129,6 +2170,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         f2lAnalysisWorkerRef.current = null;
       }
       setIsAnalyzingBasicF2l(false);
+      setIsLoadingBasicF2lOrderDetails(false);
     };
 
     worker.onmessage = (event: MessageEvent<F2lAnalysisWorkerResponse>) => {
@@ -2143,10 +2185,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           finishWorker();
         }
         setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
-        if (!useLocalSearch) {
+        if (!useLocalSearch && !includeAllPlans) {
           setBasicF2lOrderPlans([]);
           setBasicF2lComparedOrderCount(0);
           setBasicF2lAnalysisPhase(null);
+          setShowBasicF2lOrderDetails(false);
+          setIsLoadingBasicF2lOrderDetails(false);
         }
         return;
       }
@@ -2155,6 +2199,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setBasicF2lOrderPlans(event.data.orderResult?.plans ?? []);
       setBasicF2lComparedOrderCount(event.data.orderResult?.comparedOrderCount ?? 0);
       setBasicF2lAnalysisPhase(event.data.phase ?? (useLocalSearch ? "fallback" : "basic41"));
+      if (includeAllPlans) {
+        setShowBasicF2lOrderDetails(true);
+      }
 
       if (isDone) {
         finishWorker();
@@ -2170,10 +2217,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         f2lAnalysisWorkerRef.current = null;
       }
       setIsAnalyzingBasicF2l(false);
-      if (!useLocalSearch) {
+      setIsLoadingBasicF2lOrderDetails(false);
+      if (!useLocalSearch && !includeAllPlans) {
         setBasicF2lOrderPlans([]);
         setBasicF2lComparedOrderCount(0);
         setBasicF2lAnalysisPhase(null);
+        setShowBasicF2lOrderDetails(false);
+        setIsLoadingBasicF2lOrderDetails(false);
       }
       setBasicF2lError("F2L解析Workerでエラーが発生しました。");
     };
@@ -2183,6 +2233,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       crossColor: selectedCrossSolution.color,
       targetFace: selectedCrossSolution.targetFace,
       useLocalSearch,
+      includeAllPlans,
     });
   }, [selectedCrossSolution]);
 
@@ -2743,16 +2794,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 {isAnalyzingBasicF2l && (
                   <article className="analyzer-basic-f2l-plan">
                     <p className="eyebrow">Basic F2L 41</p>
-                    <h3>
-                      {basicF2lAnalysisPhase === "basic41" && basicF2lPlan
-                        ? "未解決ペアを補助探索中..."
-                        : "F2L解析中..."}
-                    </h3>
-                    <p>
-                      {basicF2lAnalysisPhase === "basic41" && basicF2lPlan
-                        ? "表示中のDB候補を残したまま、未解決ペアだけを詳しく探しています。"
-                        : "既存の基本41DBを使って、F2Lの24順序比較をWorkerで計算しています。"}
-                    </p>
+                    <h3>{basicF2lLoadingTitle}</h3>
+                    <p>{basicF2lLoadingDescription}</p>
                   </article>
                 )}
                 {basicF2lError && (
@@ -2842,85 +2885,109 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     )}
                   </article>
                 )}
-                {basicF2lOrderPlans.length > 0 && (
+                {(otherBasicF2lOrderPlans.length > 0 || canLoadMoreBasicF2lOrderPlans) && (
                   <article className="analyzer-basic-f2l-plan">
                     <div className="analyzer-basic-f2l-heading">
                       <div>
                         <p className="eyebrow">Basic41 Order Ranking</p>
-                        <h3>FR / FL / BR / BL の順序比較</h3>
+                        <h3>他の順序候補</h3>
                       </div>
                       <div className="analyzer-basic-f2l-summary">
                         <span>{basicF2lComparedOrderCount} orders</span>
-                        <span>Basic41 + 取り出し</span>
+                        <span>
+                          {basicF2lAnalysisPhase === "fallback" ? "補助探索込み" : "Basic41 + 取り出し"}
+                        </span>
                       </div>
                     </div>
 
                     <p>
-                      既存の基本41パターン解析を使って、FR / FL / BR / BL の24通りを短い順に並べています。
+                      最短順序だけを上に表示しています。FR / FL / BR / BL の別順序候補は必要な時だけ開けます。
                     </p>
 
-                    <ol className="analyzer-basic-f2l-steps">
-                      {basicF2lOrderPlans.map((plan, planIndex) => (
-                        <li key={plan.id}>
-                          <div className="analyzer-basic-f2l-step-head">
-                            <strong>
-                              候補 {planIndex + 1}: {plan.totalMoveCount} moves / order{" "}
-                              {plan.order.join(" → ")}
-                            </strong>
-                            <button type="button" onClick={() => playBasicF2lSteps(plan.steps)}>
-                              この候補を3D再生
-                            </button>
-                          </div>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      aria-expanded={showBasicF2lOrderDetails}
+                      disabled={isLoadingBasicF2lOrderDetails}
+                      onClick={() => {
+                        if (otherBasicF2lOrderPlans.length === 0) {
+                          runBasicF2lAnalysis({
+                            includeAllPlans: true,
+                            useLocalSearch: basicF2lAnalysisPhase === "fallback",
+                          });
+                          return;
+                        }
 
-                          <div className="analyzer-f2l-tags">
-                            <span>Steps: {plan.steps.length}</span>
-                            <span>Score: {plan.totalScore.toFixed(1)}</span>
-                            <span>未解決: {plan.unresolvedPairs.length}</span>
-                            <span>{plan.unresolvedPairs.length === 0 ? "F2L完成" : "未完了"}</span>
-                          </div>
+                        setShowBasicF2lOrderDetails((isShown) => !isShown);
+                      }}
+                    >
+                      {moreBasicF2lOrderButtonLabel}
+                    </button>
 
-                          {plan.steps.length > 0 ? (
-                            <ol className="analyzer-basic-f2l-steps">
-                              {plan.steps.map((step, stepIndex) => (
-                                <li key={`${plan.id}-${step.id}`}>
-                                  <div className="analyzer-basic-f2l-step-head">
-                                    <strong>
-                                      Step {stepIndex + 1}: {step.pairTitle}
-                                    </strong>
-                                    <button
-                                      type="button"
-                                      onClick={() => playBasicF2lPlanStep(plan, stepIndex)}
-                                    >
-                                      ここまで3D再生
-                                    </button>
-                                  </div>
+                    {showBasicF2lOrderDetails && (
+                      <ol className="analyzer-basic-f2l-steps">
+                        {otherBasicF2lOrderPlans.map((plan, planIndex) => (
+                          <li key={plan.id}>
+                            <div className="analyzer-basic-f2l-step-head">
+                              <strong>
+                                候補 {planIndex + 2}: {plan.totalMoveCount} moves / order{" "}
+                                {plan.order.join(" → ")}
+                              </strong>
+                              <button type="button" onClick={() => playBasicF2lSteps(plan.steps)}>
+                                この候補を3D再生
+                              </button>
+                            </div>
 
-                                  <div className="analyzer-f2l-tags">
-                                    <span>Target: {step.targetSlot}</span>
-                                    <span>Extract: {step.extractAlgorithm || "なし"}</span>
-                                    <span>
-                                      Method: {step.method === "localSearch" ? "局所探索" : "基本41"}
-                                    </span>
-                                    <span>Case: {step.caseId}</span>
-                                    <span>Moves: {step.moveCount}</span>
-                                  </div>
+                            <div className="analyzer-f2l-tags">
+                              <span>Steps: {plan.steps.length}</span>
+                              <span>Score: {plan.totalScore.toFixed(1)}</span>
+                              <span>未解決: {plan.unresolvedPairs.length}</span>
+                              <span>{plan.unresolvedPairs.length === 0 ? "F2L完成" : "未完了"}</span>
+                            </div>
 
-                                  <code>{step.fullAlgorithm || step.algorithm}</code>
-                                </li>
-                              ))}
-                            </ol>
-                          ) : (
-                            <p className="analyzer-muted">この順序では追加手順がありません。</p>
-                          )}
+                            {plan.steps.length > 0 ? (
+                              <ol className="analyzer-basic-f2l-steps">
+                                {plan.steps.map((step, stepIndex) => (
+                                  <li key={`${plan.id}-${step.id}`}>
+                                    <div className="analyzer-basic-f2l-step-head">
+                                      <strong>
+                                        Step {stepIndex + 1}: {step.pairTitle}
+                                      </strong>
+                                      <button
+                                        type="button"
+                                        onClick={() => playBasicF2lPlanStep(plan, stepIndex)}
+                                      >
+                                        ここまで3D再生
+                                      </button>
+                                    </div>
 
-                          {plan.unresolvedPairs.length > 0 && (
-                            <p className="analyzer-muted">
-                              未解決ペア: {plan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
+                                    <div className="analyzer-f2l-tags">
+                                      <span>Target: {step.targetSlot}</span>
+                                      <span>Extract: {step.extractAlgorithm || "なし"}</span>
+                                      <span>
+                                        Method: {step.method === "localSearch" ? "局所探索" : "基本41"}
+                                      </span>
+                                      <span>Case: {step.caseId}</span>
+                                      <span>Moves: {step.moveCount}</span>
+                                    </div>
+
+                                    <code>{step.fullAlgorithm || step.algorithm}</code>
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : (
+                              <p className="analyzer-muted">この順序では追加手順がありません。</p>
+                            )}
+
+                            {plan.unresolvedPairs.length > 0 && (
+                              <p className="analyzer-muted">
+                                未解決ペア: {plan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
                   </article>
                 )}
                 <div className="analyzer-f2l-list">

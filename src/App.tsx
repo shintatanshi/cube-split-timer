@@ -11,8 +11,18 @@ import type {
   ThemePreference,
 } from "./types";
 import { HELP_TOPICS, TUTORIAL_STEPS } from "./helpContent";
+import {
+  getCurrentAuthUser,
+  isAuthConfigured,
+  signInWithEmail,
+  signOutCurrentUser,
+  signUpWithEmail,
+  subscribeToAuthUserChange,
+  type AuthUser,
+} from "./lib/auth";
 import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
 import { generateScramble } from "./lib/scramble";
+import { saveSolveSession, type SaveSolveSessionInput } from "./lib/solveSessions";
 import {
   clearCurrentSolveDraft,
   loadCurrentSolveDraft,
@@ -53,7 +63,7 @@ const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
 
-type AppPage = "timer" | "help" | "learn" | "analyzer" | "scramble" | "feedback";
+type AppPage = "timer" | "help" | "learn" | "analyzer" | "scramble" | "feedback" | "login";
 
 interface LocationInfo {
   page: AppPage;
@@ -223,7 +233,9 @@ function getLocationInfo(): LocationInfo {
               ? "scramble"
               : pathname === "/feedback"
                 ? "feedback"
-                : "timer",
+                : pathname === "/login"
+                  ? "login"
+                  : "timer",
     path: pathname,
     hash,
   };
@@ -336,6 +348,39 @@ function buildTodaySummaryShareText(todaySolves: SolveRecord[], todayStats: Time
   ].join("\n");
 }
 
+function getAuthUserLabel(user: AuthUser): string {
+  const displayName = user.user_metadata?.display_name;
+
+  if (typeof displayName === "string" && displayName.trim()) {
+    return displayName.trim();
+  }
+
+  return user.email ?? "ログイン中";
+}
+
+function buildCloudSolveSessionInput(solve: SolveRecord): SaveSolveSessionInput {
+  const solveValue = getSolveValue(solve);
+  const notes = [
+    solve.penalty !== "none" ? `Penalty: ${solve.penalty}` : null,
+    solve.mode === "cross_practice" ? `Cross color: ${solve.crossColor}` : null,
+    solve.mode === "f2l_pair_split"
+      ? `Pair splits: ${solve.pair1Time}, ${solve.pair2Time}, ${solve.pair3Time}, ${solve.pair4Time}`
+      : null,
+  ].filter((note): note is string => note !== null);
+
+  return {
+    mode: solve.mode,
+    scramble: solve.scramble,
+    totalMs: solveValue.value ?? solve.totalTime,
+    crossMs: "crossTime" in solve ? solve.crossTime : null,
+    f2lMs: "f2lTime" in solve ? solve.f2lTime : null,
+    ollMs: "ollTime" in solve ? solve.ollTime : null,
+    pllMs: "pllTime" in solve ? solve.pllTime : null,
+    notes: notes.length > 0 ? notes.join(" / ") : null,
+    isDnf: solve.penalty === "DNF",
+  };
+}
+
 function getWeakPhase(cfopStats: Record<CfopPhase, PhaseStat>): WeakPhase | null {
   const averages = CFOP_PHASES.map(({ phase, label }) => ({
     label,
@@ -388,6 +433,9 @@ export default function App() {
   const [lastSavedSolveId, setLastSavedSolveId] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
   const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
   const [timerState, setTimerState] = useState<TimerState>("idle");
@@ -463,6 +511,41 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isAuthConfigured()) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let isDisposed = false;
+    const unsubscribe = subscribeToAuthUserChange((nextUser) => {
+      setAuthUser(nextUser);
+      setIsAuthLoading(false);
+    });
+
+    getCurrentAuthUser()
+      .then((currentUser) => {
+        if (!isDisposed) {
+          setAuthUser(currentUser);
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setAuthNotice("ログイン状態を確認できませんでした。Supabase設定を確認してください。");
+        }
+      })
+      .finally(() => {
+        if (!isDisposed) {
+          setIsAuthLoading(false);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     const draft = loadCurrentSolveDraft();
 
     if (draft?.status === "running") {
@@ -518,6 +601,18 @@ export default function App() {
   }, [shareStatus]);
 
   useEffect(() => {
+    if (authNotice === null) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setAuthNotice(null);
+    }, 6000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [authNotice]);
+
+  useEffect(() => {
     if (timerState !== "running") {
       return;
     }
@@ -559,6 +654,23 @@ export default function App() {
     saveSolves(nextSolves);
   }, []);
 
+  const syncSolveToCloud = useCallback(
+    (solve: SolveRecord) => {
+      if (!authUser || !isAuthConfigured()) {
+        return;
+      }
+
+      void saveSolveSession(buildCloudSolveSessionInput(solve))
+        .then(() => {
+          setAuthNotice("記録をクラウドにも保存しました。");
+        })
+        .catch(() => {
+          setAuthNotice("ローカル保存は完了しましたが、クラウド保存に失敗しました。");
+        });
+    },
+    [authUser],
+  );
+
   const finishSolve = useCallback(
     (solve: SolveRecord, finalTime: number) => {
       startTimeRef.current = null;
@@ -570,8 +682,9 @@ export default function App() {
       setLastSavedSolveId(solve.id);
       setUndoState(null);
       persistAndSetSolves([solve, ...solves]);
+      syncSolveToCloud(solve);
     },
-    [persistAndSetSolves, setTimerStatus, solves],
+    [persistAndSetSolves, setTimerStatus, solves, syncSolveToCloud],
   );
 
   const startTimer = useCallback(() => {
@@ -1303,6 +1416,20 @@ const handleTimerPointerCancel = useCallback(
     navigateTo("/feedback");
   }, [navigateTo]);
 
+  const openLogin = useCallback(() => {
+    navigateTo("/login");
+  }, [navigateTo]);
+
+  const handleSignOut = useCallback(async () => {
+    try {
+      await signOutCurrentUser();
+      setAuthUser(null);
+      setAuthNotice("ログアウトしました。");
+    } catch {
+      setAuthNotice("ログアウトできませんでした。時間を置いてもう一度試してください。");
+    }
+  }, []);
+
   const openCurrentScrambleInAnalyzer = useCallback(() => {
     navigateTo(`/analyzer?scramble=${encodeURIComponent(scramble)}`);
   }, [navigateTo, scramble]);
@@ -1459,6 +1586,23 @@ const handleTimerPointerCancel = useCallback(
     );
   }
 
+  if (locationInfo.page === "login") {
+    return (
+      <AuthPage
+        user={authUser}
+        isLoading={isAuthLoading}
+        isConfigured={isAuthConfigured()}
+        onBack={openTimer}
+        onOpenTimer={openTimer}
+        onSignedIn={(message) => {
+          setAuthNotice(message);
+          openTimer();
+        }}
+        onSignedOut={handleSignOut}
+      />
+    );
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
@@ -1477,9 +1621,20 @@ const handleTimerPointerCancel = useCallback(
             意見箱
           </button>
           <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
-          <button className="icon-button" type="button" aria-label="Profile">
-            Me
-          </button>
+          {authUser ? (
+            <div className="auth-chip" aria-label="Logged in account">
+              <button className="auth-chip-main" type="button" onClick={openLogin}>
+                {getAuthUserLabel(authUser)}
+              </button>
+              <button className="auth-chip-logout" type="button" onClick={() => void handleSignOut()}>
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button className="ghost-button auth-login-button" type="button" onClick={openLogin}>
+              {isAuthLoading ? "..." : "Login"}
+            </button>
+          )}
           <div className="theme-control" aria-label="Theme setting">
             <label htmlFor="theme-select">Theme</label>
             <select
@@ -1504,6 +1659,12 @@ const handleTimerPointerCancel = useCallback(
       {shareStatus && (
         <div className="notice share-notice" role="status">
           {shareStatus}
+        </div>
+      )}
+
+      {authNotice && (
+        <div className="notice auth-notice" role="status">
+          {authNotice}
         </div>
       )}
 
@@ -1847,6 +2008,238 @@ function TutorialDialog({ onClose, onOpenHelp }: TutorialDialogProps) {
         </div>
       </section>
     </div>
+  );
+}
+
+type AuthFormMode = "signIn" | "signUp";
+
+interface AuthPageProps {
+  user: AuthUser | null;
+  isLoading: boolean;
+  isConfigured: boolean;
+  onBack: () => void;
+  onOpenTimer: () => void;
+  onSignedIn: (message: string) => void;
+  onSignedOut: () => void | Promise<void>;
+}
+
+function getAuthErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "認証に失敗しました。入力内容とSupabase設定を確認してください。";
+}
+
+function AuthPage({
+  user,
+  isLoading,
+  isConfigured,
+  onBack,
+  onOpenTimer,
+  onSignedIn,
+  onSignedOut,
+}: AuthPageProps) {
+  const [mode, setMode] = useState<AuthFormMode>("signIn");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || password.length < 6) {
+      setStatus("error");
+      setStatusMessage("メールアドレスと6文字以上のパスワードを入力してください。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      if (mode === "signIn") {
+        const signedInUser = await signInWithEmail(trimmedEmail, password);
+        onSignedIn(`${signedInUser ? getAuthUserLabel(signedInUser) : "アカウント"}でログインしました。`);
+        return;
+      }
+
+      const result = await signUpWithEmail(trimmedEmail, password, displayName);
+
+      if (result.needsEmailConfirmation) {
+        setStatus("success");
+        setStatusMessage("確認メールを送信しました。メール内のリンクを開くとログインできます。");
+        setPassword("");
+        return;
+      }
+
+      onSignedIn(`${result.user ? getAuthUserLabel(result.user) : "アカウント"}を作成してログインしました。`);
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="app-shell auth-page">
+      <header className="app-header auth-header">
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1>ログイン</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={onBack}>
+            戻る
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenTimer}>
+            Timerへ戻る
+          </button>
+        </div>
+      </header>
+
+      {!isConfigured ? (
+        <section className="auth-card" aria-label="Supabase setup">
+          <p className="eyebrow">Setup required</p>
+          <h2>Supabaseが未設定です</h2>
+          <p className="auth-lead">
+            `.env.local` に `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を設定すると、
+            メール/パスワードログインを使えます。service_role key はフロントエンドに置かないでください。
+          </p>
+          <pre className="auth-env-example">
+{`VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
+          </pre>
+        </section>
+      ) : user ? (
+        <section className="auth-card" aria-label="Current account">
+          <p className="eyebrow">Signed in</p>
+          <h2>{getAuthUserLabel(user)}</h2>
+          <div className="auth-account-panel">
+            <p>
+              <span>Email</span>
+              <strong>{user.email ?? "未設定"}</strong>
+            </p>
+            <p>
+              <span>User ID</span>
+              <strong>{user.id}</strong>
+            </p>
+          </div>
+          <p className="auth-lead">
+            これ以降に保存した記録は、ローカル保存後にSupabaseの `solve_sessions` にも保存します。
+          </p>
+          <div className="feedback-actions">
+            <button className="primary-button" type="button" onClick={onOpenTimer}>
+              Timerへ戻る
+            </button>
+            <button className="ghost-button" type="button" onClick={() => void onSignedOut()}>
+              ログアウト
+            </button>
+          </div>
+        </section>
+      ) : (
+        <section className="auth-card" aria-label="Login form">
+          <div>
+            <p className="eyebrow">Supabase Auth</p>
+            <h2>{mode === "signIn" ? "メールでログイン" : "新規アカウント作成"}</h2>
+            <p className="auth-lead">
+              未ログインでもタイマーは今まで通り使えます。ログインすると、新しい記録をクラウドにも保存します。
+            </p>
+          </div>
+
+          {isLoading && (
+            <div className="feedback-status" role="status">
+              ログイン状態を確認しています。
+            </div>
+          )}
+
+          {status !== "idle" && (
+            <div className={`feedback-status feedback-status-${status}`} role="status">
+              {statusMessage}
+            </div>
+          )}
+
+          <div className="auth-mode-toggle" aria-label="Auth mode">
+            <button
+              type="button"
+              aria-pressed={mode === "signIn"}
+              onClick={() => setMode("signIn")}
+            >
+              ログイン
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "signUp"}
+              onClick={() => setMode("signUp")}
+            >
+              新規登録
+            </button>
+          </div>
+
+          <form className="feedback-form" onSubmit={handleSubmit}>
+            {mode === "signUp" && (
+              <label>
+                表示名 任意
+                <input
+                  autoComplete="nickname"
+                  maxLength={80}
+                  value={displayName}
+                  placeholder="例: Shinta"
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </label>
+            )}
+
+            <label>
+              メールアドレス
+              <input
+                required
+                type="email"
+                autoComplete="email"
+                value={email}
+                placeholder="you@example.com"
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+
+            <label>
+              パスワード
+              <input
+                required
+                type="password"
+                minLength={6}
+                autoComplete={mode === "signIn" ? "current-password" : "new-password"}
+                value={password}
+                placeholder="6文字以上"
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+
+            <div className="feedback-actions">
+              <button className="primary-button" type="submit" disabled={isSubmitting}>
+                {isSubmitting
+                  ? mode === "signIn"
+                    ? "ログイン中..."
+                    : "登録中..."
+                  : mode === "signIn"
+                    ? "ログインする"
+                    : "登録する"}
+              </button>
+              <button className="ghost-button" type="button" onClick={onBack}>
+                キャンセル
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+    </main>
   );
 }
 

@@ -4041,6 +4041,71 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   }
 }
 
+@media (orientation: landscape) and (max-height: 560px) {
+  .analyzer-player-panel.is-fullscreen {
+    overflow: hidden;
+    gap: 10px;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-player-header {
+    align-items: end;
+    flex-direction: row;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-player-actions {
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: auto;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-player-actions > *,
+  .analyzer-player-panel.is-fullscreen .analyzer-fullscreen-button {
+    width: auto;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-speed-control {
+    justify-content: flex-start;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-player-body {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.9fr);
+    min-height: 0;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-canvas-frame {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-control-panel {
+    max-height: 100%;
+    overflow: auto;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-now {
+    align-items: center;
+    flex-direction: row;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-control-panel .analyzer-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-phase-replay-head {
+    align-items: end;
+    flex-direction: row;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-phase-replay-head span {
+    text-align: right;
+  }
+
+  .analyzer-player-panel.is-fullscreen .analyzer-phase-replay-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 720px) {
   .app-shell {
     padding-top: 34px;

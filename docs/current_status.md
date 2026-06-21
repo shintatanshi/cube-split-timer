@@ -23,7 +23,7 @@ When starting work on another PC, ask Codex to read this file and `AGENTS.md` fi
 - React + Vite + TypeScript app.
 - Supabase email login is implemented.
 - Local solve history can be migrated/imported so old device data can be moved into a logged-in account.
-- Admin access is implemented with an `/admin` page, admin-only RLS, profile emails, cloud history visibility, role changes, and password reset email support. Passwords are never exposed in plaintext.
+- Admin access is implemented with an `/admin` page, admin-only RLS, profile emails, cloud history visibility, role changes, password reset email support, and a profile backfill migration for existing Auth users. Passwords are never exposed in plaintext.
 - Analyzer has Cross / F2L / OLL / PLL playback improvements.
 - Analyzer mobile layout was adjusted so the animation appears above the analysis blocks on phone layouts.
 - Vercel SPA routing config is present.

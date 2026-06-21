@@ -121,6 +121,7 @@ git push -u origin main
 supabase/migrations/001_initial_schema.sql
 supabase/migrations/002_feedback_reports.sql
 supabase/migrations/003_admin_access.sql
+supabase/migrations/004_backfill_auth_profiles.sql
 ```
 
 Supabase画面で、上から順番に実行します。
@@ -139,6 +140,10 @@ Supabase画面で、上から順番に実行します。
 12. `supabase/migrations/003_admin_access.sql` の中身を全部コピー
 13. SQL Editorに貼り付け
 14. `Run`
+15. もう一度 `New query`
+16. `supabase/migrations/004_backfill_auth_profiles.sql` の中身を全部コピー
+17. SQL Editorに貼り付け
+18. `Run`
 
 作成されるテーブル:
 
@@ -155,6 +160,7 @@ Supabase画面で、上から順番に実行します。
 - 管理者だけが全ユーザーのメールアドレス、クラウド履歴、意見箱を読めるポリシー
 - 管理者だけが他ユーザーへ管理者権限を付与・解除できるポリシー
 - 新規ユーザー作成時に `profiles` を作るトリガー
+- 既存のSupabase Authユーザーを `profiles` に補完するバックフィル
 
 最初の管理者だけは、SupabaseのSQL Editorで手動設定します。
 

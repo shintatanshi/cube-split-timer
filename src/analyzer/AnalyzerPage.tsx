@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import * as THREE from "three";
 import MoveButtonPanel from "../components/MoveButtonPanel";
@@ -30,10 +30,10 @@ import type {
 } from "./cubeState";
 import type { AnalyzerCandidate, LearningCase } from "../types";
 
-const AlgorithmPlayer = lazy(() => import("../learn/AlgorithmPlayer"));
-
 type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
+type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
+type AnalyzerQuickPhase = "cross" | "f2l" | "oll" | "pll";
 type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
 type CrossTargetFace = "D" | "U";
@@ -100,6 +100,7 @@ interface SceneState {
   frameId: number;
   resizeObserver: ResizeObserver;
   animationStart: number;
+  cubeScale: AnalyzerCubeScale;
 }
 
 interface DragState {
@@ -136,6 +137,14 @@ const INITIAL_VIEW_ROTATION = {
 const ANALYZER_SETTINGS_STORAGE_KEY = "cubeSplitTimer.analyzerSettings.v1";
 const ANALYZER_STATE_STORAGE_KEY = "cube-split-timer-analyzer-state";
 const ANALYZER_SPEED_STORAGE_KEY = "cubeSplitTimer.analyzerSpeed.v1";
+const ANALYZER_CUBE_SCALE_STORAGE_KEY = "cubeSplitTimer.analyzerCubeScale.v1";
+const ANALYZER_CUBE_SCALE_OPTIONS: Array<{ value: AnalyzerCubeScale; label: string }> = [
+  { value: 0.7, label: "70%" },
+  { value: 0.85, label: "85%" },
+  { value: 1, label: "100%" },
+  { value: 1.15, label: "115%" },
+  { value: 1.3, label: "130%" },
+];
 const BASIC_SCRAMBLE_MOVES = new Set([
   "U",
   "U'",
@@ -360,6 +369,28 @@ function loadAnalyzerSpeed(): AnimationSpeed {
 
 function saveAnalyzerSpeed(speed: AnimationSpeed): void {
   saveAnimationSpeed(speed);
+}
+
+function isAnalyzerCubeScale(value: number): value is AnalyzerCubeScale {
+  return ANALYZER_CUBE_SCALE_OPTIONS.some((option) => option.value === value);
+}
+
+function loadAnalyzerCubeScale(): AnalyzerCubeScale {
+  try {
+    const parsed = Number(localStorage.getItem(ANALYZER_CUBE_SCALE_STORAGE_KEY));
+
+    return isAnalyzerCubeScale(parsed) ? parsed : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function saveAnalyzerCubeScale(scale: AnalyzerCubeScale): void {
+  try {
+    localStorage.setItem(ANALYZER_CUBE_SCALE_STORAGE_KEY, String(scale));
+  } catch {
+    // Analyzer display size is local convenience data; the page should still work.
+  }
 }
 
 function copyTextWithFallback(text: string): Promise<void> {
@@ -652,7 +683,7 @@ function fitCubeToCanvas(state: SceneState, canvas: HTMLCanvasElement) {
     fov = 31;
   }
 
-  state.cubeGroup.scale.setScalar(scale);
+  state.cubeGroup.scale.setScalar(scale * state.cubeScale);
   state.camera.fov = fov;
   state.camera.position.set(0.9, 2.05, distance);
   state.camera.lookAt(0, 0, 0);
@@ -870,6 +901,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const crossJobIdRef = useRef(0);
   const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
   const f2lAnalysisJobIdRef = useRef(0);
+  const pendingQuickPhaseRef = useRef<AnalyzerQuickPhase | null>(null);
   const playerPanelRef = useRef<HTMLElement | null>(null);
   const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
   const lastRestoredSceneIdRef = useRef(0);
@@ -895,6 +927,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [currentIndex, setCurrentIndex] = useState(() => initialAnalyzerState?.currentIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() => loadAnalyzerSpeed());
+  const [cubeScale, setCubeScale] = useState<AnalyzerCubeScale>(() => loadAnalyzerCubeScale());
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
   const [showManualControls, setShowManualControls] = useState(true);
@@ -931,6 +964,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [quickPlaybackStatus, setQuickPlaybackStatus] = useState("待機中");
 
   const orientationError = useMemo(() => getOrientationError(settings), [settings]);
   const faceColorMap = useMemo(
@@ -1157,6 +1191,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       frameId: 0,
       resizeObserver: new ResizeObserver(() => resizeRenderer(state, canvas)),
       animationStart: performance.now(),
+      cubeScale,
     };
 
     sceneStateRef.current = state;
@@ -1269,6 +1304,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   useEffect(() => {
     saveAnalyzerSpeed(animationSpeed);
   }, [animationSpeed]);
+
+  useEffect(() => {
+    saveAnalyzerCubeScale(cubeScale);
+
+    const state = sceneStateRef.current;
+    const canvas = canvasRef.current;
+
+    if (!state || !canvas) {
+      return;
+    }
+
+    state.cubeScale = cubeScale;
+    resizeRenderer(state, canvas);
+  }, [cubeScale]);
 
   const enterAnalyzerFullscreen = useCallback(() => {
     setIsAnalyzerFullscreen(true);
@@ -1876,6 +1925,47 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     [applyScrambleInstant, scrambleInput, scrollToPlayerPanel],
   );
 
+  const selectAnalyzerCandidateFromPlaybackBase = useCallback(
+    (
+      candidate: { baseAlgorithm: string; algorithm: string; caseItem?: LearningCase | null },
+      options: { play?: boolean; scroll?: boolean } = {},
+    ) => {
+      const baseAlgorithm = candidate.baseAlgorithm.trim();
+      const algorithm = candidate.algorithm.trim();
+      const baseMoves = parseAlgorithm(baseAlgorithm).moves;
+      const moves = parseAlgorithm(algorithm).moves;
+
+      if (candidate.caseItem) {
+        setHelperCaseId(getLearningCaseRouteKey(candidate.caseItem));
+      }
+
+      setSolveInput(algorithm);
+      setPlaybackScrambleInput(baseAlgorithm);
+      setPlaybackSolveInput(algorithm);
+      setPlaybackMode("scramble-solve");
+      setManualMoveHistory([]);
+      setIsPlaying(false);
+
+      window.setTimeout(() => {
+        resetCubeState();
+
+        const state = sceneStateRef.current;
+
+        if (state) {
+          baseMoves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
+        }
+
+        setCurrentIndex(0);
+        setIsPlaying(Boolean(options.play && moves.length > 0));
+
+        if (options.scroll !== false) {
+          scrollToPlayerPanel();
+        }
+      }, 0);
+    },
+    [resetCubeState, scrollToPlayerPanel],
+  );
+
   const selectCrossSolution = useCallback(
     (solution: CrossSolution, options: { play?: boolean; scroll?: boolean } = {}) => {
       setSelectedCrossSolution(solution);
@@ -1942,11 +2032,19 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     if (!scrambleInput.trim()) {
       setCrossError("スクランブルを入力してください。");
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("Cross解析を開始できませんでした。");
+      }
       return;
     }
 
     if (!canUseOrientation) {
       setCrossError(orientationError ?? "キューブの向き設定を確認してください。");
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("Cross解析を開始できませんでした。");
+      }
       return;
     }
 
@@ -1954,6 +2052,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setCrossError(
         `対応していない回転記号があります: ${unsupportedScrambleTokens.join(", ")}`,
       );
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("Cross解析を開始できませんでした。");
+      }
       return;
     }
 
@@ -1991,6 +2093,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
       if (!event.data.ok || !event.data.results) {
         setCrossError(event.data.error ?? "Cross探索中にエラーが発生しました。");
+        if (pendingQuickPhaseRef.current === "cross") {
+          pendingQuickPhaseRef.current = null;
+          setQuickPlaybackStatus("Cross解析に失敗しました。");
+        }
         return;
       }
 
@@ -2009,11 +2115,21 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             ? "探索上限に達しました。探索条件を減らすか、もう一度試してください。"
             : `${settings.maxDepth}手以内ではクロスが見つかりませんでした。`,
         );
+        if (pendingQuickPhaseRef.current === "cross") {
+          pendingQuickPhaseRef.current = null;
+          setQuickPlaybackStatus("Cross bestを見つけられませんでした。");
+        }
         return;
       }
 
       setCrossError(null);
       selectCrossSolution(bestSolution, { scroll: false });
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus(
+          `Cross bestを再生待ちにしました。${bestSolution.moveCount} moves`,
+        );
+      }
     };
     worker.onerror = () => {
       if (jobId !== crossJobIdRef.current) {
@@ -2026,6 +2142,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       }
       setIsSearchingCross(false);
       setCrossError("Cross探索Workerでエラーが発生しました。");
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("Cross解析に失敗しました。");
+      }
     };
     worker.postMessage({ jobId, jobs });
   }, [
@@ -2131,9 +2251,41 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     );
   };
 
-  const runBasicF2lAnalysis = useCallback((options: { useLocalSearch?: boolean; includeAllPlans?: boolean } = {}) => {
+  const prepareBasicF2lPlanPlayback = useCallback(
+    (plan: BasicF2lAnalysisPlan, options: { play?: boolean } = {}) => {
+      if (!selectedCrossSolution) {
+        return false;
+      }
+
+      const f2lAlgorithm = plan.steps
+        .map((step) => step.fullAlgorithm)
+        .filter(Boolean)
+        .join(" ");
+      const playbackBaseAlgorithm = [scrambleInput, selectedCrossSolution.algorithm]
+        .map((algorithm) => algorithm.trim())
+        .filter(Boolean)
+        .join(" ");
+
+      selectAnalyzerCandidateFromPlaybackBase(
+        {
+          baseAlgorithm: playbackBaseAlgorithm,
+          algorithm: f2lAlgorithm,
+        },
+        { play: Boolean(options.play), scroll: false },
+      );
+      return true;
+    },
+    [scrambleInput, selectAnalyzerCandidateFromPlaybackBase, selectedCrossSolution],
+  );
+
+  const runBasicF2lAnalysis = useCallback((options: {
+    useLocalSearch?: boolean;
+    includeAllPlans?: boolean;
+    preparePlayback?: boolean;
+  } = {}) => {
     const useLocalSearch = Boolean(options.useLocalSearch);
     const includeAllPlans = Boolean(options.includeAllPlans);
+    const preparePlayback = Boolean(options.preparePlayback);
 
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
@@ -2155,6 +2307,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setIsAnalyzingBasicF2l(false);
       setIsLoadingBasicF2lOrderDetails(false);
       setBasicF2lError("先にCross候補を選択してください。");
+      if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("先にCross bestを選択してください。");
+      }
       return;
     }
 
@@ -2185,6 +2341,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           finishWorker();
         }
         setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
+        if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+          pendingQuickPhaseRef.current = null;
+          setQuickPlaybackStatus("F2L bestを作成できませんでした。");
+        }
         if (!useLocalSearch && !includeAllPlans) {
           setBasicF2lOrderPlans([]);
           setBasicF2lComparedOrderCount(0);
@@ -2204,6 +2364,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       }
 
       if (isDone) {
+        if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+          const prepared = prepareBasicF2lPlanPlayback(event.data.plan);
+
+          pendingQuickPhaseRef.current = null;
+          setQuickPlaybackStatus(
+            prepared
+              ? `Cross完了状態からF2L bestを再生待ちにしました。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
+              : "F2L bestを再生待ちにできませんでした。",
+          );
+        }
         finishWorker();
       }
     };
@@ -2226,6 +2396,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         setIsLoadingBasicF2lOrderDetails(false);
       }
       setBasicF2lError("F2L解析Workerでエラーが発生しました。");
+      if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("F2L解析に失敗しました。");
+      }
     };
     worker.postMessage({
       jobId,
@@ -2235,7 +2409,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       useLocalSearch,
       includeAllPlans,
     });
-  }, [selectedCrossSolution]);
+  }, [prepareBasicF2lPlanPlayback, selectedCrossSolution]);
 
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
     if (!selectedCrossSolution || steps.length === 0) {
@@ -2264,6 +2438,56 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const playBasicF2lPlanStep = (plan: BasicF2lAnalysisPlan, stepIndex: number) => {
     playBasicF2lSteps(plan.steps.slice(0, stepIndex + 1));
   };
+
+  const prepareBestCrossPlayback = useCallback(() => {
+    if (bestCrossSolution) {
+      pendingQuickPhaseRef.current = null;
+      selectCrossSolution(bestCrossSolution, { scroll: false });
+      setQuickPlaybackStatus(
+        `Cross bestを再生待ちにしました。${bestCrossSolution.moveCount} moves`,
+      );
+      return;
+    }
+
+    pendingQuickPhaseRef.current = "cross";
+    setQuickPlaybackStatus("Cross bestを解析中...");
+    analyzeCross();
+  }, [analyzeCross, bestCrossSolution, selectCrossSolution]);
+
+  const prepareBestF2lPlayback = useCallback(() => {
+    if (!selectedCrossSolution) {
+      pendingQuickPhaseRef.current = null;
+      setQuickPlaybackStatus("先にCross bestを選択してください。");
+      return;
+    }
+
+    if (basicF2lPlan && !isAnalyzingBasicF2l) {
+      const prepared = prepareBasicF2lPlanPlayback(basicF2lPlan);
+
+      setQuickPlaybackStatus(
+        prepared
+          ? `Cross完了状態からF2L bestを再生待ちにしました。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
+          : "F2L bestを再生待ちにできませんでした。",
+      );
+      return;
+    }
+
+    pendingQuickPhaseRef.current = "f2l";
+    setQuickPlaybackStatus("F2L bestを解析中...");
+    runBasicF2lAnalysis({ preparePlayback: true });
+  }, [
+    basicF2lPlan,
+    isAnalyzingBasicF2l,
+    prepareBasicF2lPlanPlayback,
+    runBasicF2lAnalysis,
+    selectedCrossSolution,
+  ]);
+
+  const prepareUnavailablePhasePlayback = useCallback((phase: "OLL" | "PLL") => {
+    pendingQuickPhaseRef.current = null;
+    setIsPlaying(false);
+    setQuickPlaybackStatus(`${phase}判定はまだ未実装です。手順待ちの状態です。`);
+  }, []);
 
   const invalidSummary = [
     orientationError ? `キューブの向き設定に問題があります: ${orientationError}` : "",
@@ -3214,6 +3438,25 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   ))}
                 </select>
               </label>
+              <label className="analyzer-speed-control">
+                <span>Size</span>
+                <select
+                  value={cubeScale}
+                  onChange={(event) => {
+                    const nextScale = Number(event.target.value);
+
+                    if (isAnalyzerCubeScale(nextScale)) {
+                      setCubeScale(nextScale);
+                    }
+                  }}
+                >
+                  {ANALYZER_CUBE_SCALE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="analyzer-step">
                 Step: {currentIndex} / {activeMoves.length}
               </div>
@@ -3227,127 +3470,121 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             </div>
           </div>
 
-          <div
-            className="analyzer-canvas-frame"
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-          >
-            <canvas ref={canvasRef} aria-label="3D cube preview" />
-          </div>
-
-          <div className="analyzer-now">
-            <span>Now: {currentMove ?? "Ready"}</span>
-            <small>{nextMove ? `Next: ${nextMove}` : "最後まで再生済み、または手順待ちです。"}</small>
-          </div>
-
-          <p className="analyzer-playback-note">
-            Analyzerではスクランブル適用後の状態を初期表示にし、再生リストにはCross / F2L手順だけを表示します。
-          </p>
-
-          <div className="analyzer-controls">
-            <button
-              type="button"
-              onClick={handlePlayToggle}
-              disabled={!canUseActiveSequence || activeMoves.length === 0}
+          <div className="analyzer-player-body">
+            <div
+              className="analyzer-canvas-frame"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
             >
-              {isPlaying ? "一時停止" : isComplete ? "もう一度再生" : "再生"}
-            </button>
-            <button type="button" onClick={() => void stepPrevious()} disabled={currentIndex <= 0}>
-              1手戻る
-            </button>
-            <button
-              type="button"
-              onClick={() => void stepNext()}
-              disabled={!canUseActiveSequence || currentIndex >= activeMoves.length}
-            >
-              1手進む
-            </button>
-            <button type="button" onClick={resetPlayback}>
-              リセット
-            </button>
-            <button type="button" onClick={resetCameraView}>
-              視点リセット
-            </button>
-            <button type="button" onClick={() => setShowManualControls((visible) => !visible)}>
-              {showManualControls ? "回転記号を隠す" : "回転記号を表示"}
-            </button>
-          </div>
+              <canvas ref={canvasRef} aria-label="3D cube preview" />
+            </div>
 
-          {showManualControls && (
-            <MoveButtonPanel
-              onMove={applyManualMove}
-              onUndo={undoManualMove}
-              onResetManual={resetManualMoves}
-              onResetState={resetPlayback}
-              canUndo={manualMoveHistory.length > 0}
-              manualMoveCount={manualMoveHistory.length}
-            />
-          )}
-
-          <div className="analyzer-move-list" aria-label="Move list">
-            {activeMoves.length === 0 ? (
-              <span className="analyzer-move-empty">手順を入力してください。</span>
-            ) : (
-              activeMoves.map((move, index) => (
-                <span
-                  key={`${move}-${index}`}
-                  className={[
-                    index < currentIndex ? "is-done" : "",
-                    index === currentIndex ? "is-next" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {move}
-                </span>
-              ))
-            )}
-          </div>
-
-          <aside className="analyzer-helper-panel" aria-label="Small learning animation">
-            <div className="analyzer-subheading">
-              <div>
-                <p className="eyebrow">Helper animation</p>
-                <h2>候補単体の補助再生</h2>
+            <aside className="analyzer-control-panel" aria-label="Animation controls">
+              <div className="analyzer-now">
+                <span>Now: {currentMove ?? "Ready"}</span>
+                <small>{nextMove ? `Next: ${nextMove}` : "最後まで再生済み、または手順待ちです。"}</small>
               </div>
-              {helperCase && (
+
+              <p className="analyzer-playback-note">
+                Analyzerではスクランブル適用後の状態を初期表示にし、再生リストにはCross / F2L手順だけを表示します。
+              </p>
+
+              <div className="analyzer-controls">
                 <button
                   type="button"
-                  onClick={() =>
-                    onNavigate(
-                      `/learn/${helperCase.category}/${encodeURIComponent(
-                        getLearningCaseRouteKey(helperCase),
-                      )}`,
-                    )
-                  }
+                  onClick={handlePlayToggle}
+                  disabled={!canUseActiveSequence || activeMoves.length === 0}
                 >
-                  Learn詳細
+                  {isPlaying ? "一時停止" : isComplete ? "もう一度再生" : "再生"}
                 </button>
+                <button type="button" onClick={() => void stepPrevious()} disabled={currentIndex <= 0}>
+                  1手戻る
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void stepNext()}
+                  disabled={!canUseActiveSequence || currentIndex >= activeMoves.length}
+                >
+                  1手進む
+                </button>
+                <button type="button" onClick={resetPlayback}>
+                  リセット
+                </button>
+                <button type="button" onClick={resetCameraView}>
+                  視点リセット
+                </button>
+                <button type="button" onClick={() => setShowManualControls((visible) => !visible)}>
+                  {showManualControls ? "回転記号を隠す" : "回転記号を表示"}
+                </button>
+              </div>
+
+              {showManualControls && (
+                <MoveButtonPanel
+                  onMove={applyManualMove}
+                  onUndo={undoManualMove}
+                  onResetManual={resetManualMoves}
+                  onResetState={resetPlayback}
+                  canUndo={manualMoveHistory.length > 0}
+                  manualMoveCount={manualMoveHistory.length}
+                />
               )}
-            </div>
-            {helperCase ? (
-              <>
-                <p className="analyzer-muted">
-                  {helperCase.title} / {helperCase.algorithm}
-                </p>
-                <div className="analyzer-helper-player-frame">
-                  <Suspense fallback={<p className="analyzer-muted">3Dプレイヤーを読み込み中...</p>}>
-                    <AlgorithmPlayer
-                      caseItem={helperCase}
-                      headingLabel="Mini Preview"
-                      headingTitle="補助アニメーション"
-                    />
-                  </Suspense>
+
+              <div className="analyzer-move-list" aria-label="Move list">
+                {activeMoves.length === 0 ? (
+                  <span className="analyzer-move-empty">手順を入力してください。</span>
+                ) : (
+                  activeMoves.map((move, index) => (
+                    <span
+                      key={`${move}-${index}`}
+                      className={[
+                        index < currentIndex ? "is-done" : "",
+                        index === currentIndex ? "is-next" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {move}
+                    </span>
+                  ))
+                )}
+              </div>
+
+              <div className="analyzer-phase-replay-panel" aria-label="Phase best playback">
+                <div className="analyzer-phase-replay-head">
+                  <div>
+                    <p className="eyebrow">Best Playback</p>
+                    <h3>工程別best</h3>
+                  </div>
+                  <span>{quickPlaybackStatus}</span>
                 </div>
-              </>
-            ) : (
-              <p className="analyzer-muted">
-                F2L / OLL / PLL候補を選ぶと、ここに小さな教材アニメーションを表示します。
-              </p>
-            )}
-          </aside>
+                <div className="analyzer-phase-replay-actions">
+                  <button
+                    type="button"
+                    onClick={prepareBestCrossPlayback}
+                    disabled={isSearchingCross || !canUseScramble}
+                  >
+                    {isSearchingCross ? "Cross..." : "Cross"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={prepareBestF2lPlayback}
+                    disabled={!selectedCrossSolution || isAnalyzingBasicF2l}
+                  >
+                    {isAnalyzingBasicF2l ? "F2L..." : "F2L"}
+                  </button>
+                  <button type="button" onClick={() => prepareUnavailablePhasePlayback("OLL")}>
+                    OLL
+                  </button>
+                  <button type="button" onClick={() => prepareUnavailablePhasePlayback("PLL")}>
+                    PLL
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
+
         </section>
       </div>
     </main>

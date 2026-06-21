@@ -21,6 +21,7 @@ interface MoveButtonPanelProps {
   canUndo?: boolean;
   manualMoveCount?: number;
   showRotations?: boolean;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -32,6 +33,7 @@ export default function MoveButtonPanel({
   canUndo = false,
   manualMoveCount = 0,
   showRotations = true,
+  disabled = false,
   className = "",
 }: MoveButtonPanelProps) {
   const groups = showRotations ? [...DEFAULT_MOVE_GROUPS, ...ROTATION_GROUPS] : DEFAULT_MOVE_GROUPS;
@@ -50,7 +52,7 @@ export default function MoveButtonPanel({
         {groups.map((group) => (
           <div className="move-button-group" key={group[0]}>
             {group.map((move) => (
-              <button type="button" key={move} onClick={() => onMove(move)}>
+              <button type="button" key={move} onClick={() => onMove(move)} disabled={disabled}>
                 {move}
               </button>
             ))}
@@ -60,17 +62,17 @@ export default function MoveButtonPanel({
 
       <div className="move-history-actions">
         {onUndo && (
-          <button type="button" onClick={onUndo} disabled={!canUndo}>
+          <button type="button" onClick={onUndo} disabled={disabled || !canUndo}>
             一手戻る
           </button>
         )}
         {onResetManual && (
-          <button type="button" onClick={onResetManual} disabled={manualMoveCount === 0}>
+          <button type="button" onClick={onResetManual} disabled={disabled || manualMoveCount === 0}>
             手動操作リセット
           </button>
         )}
         {onResetState && (
-          <button type="button" onClick={onResetState}>
+          <button type="button" onClick={onResetState} disabled={disabled}>
             初期状態に戻す
           </button>
         )}

@@ -19,11 +19,15 @@ import type {
   PllArrow,
 } from "../types";
 import {
-  getMoveDescriptor,
-  invertAlgorithm,
   parseAlgorithm,
 } from "./moveNotation";
 import type { MoveAxis, MoveDescriptor } from "./moveNotation";
+import {
+  createInverseViewpointDescriptors,
+  createViewpointMoveSteps,
+  reverseMoveDescriptor,
+  type ViewpointMoveStep,
+} from "./viewpointMoves";
 
 interface AlgorithmPlayerProps {
   caseItem: LearningCase;
@@ -221,13 +225,10 @@ function createVirtualCubies() {
   return cubies;
 }
 
-function applyVirtualMove(cubies: Array<{ id: string; coord: THREE.Vector3 }>, move: string) {
-  const descriptor = getMoveDescriptor(move);
-
-  if (!descriptor) {
-    return;
-  }
-
+function applyVirtualMove(
+  cubies: Array<{ id: string; coord: THREE.Vector3 }>,
+  descriptor: MoveDescriptor,
+) {
   const matrix = new THREE.Matrix4().makeRotationAxis(getAxisVector(descriptor.axis), descriptor.angle);
 
   cubies.forEach((cubie) => {
@@ -246,7 +247,9 @@ function applyVirtualMove(cubies: Array<{ id: string; coord: THREE.Vector3 }>, m
 
 function inferF2lTargetSlot(moves: string[]): F2lSlotSpec | null {
   const cubies = createVirtualCubies();
-  invertAlgorithm(moves).forEach((move) => applyVirtualMove(cubies, move));
+  createInverseViewpointDescriptors(moves).forEach((descriptor) =>
+    applyVirtualMove(cubies, descriptor),
+  );
   const scoredSlots = F2L_SLOT_SPECS.map((slot) => {
     const corner = cubies.find((cubie) => cubie.id === getCubieIdFromCoord(slot.cornerCoord));
     const edge = cubies.find((cubie) => cubie.id === getCubieIdFromCoord(slot.edgeCoord));
@@ -636,13 +639,7 @@ function applyMoveTransform(
   cubeGroup.remove(pivot);
 }
 
-function applyMoveInstant(cubeGroup: THREE.Group, cubies: Cubie[], move: string) {
-  const descriptor = getMoveDescriptor(move);
-
-  if (!descriptor) {
-    return;
-  }
-
+function applyMoveInstant(cubeGroup: THREE.Group, cubies: Cubie[], descriptor: MoveDescriptor) {
   applyMoveTransform(cubeGroup, cubies, descriptor, descriptor.angle);
 }
 
@@ -656,7 +653,9 @@ function createCaseStartState(
   const focus = resolveF2lFocus(caseItem, moves, startMode);
   const cubies = createSolvedCubies(cubeGroup, caseItem, focus, options);
   if (startMode === "inverse") {
-    invertAlgorithm(moves).forEach((move) => applyMoveInstant(cubeGroup, cubies, move));
+    createInverseViewpointDescriptors(moves).forEach((descriptor) =>
+      applyMoveInstant(cubeGroup, cubies, descriptor),
+    );
   }
   applyHighlights(cubeGroup, caseItem, focus);
 
@@ -694,6 +693,7 @@ export default function AlgorithmPlayer({
   const autoResetTimeoutRef = useRef<number | null>(null);
   const parsedAlgorithm = useMemo(() => parseAlgorithm(caseItem.algorithm), [caseItem.algorithm]);
   const moves = parsedAlgorithm.moves;
+  const viewpointSteps = useMemo(() => createViewpointMoveSteps(moves), [moves]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLooping, setIsLooping] = useState(false);
@@ -846,14 +846,18 @@ export default function AlgorithmPlayer({
   }, [caseItem.id, clearAutoReset]);
 
   const animateMove = useCallback(
-    async (move: string, reverse = false) => {
+    async (step: ViewpointMoveStep | null | undefined, reverse = false) => {
       const state = sceneStateRef.current;
-      const descriptor = getMoveDescriptor(move, reverse);
 
-      if (!state || !descriptor || isAnimatingRef.current) {
+      if (!step?.descriptor) {
+        return !isAnimatingRef.current;
+      }
+
+      if (!state || isAnimatingRef.current) {
         return false;
       }
 
+      const descriptor = reverse ? reverseMoveDescriptor(step.descriptor) : step.descriptor;
       isAnimatingRef.current = true;
       const animationRun = animationRunRef.current;
 
@@ -938,14 +942,14 @@ export default function AlgorithmPlayer({
     }
 
     const nextIndex = currentIndex + 1;
-    const didMove = await animateMove(moves[nextIndex]);
+    const didMove = await animateMove(viewpointSteps[nextIndex]);
 
     if (didMove) {
       setCurrentIndex(nextIndex);
     }
 
     return didMove;
-  }, [animateMove, clearAutoReset, currentIndex, moves]);
+  }, [animateMove, clearAutoReset, currentIndex, moves.length, viewpointSteps]);
 
   const stepPrevious = useCallback(async () => {
     clearAutoReset();
@@ -955,14 +959,14 @@ export default function AlgorithmPlayer({
     }
 
     setIsPlaying(false);
-    const didMove = await animateMove(moves[currentIndex], true);
+    const didMove = await animateMove(viewpointSteps[currentIndex], true);
 
     if (didMove) {
       setCurrentIndex((index) => index - 1);
     }
 
     return didMove;
-  }, [animateMove, clearAutoReset, currentIndex, moves]);
+  }, [animateMove, clearAutoReset, currentIndex, viewpointSteps]);
 
   const handlePlayToggle = useCallback(() => {
     clearAutoReset();

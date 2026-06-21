@@ -97,6 +97,12 @@ export function fileBaseNameToAlgorithm(baseName: string): string {
 }
 
 function fileTokenToMove(token: string): string {
+  const primeWideBeforeW = token.match(/^([URFDLB])p(w)$/);
+
+  if (primeWideBeforeW) {
+    return `${primeWideBeforeW[1]}w'`;
+  }
+
   if (token.endsWith("p2")) {
     return `${token.slice(0, -2)}2`;
   }

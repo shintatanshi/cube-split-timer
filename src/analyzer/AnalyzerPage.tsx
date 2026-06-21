@@ -14,10 +14,20 @@ import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/mov
 import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
 import {
+  createViewpointMoveSteps,
+  reverseMoveDescriptor,
+  type ViewpointMoveStep,
+} from "../learn/viewpointMoves";
+import {
   CROSS_SEARCH_MAX_DEPTH,
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
+import {
+  recognizeOll,
+  recognizePll,
+  type LastLayerRecognitionResult,
+} from "./lastLayerRecognition";
 import type {
   BasicF2lAnalysisPhase,
   BasicF2lAnalysisPlan,
@@ -742,6 +752,26 @@ function applyMoveInstant(cubeGroup: THREE.Group, cubies: Cubie[], move: string)
   applyMoveTransform(cubeGroup, cubies, descriptor, descriptor.angle);
 }
 
+function applyDescriptorInstant(
+  cubeGroup: THREE.Group,
+  cubies: Cubie[],
+  descriptor: MoveDescriptor,
+) {
+  applyMoveTransform(cubeGroup, cubies, descriptor, descriptor.angle);
+}
+
+function applyViewpointMovesInstant(
+  cubeGroup: THREE.Group,
+  cubies: Cubie[],
+  moves: string[],
+) {
+  createViewpointMoveSteps(moves).forEach((step) => {
+    if (step.descriptor) {
+      applyDescriptorInstant(cubeGroup, cubies, step.descriptor);
+    }
+  });
+}
+
 function getPlaybackModeLabel(mode: PlaybackMode): string {
   return mode === "scramble" ? "崩した状態" : "崩した状態 + 手順";
 }
@@ -896,6 +926,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const sceneStateRef = useRef<SceneState | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const isAnimatingRef = useRef(false);
+  const isManualMoveAnimatingRef = useRef(false);
   const animationRunRef = useRef(0);
   const crossWorkerRef = useRef<Worker | null>(null);
   const crossJobIdRef = useRef(0);
@@ -930,6 +961,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [cubeScale, setCubeScale] = useState<AnalyzerCubeScale>(() => loadAnalyzerCubeScale());
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
+  const [isManualMoveAnimating, setIsManualMoveAnimating] = useState(false);
   const [showManualControls, setShowManualControls] = useState(true);
   const [isSearchingCross, setIsSearchingCross] = useState(false);
   const [crossResults, setCrossResults] = useState<CrossSearchResult[]>(
@@ -1017,6 +1049,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     () => (playbackMode === "scramble" ? [] : parsedPlaybackSolve.moves),
     [parsedPlaybackSolve.moves, playbackMode],
   );
+  const activeMoveSteps = useMemo(
+    () => createViewpointMoveSteps(activeMoves),
+    [activeMoves],
+  );
   const activeInvalidTokens = useMemo(
     () =>
       playbackMode === "scramble"
@@ -1093,11 +1129,105 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         return;
       }
 
-      parsedPlaybackScramble.moves.forEach((move) =>
-        applyMoveInstant(state.cubeGroup, state.cubies, move),
+      applyViewpointMovesInstant(
+        state.cubeGroup,
+        state.cubies,
+        parsedPlaybackScramble.moves,
       );
     },
     [parsedPlaybackScramble.moves, playbackMode, resetCubeState],
+  );
+
+  const animateDescriptor = useCallback(async (descriptor: MoveDescriptor | null | undefined) => {
+    const state = sceneStateRef.current;
+
+    if (!state || !descriptor || isAnimatingRef.current) {
+      return false;
+    }
+
+    isAnimatingRef.current = true;
+    const animationRun = animationRunRef.current;
+    const selectedCubies = state.cubies.filter((cubie) =>
+      descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis])),
+    );
+    const pivot = new THREE.Group();
+    state.cubeGroup.add(pivot);
+    state.cubeGroup.updateMatrixWorld(true);
+    selectedCubies.forEach((cubie) => pivot.attach(cubie.group));
+
+    const start = performance.now();
+
+    await new Promise<void>((resolve) => {
+      const turn = (now: number) => {
+        if (animationRun !== animationRunRef.current) {
+          resolve();
+          return;
+        }
+
+        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / animationSpeed));
+        pivot.rotation[descriptor.axis] = descriptor.angle * easeInOut(ratio);
+
+        if (ratio < 1) {
+          requestAnimationFrame(turn);
+          return;
+        }
+
+        resolve();
+      };
+
+      requestAnimationFrame(turn);
+    });
+
+    if (animationRun !== animationRunRef.current) {
+      if (pivot.parent) {
+        state.cubeGroup.remove(pivot);
+      }
+      isAnimatingRef.current = false;
+      return false;
+    }
+
+    const matrix = new THREE.Matrix4().makeRotationAxis(
+      getAxisVector(descriptor.axis),
+      descriptor.angle,
+    );
+
+    selectedCubies.forEach((cubie) => {
+      cubie.coord.applyMatrix4(matrix);
+      cubie.coord.set(
+        roundCoord(cubie.coord.x),
+        roundCoord(cubie.coord.y),
+        roundCoord(cubie.coord.z),
+      );
+      state.cubeGroup.attach(cubie.group);
+      cubie.group.position.copy(cubie.coord);
+    });
+
+    state.cubeGroup.remove(pivot);
+    isAnimatingRef.current = false;
+    return true;
+  }, [animationSpeed]);
+
+  const animateMove = useCallback(
+    async (move: string, reverse = false) =>
+      animateDescriptor(getMoveDescriptor(move, reverse)),
+    [animateDescriptor],
+  );
+
+  const animateViewpointStep = useCallback(
+    async (step: ViewpointMoveStep | null | undefined, reverse = false) => {
+      if (!step) {
+        return false;
+      }
+
+      if (!step.descriptor) {
+        return !isAnimatingRef.current;
+      }
+
+      return animateDescriptor(
+        reverse ? reverseMoveDescriptor(step.descriptor) : step.descriptor,
+      );
+    },
+    [animateDescriptor],
   );
 
   const resetPlayback = useCallback(() => {
@@ -1107,24 +1237,33 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     resetCubeToPlaybackStart();
   }, [resetCubeToPlaybackStart]);
 
-  const applyManualMove = useCallback((move: string) => {
-    const state = sceneStateRef.current;
-
-    if (!state || !getMoveDescriptor(move)) {
+  const applyManualMove = useCallback(async (move: string) => {
+    if (!sceneStateRef.current || !getMoveDescriptor(move) || isManualMoveAnimatingRef.current) {
       return;
     }
 
     setIsPlaying(false);
-    animationRunRef.current += 1;
-    isAnimatingRef.current = false;
-    applyMoveInstant(state.cubeGroup, state.cubies, move);
-    setManualMoveHistory((history) => [...history, move]);
-  }, []);
+    isManualMoveAnimatingRef.current = true;
+    setIsManualMoveAnimating(true);
 
-  const undoManualMove = useCallback(() => {
-    const state = sceneStateRef.current;
+    try {
+      const didMove = await animateMove(move);
 
-    if (!state || manualMoveHistory.length === 0) {
+      if (didMove) {
+        setManualMoveHistory((history) => [...history, move]);
+      }
+    } finally {
+      isManualMoveAnimatingRef.current = false;
+      setIsManualMoveAnimating(false);
+    }
+  }, [animateMove]);
+
+  const undoManualMove = useCallback(async () => {
+    if (
+      !sceneStateRef.current ||
+      manualMoveHistory.length === 0 ||
+      isManualMoveAnimatingRef.current
+    ) {
       return;
     }
 
@@ -1136,27 +1275,54 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     setIsPlaying(false);
-    animationRunRef.current += 1;
-    isAnimatingRef.current = false;
-    applyMoveInstant(state.cubeGroup, state.cubies, inverseMove);
-    setManualMoveHistory((history) => history.slice(0, -1));
-  }, [manualMoveHistory]);
+    isManualMoveAnimatingRef.current = true;
+    setIsManualMoveAnimating(true);
 
-  const resetManualMoves = useCallback(() => {
-    const state = sceneStateRef.current;
+    try {
+      const didMove = await animateMove(inverseMove);
 
-    if (!state || manualMoveHistory.length === 0) {
+      if (didMove) {
+        setManualMoveHistory((history) => history.slice(0, -1));
+      }
+    } finally {
+      isManualMoveAnimatingRef.current = false;
+      setIsManualMoveAnimating(false);
+    }
+  }, [animateMove, manualMoveHistory]);
+
+  const resetManualMoves = useCallback(async () => {
+    if (
+      !sceneStateRef.current ||
+      manualMoveHistory.length === 0 ||
+      isManualMoveAnimatingRef.current
+    ) {
       return;
     }
 
     setIsPlaying(false);
-    animationRunRef.current += 1;
-    isAnimatingRef.current = false;
-    invertAlgorithm(manualMoveHistory).forEach((move) => {
-      applyMoveInstant(state.cubeGroup, state.cubies, move);
-    });
-    setManualMoveHistory([]);
-  }, [manualMoveHistory]);
+    isManualMoveAnimatingRef.current = true;
+    setIsManualMoveAnimating(true);
+
+    try {
+      let completedCount = 0;
+      for (const move of invertAlgorithm(manualMoveHistory)) {
+        const didMove = await animateMove(move);
+
+        if (!didMove) {
+          break;
+        }
+
+        completedCount += 1;
+      }
+
+      if (completedCount > 0) {
+        setManualMoveHistory((history) => history.slice(0, -completedCount));
+      }
+    } finally {
+      isManualMoveAnimatingRef.current = false;
+      setIsManualMoveAnimating(false);
+    }
+  }, [animateMove, manualMoveHistory]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1240,9 +1406,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return;
     }
 
-    activeMoves.slice(0, restoredIndex).forEach((move) => {
-      applyMoveInstant(restoredState.cubeGroup, restoredState.cubies, move);
-    });
+    applyViewpointMovesInstant(
+      restoredState.cubeGroup,
+      restoredState.cubies,
+      activeMoves.slice(0, restoredIndex),
+    );
     lastRestoredSceneIdRef.current = sceneReadyId;
     setCurrentIndex(restoredIndex);
     setIsPlaying(false);
@@ -1439,90 +1607,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     [],
   );
 
-  const animateMove = useCallback(async (move: string, reverse = false) => {
-    const state = sceneStateRef.current;
-    const descriptor = getMoveDescriptor(move, reverse);
-
-    if (!state || !descriptor || isAnimatingRef.current) {
-      return false;
-    }
-
-    isAnimatingRef.current = true;
-    const animationRun = animationRunRef.current;
-    const selectedCubies = state.cubies.filter((cubie) =>
-      descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis])),
-    );
-    const pivot = new THREE.Group();
-    state.cubeGroup.add(pivot);
-    state.cubeGroup.updateMatrixWorld(true);
-    selectedCubies.forEach((cubie) => pivot.attach(cubie.group));
-
-    const start = performance.now();
-
-    await new Promise<void>((resolve) => {
-      const turn = (now: number) => {
-        if (animationRun !== animationRunRef.current) {
-          resolve();
-          return;
-        }
-
-        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / animationSpeed));
-        pivot.rotation[descriptor.axis] = descriptor.angle * easeInOut(ratio);
-
-        if (ratio < 1) {
-          requestAnimationFrame(turn);
-          return;
-        }
-
-        resolve();
-      };
-
-      requestAnimationFrame(turn);
-    });
-
-    if (animationRun !== animationRunRef.current) {
-      if (pivot.parent) {
-        state.cubeGroup.remove(pivot);
-      }
-      isAnimatingRef.current = false;
-      return false;
-    }
-
-    const matrix = new THREE.Matrix4().makeRotationAxis(
-      getAxisVector(descriptor.axis),
-      descriptor.angle,
-    );
-
-    selectedCubies.forEach((cubie) => {
-      cubie.coord.applyMatrix4(matrix);
-      cubie.coord.set(
-        roundCoord(cubie.coord.x),
-        roundCoord(cubie.coord.y),
-        roundCoord(cubie.coord.z),
-      );
-      state.cubeGroup.attach(cubie.group);
-      cubie.group.position.copy(cubie.coord);
-    });
-
-    state.cubeGroup.remove(pivot);
-    isAnimatingRef.current = false;
-    return true;
-  }, [animationSpeed]);
-
   const stepNext = useCallback(async () => {
     if (!canUseActiveSequence || currentIndex >= activeMoves.length) {
       return false;
     }
 
     setIsPlaying(false);
-    const didMove = await animateMove(activeMoves[currentIndex]);
+    const didMove = await animateViewpointStep(activeMoveSteps[currentIndex]);
 
     if (didMove) {
       setCurrentIndex((index) => Math.min(index + 1, activeMoves.length));
     }
 
     return didMove;
-  }, [activeMoves, animateMove, canUseActiveSequence, currentIndex]);
+  }, [activeMoveSteps, activeMoves.length, animateViewpointStep, canUseActiveSequence, currentIndex]);
 
   const stepPrevious = useCallback(async () => {
     if (!canUseActiveSequence || currentIndex <= 0) {
@@ -1530,14 +1628,14 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     setIsPlaying(false);
-    const didMove = await animateMove(activeMoves[currentIndex - 1], true);
+    const didMove = await animateViewpointStep(activeMoveSteps[currentIndex - 1], true);
 
     if (didMove) {
       setCurrentIndex((index) => Math.max(0, index - 1));
     }
 
     return didMove;
-  }, [activeMoves, animateMove, canUseActiveSequence, currentIndex]);
+  }, [activeMoveSteps, animateViewpointStep, canUseActiveSequence, currentIndex]);
 
   useEffect(() => {
     if (!isPlaying) {
@@ -1551,7 +1649,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     const timeoutId = window.setTimeout(() => {
       void (async () => {
-        const didMove = await animateMove(activeMoves[currentIndex]);
+        const didMove = await animateViewpointStep(activeMoveSteps[currentIndex]);
 
         if (didMove) {
           setCurrentIndex((index) => Math.min(index + 1, activeMoves.length));
@@ -1560,7 +1658,14 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }, PLAY_DELAY_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [activeMoves, animateMove, canUseActiveSequence, currentIndex, isPlaying]);
+  }, [
+    activeMoveSteps,
+    activeMoves.length,
+    animateViewpointStep,
+    canUseActiveSequence,
+    currentIndex,
+    isPlaying,
+  ]);
 
   const updateSettings = <Key extends keyof AnalyzerSettings>(
     key: Key,
@@ -1864,6 +1969,37 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       })),
     [pllLearningCases],
   );
+  const basicF2lAlgorithm = useMemo(
+    () =>
+      basicF2lPlan?.steps
+        .map((step) => step.fullAlgorithm)
+        .filter(Boolean)
+        .join(" ") ?? "",
+    [basicF2lPlan],
+  );
+  const ollRecognition = useMemo<LastLayerRecognitionResult | null>(() => {
+    if (!basicF2lPlan || !selectedCrossSolution) {
+      return null;
+    }
+
+    return recognizeOll(
+      basicF2lPlan.finalState,
+      selectedCrossSolution.color,
+      selectedCrossSolution.targetFace,
+      ollLearningCases,
+    );
+  }, [basicF2lPlan, ollLearningCases, selectedCrossSolution]);
+  const pllRecognition = useMemo<LastLayerRecognitionResult | null>(() => {
+    if (!ollRecognition?.ok || !selectedCrossSolution) {
+      return null;
+    }
+
+    return recognizePll(
+      ollRecognition.recognition.stateAfter,
+      selectedCrossSolution.targetFace,
+      pllLearningCases,
+    );
+  }, [ollRecognition, pllLearningCases, selectedCrossSolution]);
   const getCrossSearchFaceColorMap = useCallback(
     (targetCrossColor = settings.crossColor): Record<FaceName, CubeColorName> =>
       faceColorMap[settings.crossTargetFace] === targetCrossColor
@@ -1952,7 +2088,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         const state = sceneStateRef.current;
 
         if (state) {
-          baseMoves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
+          applyViewpointMovesInstant(state.cubeGroup, state.cubies, baseMoves);
         }
 
         setCurrentIndex(0);
@@ -2483,11 +2619,98 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     selectedCrossSolution,
   ]);
 
-  const prepareUnavailablePhasePlayback = useCallback((phase: "OLL" | "PLL") => {
+  const prepareBestOllPlayback = useCallback(() => {
     pendingQuickPhaseRef.current = null;
-    setIsPlaying(false);
-    setQuickPlaybackStatus(`${phase}判定はまだ未実装です。手順待ちの状態です。`);
-  }, []);
+
+    if (!selectedCrossSolution || !basicF2lPlan) {
+      setQuickPlaybackStatus("先にF2L bestを作ってください。");
+      return;
+    }
+
+    if (!ollRecognition?.ok) {
+      setQuickPlaybackStatus(ollRecognition?.reason ?? "OLL判定の準備ができていません。");
+      return;
+    }
+
+    const baseAlgorithm = [scrambleInput, selectedCrossSolution.algorithm, basicF2lAlgorithm]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+    const { recognition } = ollRecognition;
+
+    selectAnalyzerCandidateFromPlaybackBase(
+      {
+        baseAlgorithm,
+        algorithm: recognition.algorithm,
+        caseItem: recognition.caseItem,
+      },
+      { play: false, scroll: false },
+    );
+    setQuickPlaybackStatus(
+      recognition.isSkip
+        ? "F2L完成状態からOLL Skipを再生待ちにしました。"
+        : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+    );
+  }, [
+    basicF2lAlgorithm,
+    basicF2lPlan,
+    ollRecognition,
+    scrambleInput,
+    selectAnalyzerCandidateFromPlaybackBase,
+    selectedCrossSolution,
+  ]);
+
+  const prepareBestPllPlayback = useCallback(() => {
+    pendingQuickPhaseRef.current = null;
+
+    if (!selectedCrossSolution || !basicF2lPlan) {
+      setQuickPlaybackStatus("先にF2L bestを作ってください。");
+      return;
+    }
+
+    if (!ollRecognition?.ok) {
+      setQuickPlaybackStatus(ollRecognition?.reason ?? "先にOLL判定が必要です。");
+      return;
+    }
+
+    if (!pllRecognition?.ok) {
+      setQuickPlaybackStatus(pllRecognition?.reason ?? "PLL判定の準備ができていません。");
+      return;
+    }
+
+    const baseAlgorithm = [
+      scrambleInput,
+      selectedCrossSolution.algorithm,
+      basicF2lAlgorithm,
+      ollRecognition.recognition.algorithm,
+    ]
+      .map((algorithm) => algorithm.trim())
+      .filter(Boolean)
+      .join(" ");
+    const { recognition } = pllRecognition;
+
+    selectAnalyzerCandidateFromPlaybackBase(
+      {
+        baseAlgorithm,
+        algorithm: recognition.algorithm,
+        caseItem: recognition.caseItem,
+      },
+      { play: false, scroll: false },
+    );
+    setQuickPlaybackStatus(
+      recognition.isSkip
+        ? "OLL完成状態からPLL Skipを再生待ちにしました。"
+        : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+    );
+  }, [
+    basicF2lAlgorithm,
+    basicF2lPlan,
+    ollRecognition,
+    pllRecognition,
+    scrambleInput,
+    selectAnalyzerCandidateFromPlaybackBase,
+    selectedCrossSolution,
+  ]);
 
   const invalidSummary = [
     orientationError ? `キューブの向き設定に問題があります: ${orientationError}` : "",
@@ -3330,8 +3553,39 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               </div>
             </div>
             <p className="analyzer-muted">
-              OLL判定はまだ未実装です。ここではLearnにあるOLLケースを、F2L後の確認候補として表示します。
+              F2L best後の状態から、上面色の向きパターンを既存OLL DBと照合します。
             </p>
+            {ollRecognition ? (
+              <article className="analyzer-candidate-card">
+                <p className="eyebrow">OLL Recognition</p>
+                {ollRecognition.ok ? (
+                  <>
+                    <h3>{ollRecognition.recognition.caseTitle}</h3>
+                    <code>{ollRecognition.recognition.algorithm || "OLL Skip"}</code>
+                    <p>
+                      {ollRecognition.recognition.isSkip
+                        ? "F2L後の時点でOLLは完成しています。"
+                        : "このOLL手順をF2L完成状態から再生できます。"}
+                    </p>
+                    <div className="analyzer-f2l-tags">
+                      <span>{ollRecognition.recognition.moveCount} moves</span>
+                      <span>{ollRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
+                    </div>
+                    <div className="analyzer-f2l-actions">
+                      <button type="button" onClick={prepareBestOllPlayback}>
+                        OLLを3D再生待ち
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="analyzer-muted">{ollRecognition.reason}</p>
+                )}
+              </article>
+            ) : (
+              <p className="analyzer-muted">
+                F2L bestを作ると、その完成状態からOLLを判定します。
+              </p>
+            )}
             <div className="analyzer-candidate-grid">
               {ollCandidates.length === 0 ? (
                 <p className="analyzer-muted">
@@ -3372,8 +3626,39 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               </div>
             </div>
             <p className="analyzer-muted">
-              PLL判定はまだ未実装です。ここではLearnにあるPLLケースを、完成までの学習フロー用に表示します。
+              OLL適用後の状態から、最後層ピースの並びを既存PLL DBと照合します。
             </p>
+            {pllRecognition ? (
+              <article className="analyzer-candidate-card">
+                <p className="eyebrow">PLL Recognition</p>
+                {pllRecognition.ok ? (
+                  <>
+                    <h3>{pllRecognition.recognition.caseTitle}</h3>
+                    <code>{pllRecognition.recognition.algorithm || "PLL Skip"}</code>
+                    <p>
+                      {pllRecognition.recognition.isSkip
+                        ? "OLL後の時点でPLLは完成しています。"
+                        : "このPLL手順をOLL完成状態から再生できます。"}
+                    </p>
+                    <div className="analyzer-f2l-tags">
+                      <span>{pllRecognition.recognition.moveCount} moves</span>
+                      <span>{pllRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
+                    </div>
+                    <div className="analyzer-f2l-actions">
+                      <button type="button" onClick={prepareBestPllPlayback}>
+                        PLLを3D再生待ち
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p className="analyzer-muted">{pllRecognition.reason}</p>
+                )}
+              </article>
+            ) : (
+              <p className="analyzer-muted">
+                OLLを判定できる状態になると、その後のPLLも判定します。
+              </p>
+            )}
             <div className="analyzer-candidate-grid">
               {pllCandidates.length === 0 ? (
                 <p className="analyzer-muted">
@@ -3528,6 +3813,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   onResetState={resetPlayback}
                   canUndo={manualMoveHistory.length > 0}
                   manualMoveCount={manualMoveHistory.length}
+                  disabled={isManualMoveAnimating}
                 />
               )}
 
@@ -3574,10 +3860,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   >
                     {isAnalyzingBasicF2l ? "F2L..." : "F2L"}
                   </button>
-                  <button type="button" onClick={() => prepareUnavailablePhasePlayback("OLL")}>
+                  <button type="button" onClick={prepareBestOllPlayback}>
                     OLL
                   </button>
-                  <button type="button" onClick={() => prepareUnavailablePhasePlayback("PLL")}>
+                  <button type="button" onClick={prepareBestPllPlayback}>
                     PLL
                   </button>
                 </div>

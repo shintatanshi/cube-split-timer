@@ -3735,6 +3735,47 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   font-size: 0.9rem;
 }
 
+.auth-data-card {
+  margin-top: 16px;
+}
+
+.auth-data-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-data-actions button {
+  min-height: 44px;
+}
+
+.auth-import-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text-strong);
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.auth-import-field textarea {
+  width: 100%;
+  min-height: 150px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+  resize: vertical;
+}
+
+.auth-import-field textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 .auth-env-example {
   margin: 0;
   padding: 12px;
@@ -4394,6 +4435,10 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
 
   .auth-chip-main {
     flex: 1 1 auto;
+  }
+
+  .auth-data-actions {
+    grid-template-columns: 1fr;
   }
 
   .timer-toolbar {

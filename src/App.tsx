@@ -22,15 +22,23 @@ import {
 } from "./lib/auth";
 import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
 import { generateScramble } from "./lib/scramble";
-import { saveSolveSession, type SaveSolveSessionInput } from "./lib/solveSessions";
+import {
+  getMySolveSessions,
+  saveSolveSession,
+  type SaveSolveSessionInput,
+  type SolveSessionRow,
+} from "./lib/solveSessions";
 import {
   clearCurrentSolveDraft,
+  mergeSolvesById,
   loadCurrentSolveDraft,
   loadSolves,
   loadThemePreference,
+  parseSolvesBackup,
   saveCurrentSolveDraft,
   saveSolves,
   saveThemePreference,
+  stringifySolvesBackup,
 } from "./lib/storage";
 import {
   calculateCfopPhaseStats,
@@ -218,6 +226,18 @@ interface WeakPhase {
   delta: number;
 }
 
+interface CloudSyncResult {
+  total: number;
+  uploaded: number;
+  skipped: number;
+}
+
+interface LocalImportResult {
+  imported: number;
+  added: number;
+  total: number;
+}
+
 function getLocationInfo(): LocationInfo {
   const { pathname, hash } = window.location;
 
@@ -358,6 +378,10 @@ function getAuthUserLabel(user: AuthUser): string {
   return user.email ?? "ログイン中";
 }
 
+function getLocalSyncNote(solve: SolveRecord): string {
+  return `Local solve ID: ${solve.id}`;
+}
+
 function buildCloudSolveSessionInput(solve: SolveRecord): SaveSolveSessionInput {
   const solveValue = getSolveValue(solve);
   const notes = [
@@ -366,6 +390,7 @@ function buildCloudSolveSessionInput(solve: SolveRecord): SaveSolveSessionInput 
     solve.mode === "f2l_pair_split"
       ? `Pair splits: ${solve.pair1Time}, ${solve.pair2Time}, ${solve.pair3Time}, ${solve.pair4Time}`
       : null,
+    getLocalSyncNote(solve),
   ].filter((note): note is string => note !== null);
 
   return {
@@ -378,7 +403,62 @@ function buildCloudSolveSessionInput(solve: SolveRecord): SaveSolveSessionInput 
     pllMs: "pllTime" in solve ? solve.pllTime : null,
     notes: notes.length > 0 ? notes.join(" / ") : null,
     isDnf: solve.penalty === "DNF",
+    createdAt: solve.createdAt,
   };
+}
+
+function getCloudInputFingerprint(input: SaveSolveSessionInput): string {
+  return [
+    input.mode,
+    input.scramble,
+    Math.round(input.totalMs),
+    input.crossMs == null ? "" : Math.round(input.crossMs),
+    input.f2lMs == null ? "" : Math.round(input.f2lMs),
+    input.ollMs == null ? "" : Math.round(input.ollMs),
+    input.pllMs == null ? "" : Math.round(input.pllMs),
+    input.isDnf ? "dnf" : "ok",
+    input.createdAt ?? "",
+  ].join("|");
+}
+
+function getCloudInputLooseFingerprint(input: SaveSolveSessionInput): string {
+  return [
+    input.mode,
+    input.scramble,
+    Math.round(input.totalMs),
+    input.crossMs == null ? "" : Math.round(input.crossMs),
+    input.f2lMs == null ? "" : Math.round(input.f2lMs),
+    input.ollMs == null ? "" : Math.round(input.ollMs),
+    input.pllMs == null ? "" : Math.round(input.pllMs),
+    input.isDnf ? "dnf" : "ok",
+  ].join("|");
+}
+
+function getCloudRowFingerprint(row: SolveSessionRow): string {
+  return [
+    row.mode,
+    row.scramble,
+    row.total_ms,
+    row.cross_ms ?? "",
+    row.f2l_ms ?? "",
+    row.oll_ms ?? "",
+    row.pll_ms ?? "",
+    row.is_dnf ? "dnf" : "ok",
+    row.created_at,
+  ].join("|");
+}
+
+function getCloudRowLooseFingerprint(row: SolveSessionRow): string {
+  return [
+    row.mode,
+    row.scramble,
+    row.total_ms,
+    row.cross_ms ?? "",
+    row.f2l_ms ?? "",
+    row.oll_ms ?? "",
+    row.pll_ms ?? "",
+    row.is_dnf ? "dnf" : "ok",
+  ].join("|");
 }
 
 function getWeakPhase(cfopStats: Record<CfopPhase, PhaseStat>): WeakPhase | null {
@@ -453,6 +533,7 @@ export default function App() {
   const holdReturnStateRef = useRef<StartReturnState>("idle");
   const pointerStartCandidateRef = useRef<PointerStartCandidate | null>(null);
   const elapsedBeforeHoldRef = useRef(0);
+  const syncedLocalSolvesUserIdRef = useRef<string | null>(null);
 
   const activeSolves = useMemo(() => getActiveSolves(solves), [solves]);
   const stats = useMemo(() => calculateStats(solves), [solves]);
@@ -653,6 +734,79 @@ export default function App() {
     setSolves(nextSolves);
     saveSolves(nextSolves);
   }, []);
+
+  const syncLocalSolvesToCloud = useCallback(
+    async (candidateSolves = solves): Promise<CloudSyncResult> => {
+      const localSolves = getActiveSolves(candidateSolves);
+
+      if (!authUser || !isAuthConfigured() || localSolves.length === 0) {
+        return { total: localSolves.length, uploaded: 0, skipped: 0 };
+      }
+
+      const existingRows = await getMySolveSessions({ includeDeleted: true, limit: 10000 });
+      const existingFingerprints = new Set(existingRows.map(getCloudRowFingerprint));
+      const existingLooseFingerprints = new Set(existingRows.map(getCloudRowLooseFingerprint));
+      let uploaded = 0;
+      let skipped = 0;
+
+      for (const solve of localSolves) {
+        const input = buildCloudSolveSessionInput(solve);
+        const hasSameLocalId = existingRows.some((row) =>
+          row.notes?.includes(getLocalSyncNote(solve)),
+        );
+        const hasSameRecord =
+          existingFingerprints.has(getCloudInputFingerprint(input)) ||
+          existingLooseFingerprints.has(getCloudInputLooseFingerprint(input));
+
+        if (hasSameLocalId || hasSameRecord) {
+          skipped += 1;
+          continue;
+        }
+
+        await saveSolveSession(input);
+        existingFingerprints.add(getCloudInputFingerprint(input));
+        existingLooseFingerprints.add(getCloudInputLooseFingerprint(input));
+        uploaded += 1;
+      }
+
+      return {
+        total: localSolves.length,
+        uploaded,
+        skipped,
+      };
+    },
+    [authUser, solves],
+  );
+
+  useEffect(() => {
+    if (
+      !authUser ||
+      !isAuthConfigured() ||
+      activeSolves.length === 0 ||
+      syncedLocalSolvesUserIdRef.current === authUser.id
+    ) {
+      return;
+    }
+
+    syncedLocalSolvesUserIdRef.current = authUser.id;
+
+    void syncLocalSolvesToCloud()
+      .then((result) => {
+        if (result.uploaded > 0) {
+          setAuthNotice(
+            `この端末の履歴 ${result.uploaded}件をアカウントへアップロードしました。`,
+          );
+          return;
+        }
+
+        if (result.skipped > 0) {
+          setAuthNotice("この端末の履歴はすでにアカウントへ保存済みです。");
+        }
+      })
+      .catch(() => {
+        setAuthNotice("ログインしましたが、この端末の履歴アップロードに失敗しました。");
+      });
+  }, [activeSolves.length, authUser, syncLocalSolvesToCloud]);
 
   const syncSolveToCloud = useCallback(
     (solve: SolveRecord) => {
@@ -1450,6 +1604,42 @@ const handleTimerPointerCancel = useCallback(
     }
   }, [scramble]);
 
+  const exportLocalSolves = useCallback(async () => {
+    await copyTextWithFallback(stringifySolvesBackup(solves));
+    setShareStatus("この端末の履歴データをコピーしました。");
+  }, [solves]);
+
+  const importLocalSolves = useCallback(
+    (raw: string): LocalImportResult => {
+      const importedSolves = parseSolvesBackup(raw);
+      const mergedSolves = mergeSolvesById(solves, importedSolves);
+      const added = Math.max(0, mergedSolves.length - solves.length);
+
+      persistAndSetSolves(mergedSolves);
+
+      return {
+        imported: importedSolves.length,
+        added,
+        total: mergedSolves.length,
+      };
+    },
+    [persistAndSetSolves, solves],
+  );
+
+  const uploadLocalSolvesToAccount = useCallback(async (): Promise<CloudSyncResult> => {
+    const result = await syncLocalSolvesToCloud();
+
+    if (result.uploaded > 0) {
+      setAuthNotice(`この端末の履歴 ${result.uploaded}件をアカウントへアップロードしました。`);
+    } else if (result.total === 0) {
+      setAuthNotice("この端末にはアップロードする履歴がありません。");
+    } else {
+      setAuthNotice("この端末の履歴はすでにアカウントへ保存済みです。");
+    }
+
+    return result;
+  }, [syncLocalSolvesToCloud]);
+
   const dismissTutorial = useCallback(() => {
     markTutorialSeen();
     setIsTutorialOpen(false);
@@ -1599,6 +1789,10 @@ const handleTimerPointerCancel = useCallback(
           openTimer();
         }}
         onSignedOut={handleSignOut}
+        localSolveCount={activeSolves.length}
+        onExportLocalSolves={exportLocalSolves}
+        onImportLocalSolves={importLocalSolves}
+        onUploadLocalSolves={uploadLocalSolvesToAccount}
       />
     );
   }
@@ -2017,10 +2211,14 @@ interface AuthPageProps {
   user: AuthUser | null;
   isLoading: boolean;
   isConfigured: boolean;
+  localSolveCount: number;
   onBack: () => void;
   onOpenTimer: () => void;
   onSignedIn: (message: string) => void;
   onSignedOut: () => void | Promise<void>;
+  onExportLocalSolves: () => Promise<void>;
+  onImportLocalSolves: (raw: string) => LocalImportResult;
+  onUploadLocalSolves: () => Promise<CloudSyncResult>;
 }
 
 function getAuthErrorMessage(error: unknown): string {
@@ -2035,10 +2233,14 @@ function AuthPage({
   user,
   isLoading,
   isConfigured,
+  localSolveCount,
   onBack,
   onOpenTimer,
   onSignedIn,
   onSignedOut,
+  onExportLocalSolves,
+  onImportLocalSolves,
+  onUploadLocalSolves,
 }: AuthPageProps) {
   const [mode, setMode] = useState<AuthFormMode>("signIn");
   const [email, setEmail] = useState("");
@@ -2047,6 +2249,12 @@ function AuthPage({
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [dataStatus, setDataStatus] = useState<"idle" | "success" | "error">("idle");
+  const [dataStatusMessage, setDataStatusMessage] = useState("");
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isUploadingLocalSolves, setIsUploadingLocalSolves] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2085,6 +2293,70 @@ function AuthPage({
       setStatusMessage(getAuthErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleExportLocalSolves = async () => {
+    setIsExporting(true);
+    setDataStatus("idle");
+    setDataStatusMessage("");
+
+    try {
+      await onExportLocalSolves();
+      setDataStatus("success");
+      setDataStatusMessage("この端末の履歴データをクリップボードへコピーしました。");
+    } catch {
+      setDataStatus("error");
+      setDataStatusMessage("コピーできませんでした。ブラウザの権限を確認してください。");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImportLocalSolves = () => {
+    if (!importText.trim()) {
+      setDataStatus("error");
+      setDataStatusMessage("読み込む履歴データを貼り付けてください。");
+      return;
+    }
+
+    setIsImporting(true);
+    setDataStatus("idle");
+    setDataStatusMessage("");
+
+    try {
+      const result = onImportLocalSolves(importText);
+
+      setDataStatus("success");
+      setDataStatusMessage(
+        `${result.imported}件を読み込みました。追加 ${result.added}件 / 合計 ${result.total}件です。`,
+      );
+      setImportText("");
+    } catch (error) {
+      setDataStatus("error");
+      setDataStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleUploadLocalSolves = async () => {
+    setIsUploadingLocalSolves(true);
+    setDataStatus("idle");
+    setDataStatusMessage("");
+
+    try {
+      const result = await onUploadLocalSolves();
+
+      setDataStatus("success");
+      setDataStatusMessage(
+        `アカウント保存を確認しました。アップロード ${result.uploaded}件 / 保存済み ${result.skipped}件 / 対象 ${result.total}件です。`,
+      );
+    } catch {
+      setDataStatus("error");
+      setDataStatusMessage("アカウントへアップロードできませんでした。ログイン状態とSupabase設定を確認してください。");
+    } finally {
+      setIsUploadingLocalSolves(false);
     }
   };
 
@@ -2239,6 +2511,71 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </form>
         </section>
       )}
+
+      <section className="auth-card auth-data-card" aria-label="Local data transfer">
+        <div>
+          <p className="eyebrow">Data Transfer</p>
+          <h2>端末の履歴を移す</h2>
+          <p className="auth-lead">
+            この端末のローカル履歴は {localSolveCount} 件です。書き出し/読み込みを使うと、
+            NetlifyからVercelへ移したり、別端末の履歴をこの端末へまとめたりできます。
+          </p>
+        </div>
+
+        {dataStatus !== "idle" && (
+          <div className={`feedback-status feedback-status-${dataStatus}`} role="status">
+            {dataStatusMessage}
+          </div>
+        )}
+
+        <div className="auth-data-actions">
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => void handleExportLocalSolves()}
+            disabled={isExporting || localSolveCount === 0}
+          >
+            {isExporting ? "コピー中..." : "この端末の履歴を書き出す"}
+          </button>
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => void handleUploadLocalSolves()}
+            disabled={!user || isUploadingLocalSolves || localSolveCount === 0}
+          >
+            {isUploadingLocalSolves ? "保存中..." : "この端末の履歴をアカウントへ保存"}
+          </button>
+        </div>
+
+        <label className="auth-import-field">
+          別端末の履歴データを貼り付け
+          <textarea
+            rows={7}
+            value={importText}
+            placeholder='{"app":"cube-split-timer","version":1,"solves":[...]}'
+            onChange={(event) => setImportText(event.target.value)}
+          />
+        </label>
+
+        <div className="feedback-actions">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={handleImportLocalSolves}
+            disabled={isImporting || !importText.trim()}
+          >
+            {isImporting ? "読み込み中..." : "貼り付けた履歴を読み込む"}
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => setImportText("")}
+            disabled={!importText}
+          >
+            クリア
+          </button>
+        </div>
+      </section>
     </main>
   );
 }

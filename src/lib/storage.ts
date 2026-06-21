@@ -9,6 +9,15 @@ import type {
 const STORAGE_KEY = "cubeSplitTimer.solves.v1";
 const THEME_KEY = "cubeSplitTimer.theme.v1";
 const CURRENT_SOLVE_DRAFT_KEY = "cubeSplitTimer.currentSolveDraft.v1";
+const SOLVES_BACKUP_APP_ID = "cube-split-timer";
+const SOLVES_BACKUP_VERSION = 1;
+
+export interface SolvesBackup {
+  app: typeof SOLVES_BACKUP_APP_ID;
+  version: typeof SOLVES_BACKUP_VERSION;
+  exportedAt: string;
+  solves: SolveRecord[];
+}
 
 function isPenalty(value: unknown): boolean {
   return value === "none" || value === "+2" || value === "DNF";
@@ -38,7 +47,7 @@ function hasBaseSolveFields(value: Partial<SolveRecord>): boolean {
   );
 }
 
-function isSolveRecord(value: unknown): value is SolveRecord {
+export function isSolveRecord(value: unknown): value is SolveRecord {
   if (typeof value !== "object" || value === null) {
     return false;
   }
@@ -107,6 +116,56 @@ export function loadSolves(): SolveRecord[] {
 
 export function saveSolves(solves: SolveRecord[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(solves));
+}
+
+export function createSolvesBackup(solves: SolveRecord[]): SolvesBackup {
+  return {
+    app: SOLVES_BACKUP_APP_ID,
+    version: SOLVES_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    solves,
+  };
+}
+
+export function stringifySolvesBackup(solves: SolveRecord[]): string {
+  return JSON.stringify(createSolvesBackup(solves), null, 2);
+}
+
+export function parseSolvesBackup(raw: string): SolveRecord[] {
+  const parsed = JSON.parse(raw) as unknown;
+  const candidateSolves =
+    Array.isArray(parsed)
+      ? parsed
+      : typeof parsed === "object" &&
+          parsed !== null &&
+          "solves" in parsed &&
+          Array.isArray((parsed as { solves?: unknown }).solves)
+        ? (parsed as { solves: unknown[] }).solves
+        : null;
+
+  if (!candidateSolves) {
+    throw new Error("Cube Split Timerの履歴データではありません。");
+  }
+
+  const validSolves = candidateSolves.filter(isSolveRecord);
+
+  if (validSolves.length === 0 && candidateSolves.length > 0) {
+    throw new Error("読み込める記録がありませんでした。");
+  }
+
+  return validSolves;
+}
+
+export function mergeSolvesById(currentSolves: SolveRecord[], importedSolves: SolveRecord[]): SolveRecord[] {
+  const solveMap = new Map<string, SolveRecord>();
+
+  [...importedSolves, ...currentSolves].forEach((solve) => {
+    solveMap.set(solve.id, solve);
+  });
+
+  return Array.from(solveMap.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 export function loadThemePreference(): ThemePreference {

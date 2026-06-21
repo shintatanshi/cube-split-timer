@@ -14,6 +14,7 @@ export interface SaveSolveSessionInput {
   crossSolution?: string | null;
   notes?: string | null;
   isDnf?: boolean;
+  createdAt?: string;
 }
 
 export interface GetMySolveSessionsOptions {
@@ -55,6 +56,7 @@ export async function saveSolveSession(input: SaveSolveSessionInput): Promise<So
       notes: input.notes ?? null,
       is_dnf: input.isDnf ?? false,
       is_deleted: false,
+      created_at: input.createdAt,
     })
     .select()
     .single();

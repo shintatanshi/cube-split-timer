@@ -8,17 +8,20 @@ export interface Database {
       profiles: {
         Row: {
           id: string;
+          email: string | null;
           display_name: string | null;
           role: ProfileRole;
           created_at: string;
         };
         Insert: {
           id: string;
+          email?: string | null;
           display_name?: string | null;
           role?: ProfileRole;
           created_at?: string;
         };
         Update: {
+          email?: string | null;
           display_name?: string | null;
           role?: ProfileRole;
         };

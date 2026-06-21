@@ -10,6 +10,7 @@ Current public-ready scope:
 - Learn pages
 - PWA foundation
 - Supabase connection and solve session save helpers
+- Supabase email login, admin page, role management, and password reset emails
 - Netlify deployment configuration
 
 Some analyzer and learning features are still in progress. The app can be published now, then updated later by pushing new commits to GitHub.

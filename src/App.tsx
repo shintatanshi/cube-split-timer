@@ -14,12 +14,15 @@ import { HELP_TOPICS, TUTORIAL_STEPS } from "./helpContent";
 import {
   getCurrentAuthUser,
   isAuthConfigured,
+  requestPasswordResetEmail,
   signInWithEmail,
   signOutCurrentUser,
   signUpWithEmail,
   subscribeToAuthUserChange,
   type AuthUser,
+  updateCurrentUserPassword,
 } from "./lib/auth";
+import { getMyProfile, type ProfileRow } from "./lib/admin";
 import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
 import { generateScramble } from "./lib/scramble";
 import {
@@ -70,8 +73,18 @@ const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
 const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
+const AdminPage = lazy(() => import("./admin/AdminPage"));
 
-type AppPage = "timer" | "help" | "learn" | "analyzer" | "scramble" | "feedback" | "login";
+type AppPage =
+  | "timer"
+  | "help"
+  | "learn"
+  | "analyzer"
+  | "scramble"
+  | "feedback"
+  | "login"
+  | "admin"
+  | "reset-password";
 
 interface LocationInfo {
   page: AppPage;
@@ -255,7 +268,11 @@ function getLocationInfo(): LocationInfo {
                 ? "feedback"
                 : pathname === "/login"
                   ? "login"
-                  : "timer",
+                  : pathname === "/admin"
+                    ? "admin"
+                    : pathname === "/reset-password"
+                      ? "reset-password"
+                      : "timer",
     path: pathname,
     hash,
   };
@@ -514,6 +531,7 @@ export default function App() {
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authProfile, setAuthProfile] = useState<ProfileRow | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
@@ -625,6 +643,31 @@ export default function App() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!authUser || !isAuthConfigured()) {
+      setAuthProfile(null);
+      return;
+    }
+
+    let isDisposed = false;
+
+    getMyProfile()
+      .then((profile) => {
+        if (!isDisposed) {
+          setAuthProfile(profile);
+        }
+      })
+      .catch(() => {
+        if (!isDisposed) {
+          setAuthProfile(null);
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [authUser]);
 
   useEffect(() => {
     const draft = loadCurrentSolveDraft();
@@ -1574,10 +1617,15 @@ const handleTimerPointerCancel = useCallback(
     navigateTo("/login");
   }, [navigateTo]);
 
+  const openAdmin = useCallback(() => {
+    navigateTo("/admin");
+  }, [navigateTo]);
+
   const handleSignOut = useCallback(async () => {
     try {
       await signOutCurrentUser();
       setAuthUser(null);
+      setAuthProfile(null);
       setAuthNotice("ログアウトしました。");
     } catch {
       setAuthNotice("ログアウトできませんでした。時間を置いてもう一度試してください。");
@@ -1780,10 +1828,12 @@ const handleTimerPointerCancel = useCallback(
     return (
       <AuthPage
         user={authUser}
+        isAdmin={authProfile?.role === "admin"}
         isLoading={isAuthLoading}
         isConfigured={isAuthConfigured()}
         onBack={openTimer}
         onOpenTimer={openTimer}
+        onOpenAdmin={openAdmin}
         onSignedIn={(message) => {
           setAuthNotice(message);
           openTimer();
@@ -1795,6 +1845,26 @@ const handleTimerPointerCancel = useCallback(
         onUploadLocalSolves={uploadLocalSolvesToAccount}
       />
     );
+  }
+
+  if (locationInfo.page === "admin") {
+    return (
+      <Suspense
+        fallback={
+          <main className="app-shell admin-page">
+            <div className="notice" role="status">
+              管理者画面を読み込んでいます。
+            </div>
+          </main>
+        }
+      >
+        <AdminPage user={authUser} onOpenLogin={openLogin} onOpenTimer={openTimer} />
+      </Suspense>
+    );
+  }
+
+  if (locationInfo.page === "reset-password") {
+    return <ResetPasswordPage onOpenLogin={openLogin} onOpenTimer={openTimer} />;
   }
 
   return (
@@ -1814,6 +1884,11 @@ const handleTimerPointerCancel = useCallback(
           <button className="ghost-button" type="button" onClick={openFeedback}>
             意見箱
           </button>
+          {authProfile?.role === "admin" && (
+            <button className="ghost-button" type="button" onClick={openAdmin}>
+              Admin
+            </button>
+          )}
           <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
           {authUser ? (
             <div className="auth-chip" aria-label="Logged in account">
@@ -2144,6 +2219,17 @@ const handleTimerPointerCancel = useCallback(
         >
           Help
         </a>
+        {authProfile?.role === "admin" && (
+          <a
+            href="/admin"
+            onClick={(event) => {
+              event.preventDefault();
+              openAdmin();
+            }}
+          >
+            Admin
+          </a>
+        )}
       </nav>
 
       {isTutorialOpen && (
@@ -2209,11 +2295,13 @@ type AuthFormMode = "signIn" | "signUp";
 
 interface AuthPageProps {
   user: AuthUser | null;
+  isAdmin: boolean;
   isLoading: boolean;
   isConfigured: boolean;
   localSolveCount: number;
   onBack: () => void;
   onOpenTimer: () => void;
+  onOpenAdmin: () => void;
   onSignedIn: (message: string) => void;
   onSignedOut: () => void | Promise<void>;
   onExportLocalSolves: () => Promise<void>;
@@ -2231,11 +2319,13 @@ function getAuthErrorMessage(error: unknown): string {
 
 function AuthPage({
   user,
+  isAdmin,
   isLoading,
   isConfigured,
   localSolveCount,
   onBack,
   onOpenTimer,
+  onOpenAdmin,
   onSignedIn,
   onSignedOut,
   onExportLocalSolves,
@@ -2249,6 +2339,7 @@ function AuthPage({
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingReset, setIsSendingReset] = useState(false);
   const [importText, setImportText] = useState("");
   const [dataStatus, setDataStatus] = useState<"idle" | "success" | "error">("idle");
   const [dataStatusMessage, setDataStatusMessage] = useState("");
@@ -2293,6 +2384,31 @@ function AuthPage({
       setStatusMessage(getAuthErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSendPasswordReset = async () => {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setStatus("error");
+      setStatusMessage("再設定メールを送るメールアドレスを入力してください。");
+      return;
+    }
+
+    setIsSendingReset(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await requestPasswordResetEmail(trimmedEmail);
+      setStatus("success");
+      setStatusMessage("パスワード再設定メールを送信しました。メール内のリンクを開いてください。");
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSendingReset(false);
     }
   };
 
@@ -2411,6 +2527,11 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             <button className="primary-button" type="button" onClick={onOpenTimer}>
               Timerへ戻る
             </button>
+            {isAdmin && (
+              <button className="ghost-button" type="button" onClick={onOpenAdmin}>
+                管理者画面
+              </button>
+            )}
             <button className="ghost-button" type="button" onClick={() => void onSignedOut()}>
               ログアウト
             </button>
@@ -2504,6 +2625,16 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
                     ? "ログインする"
                     : "登録する"}
               </button>
+              {mode === "signIn" && (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void handleSendPasswordReset()}
+                  disabled={isSendingReset || !email.trim()}
+                >
+                  {isSendingReset ? "送信中..." : "パスワード再設定"}
+                </button>
+              )}
               <button className="ghost-button" type="button" onClick={onBack}>
                 キャンセル
               </button>
@@ -2575,6 +2706,124 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             クリア
           </button>
         </div>
+      </section>
+    </main>
+  );
+}
+
+interface ResetPasswordPageProps {
+  onOpenLogin: () => void;
+  onOpenTimer: () => void;
+}
+
+function ResetPasswordPage({ onOpenLogin, onOpenTimer }: ResetPasswordPageProps) {
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (password.length < 6) {
+      setStatus("error");
+      setStatusMessage("パスワードは6文字以上にしてください。");
+      return;
+    }
+
+    if (password !== passwordConfirm) {
+      setStatus("error");
+      setStatusMessage("確認用パスワードが一致していません。");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await updateCurrentUserPassword(password);
+      setStatus("success");
+      setStatusMessage("パスワードを変更しました。次回から新しいパスワードでログインできます。");
+      setPassword("");
+      setPasswordConfirm("");
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <main className="app-shell auth-page">
+      <header className="app-header auth-header">
+        <div>
+          <p className="eyebrow">Account</p>
+          <h1>パスワード再設定</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={onOpenLogin}>
+            ログインへ
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenTimer}>
+            Timerへ戻る
+          </button>
+        </div>
+      </header>
+
+      <section className="auth-card" aria-label="Reset password form">
+        <div>
+          <p className="eyebrow">Reset Password</p>
+          <h2>新しいパスワード</h2>
+          <p className="auth-lead">
+            再設定メールのリンクから開いた状態で、新しいパスワードを入力してください。
+          </p>
+        </div>
+
+        {status !== "idle" && (
+          <div className={`feedback-status feedback-status-${status}`} role="status">
+            {statusMessage}
+          </div>
+        )}
+
+        <form className="feedback-form" onSubmit={handleSubmit}>
+          <label>
+            新しいパスワード
+            <input
+              required
+              type="password"
+              minLength={6}
+              autoComplete="new-password"
+              value={password}
+              placeholder="6文字以上"
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+
+          <label>
+            新しいパスワード 確認
+            <input
+              required
+              type="password"
+              minLength={6}
+              autoComplete="new-password"
+              value={passwordConfirm}
+              placeholder="もう一度入力"
+              onChange={(event) => setPasswordConfirm(event.target.value)}
+            />
+          </label>
+
+          <div className="feedback-actions">
+            <button className="primary-button" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "変更中..." : "パスワードを変更"}
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenLogin}>
+              ログインへ
+            </button>
+          </div>
+        </form>
       </section>
     </main>
   );

@@ -3631,11 +3631,19 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   padding-bottom: 40px;
 }
 
+.admin-page {
+  padding-bottom: 40px;
+}
+
 .auth-header {
   align-items: center;
 }
 
 .feedback-header {
+  align-items: center;
+}
+
+.admin-header {
   align-items: center;
 }
 
@@ -3659,12 +3667,155 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   box-shadow: 0 20px 60px var(--shadow);
 }
 
+.admin-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 20px 60px var(--shadow);
+}
+
+.admin-card + .admin-card {
+  margin-top: 16px;
+}
+
+.admin-warning-card {
+  border-color: color-mix(in srgb, var(--warning) 44%, var(--border));
+  background: color-mix(in srgb, var(--warning) 8%, var(--panel));
+}
+
+.admin-warning-card p,
+.admin-help-text {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
 .auth-card h2 {
   margin-bottom: 8px;
 }
 
 .feedback-card h2 {
   margin-bottom: 8px;
+}
+
+.admin-card h2 {
+  margin-bottom: 8px;
+}
+
+.admin-count {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-user-list,
+.admin-solve-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-user-card,
+.admin-solve-item {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+}
+
+.admin-user-main,
+.admin-solve-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.admin-user-main h3 {
+  margin: 0 0 4px;
+  color: var(--text-strong);
+  font-size: 1rem;
+}
+
+.admin-user-main p,
+.admin-solve-user span {
+  margin: 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-role-badge {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.admin-role-admin {
+  border-color: color-mix(in srgb, #57d889 52%, var(--border));
+  color: #a6f3be;
+}
+
+.admin-role-user {
+  color: var(--muted);
+}
+
+.admin-user-meta,
+.admin-user-actions,
+.admin-solve-user {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-user-meta span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-user-actions button {
+  min-height: 38px;
+}
+
+.admin-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 900;
+}
+
+.admin-filter select {
+  min-height: 40px;
+  max-width: min(320px, 52vw);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font: inherit;
+}
+
+.admin-solve-user {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.admin-solve-user strong {
+  width: 100%;
+  color: var(--text-strong);
 }
 
 .auth-lead {

@@ -80,3 +80,25 @@ export async function signOutCurrentUser(): Promise<void> {
     throw error;
   }
 }
+
+function getPasswordResetRedirectUrl(): string {
+  return `${window.location.origin}/reset-password`;
+}
+
+export async function requestPasswordResetEmail(email: string): Promise<void> {
+  const { error } = await getSupabaseClient().auth.resetPasswordForEmail(email, {
+    redirectTo: getPasswordResetRedirectUrl(),
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function updateCurrentUserPassword(password: string): Promise<void> {
+  const { error } = await getSupabaseClient().auth.updateUser({ password });
+
+  if (error) {
+    throw error;
+  }
+}

@@ -120,6 +120,7 @@ git push -u origin main
 ```text
 supabase/migrations/001_initial_schema.sql
 supabase/migrations/002_feedback_reports.sql
+supabase/migrations/003_admin_access.sql
 ```
 
 Supabase画面で、上から順番に実行します。
@@ -134,6 +135,10 @@ Supabase画面で、上から順番に実行します。
 8. `supabase/migrations/002_feedback_reports.sql` の中身を全部コピー
 9. SQL Editorに貼り付け
 10. `Run`
+11. もう一度 `New query`
+12. `supabase/migrations/003_admin_access.sql` の中身を全部コピー
+13. SQL Editorに貼り付け
+14. `Run`
 
 作成されるテーブル:
 
@@ -147,7 +152,20 @@ Supabase画面で、上から順番に実行します。
 - 自分のプロフィールだけ読める・更新できるポリシー
 - 自分の記録だけ読める・追加できる・更新できるポリシー
 - サイト利用者が意見箱へ匿名投稿できるポリシー
+- 管理者だけが全ユーザーのメールアドレス、クラウド履歴、意見箱を読めるポリシー
+- 管理者だけが他ユーザーへ管理者権限を付与・解除できるポリシー
 - 新規ユーザー作成時に `profiles` を作るトリガー
+
+最初の管理者だけは、SupabaseのSQL Editorで手動設定します。
+
+```sql
+update public.profiles
+set role = 'admin'
+where email = 'YOUR_ADMIN_EMAIL@example.com';
+```
+
+パスワードはSupabase Authから平文取得できません。管理者画面ではパスワード表示ではなく、
+ユーザーへパスワード再設定メールを送信します。
 
 意見箱の内容を見る場所:
 
@@ -341,18 +359,35 @@ Build command: npm run build
 Publish directory: dist
 ```
 
-## 13. 今後ログインUIを追加するとき
+## 13. ログインUIと保存関数
 
-現時点では、Supabase接続ファイルと保存関数の土台だけを追加しています。
-ログイン画面を作るときは、次を使います。
+現在はメール/パスワードのログイン画面、ログアウト、端末内履歴の書き出し/読み込み、
+ログイン中の `solve_sessions` 保存、管理者画面、パスワード再設定画面を実装しています。
+
+関連ファイル:
 
 - `src/lib/supabase.ts`
+- `src/lib/auth.ts`
+- `src/lib/admin.ts`
 - `src/lib/solveSessions.ts`
+- `src/App.tsx`
+- `src/admin/AdminPage.tsx`
 
-用意済みの関数:
+主な関数:
 
+- `signInWithEmail()`
+- `signUpWithEmail()`
+- `signOutCurrentUser()`
+- `requestPasswordResetEmail()`
+- `updateCurrentUserPassword()`
+- `getAdminProfiles()`
+- `updateProfileRole()`
+- `getAdminSolveSessions()`
 - `saveSolveSession()`
 - `getMySolveSessions()`
 - `softDeleteSolveSession()`
 
 `softDeleteSolveSession()` は完全削除ではなく、`is_deleted = true` にします。
+
+現時点のクラウド保存は、ログイン中に新しく保存した記録と、Account画面またはログイン時に
+この端末の未削除ローカル履歴をアップロードする構成です。タイマー中はSupabase通信を行いません。

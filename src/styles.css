@@ -1030,6 +1030,11 @@ h2 {
   gap: 14px;
 }
 
+.analyzer-input-controls,
+.analyzer-analysis-flow {
+  display: contents;
+}
+
 .analyzer-settings-card,
 .analyzer-cross-card,
 .analyzer-f2l-card,
@@ -3927,6 +3932,33 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   .scramble-preview-hero,
   .scramble-preview-layout {
     grid-template-columns: 1fr;
+  }
+
+  .analyzer-input-panel {
+    display: contents;
+  }
+
+  .analyzer-input-controls,
+  .analyzer-analysis-flow {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+
+  .analyzer-input-controls {
+    order: 1;
+  }
+
+  .analyzer-player-panel {
+    order: 2;
+  }
+
+  .analyzer-analysis-flow {
+    order: 3;
   }
 
   .analyzer-hero,

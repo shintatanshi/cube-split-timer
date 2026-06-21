@@ -2778,6 +2778,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
       <div className="analyzer-layout">
         <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
+          <div className="analyzer-input-controls">
           <section className="analyzer-settings-card" aria-label="Analyzer settings">
             <div className="analyzer-subheading">
               <div>
@@ -2995,7 +2996,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               <strong>{getPlaybackModeLabel(playbackMode)}</strong>
             </div>
           </div>
+          </div>
 
+          <div className="analyzer-analysis-flow">
           <section className="analyzer-cross-card" aria-label="Cross candidates">
             <div className="analyzer-subheading">
               <div>
@@ -3690,6 +3693,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               )}
             </div>
           </section>
+          </div>
         </section>
 
         <section

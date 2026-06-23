@@ -60,7 +60,7 @@ interface AnalyzerSettings {
 
 interface CrossCandidate {
   color: CubeColorName;
-  targetFace: CrossTargetFace;
+  targetFace: FaceName;
   algorithm: string;
   moveCount: number;
 }
@@ -328,6 +328,16 @@ function buildCrossFaceColorMap(
       frontColor,
       topColor,
     }) ?? DEFAULT_FACE_COLOR_MAP
+  );
+}
+
+function getFaceForColor(
+  faceColorMap: Record<FaceName, CubeColorName>,
+  color: CubeColorName,
+): FaceName | null {
+  return (
+    (Object.keys(faceColorMap) as FaceName[]).find((face) => faceColorMap[face] === color) ??
+    null
   );
 }
 
@@ -883,7 +893,11 @@ function isSameCrossSolution(a: CrossSolution | null, b: CrossSolution | null): 
   );
 }
 
-function buildCrossCandidates(settings: AnalyzerSettings, scrambleMoves: string[]): CrossCandidate[] {
+function buildCrossCandidates(
+  settings: AnalyzerSettings,
+  scrambleMoves: string[],
+  faceColorMap: Record<FaceName, CubeColorName>,
+): CrossCandidate[] {
   const colors = settings.showAllCrossColors
     ? COLOR_OPTIONS.map((option) => option.value)
     : [settings.crossColor];
@@ -892,7 +906,9 @@ function buildCrossCandidates(settings: AnalyzerSettings, scrambleMoves: string[
 
   return colors.map((color) => ({
     color,
-    targetFace: settings.crossTargetFace,
+    targetFace: settings.showAllCrossColors
+      ? getFaceForColor(faceColorMap, color) ?? settings.crossTargetFace
+      : settings.crossTargetFace,
     algorithm,
     moveCount: inverseScramble.length,
   }));
@@ -962,7 +978,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
   const [isManualMoveAnimating, setIsManualMoveAnimating] = useState(false);
-  const [showManualControls, setShowManualControls] = useState(true);
+  const [showManualControls, setShowManualControls] = useState(false);
   const [isSearchingCross, setIsSearchingCross] = useState(false);
   const [crossResults, setCrossResults] = useState<CrossSearchResult[]>(
     () => initialAnalyzerState?.crossResults ?? [],
@@ -1023,8 +1039,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     [parsedScramble.invalidTokens, parsedScramble.parsedMoves],
   );
   const crossCandidates = useMemo(
-    () => buildCrossCandidates(settings, parsedScramble.moves),
-    [parsedScramble.moves, settings],
+    () => buildCrossCandidates(settings, parsedScramble.moves, faceColorMap),
+    [faceColorMap, parsedScramble.moves, settings],
   );
   const bestCrossSolution = useMemo(
     () =>
@@ -2206,14 +2222,22 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     const targetColors = settings.showAllCrossColors
       ? COLOR_OPTIONS.map((option) => option.value)
       : [settings.crossColor];
-    const jobs: CrossSearchInput[] = targetColors.map((crossColor) => ({
-      crossColor,
-      targetFace: settings.crossTargetFace,
-      faceColorMap: getCrossSearchFaceColorMap(crossColor),
-      scrambleMoves: parsedScramble.moves,
-      maxDepth: settings.maxDepth,
-      maxSolutions: 5,
-    }));
+    const jobs: CrossSearchInput[] = targetColors.map((crossColor) => {
+      const targetFace = settings.showAllCrossColors
+        ? getFaceForColor(faceColorMap, crossColor) ?? settings.crossTargetFace
+        : settings.crossTargetFace;
+
+      return {
+        crossColor,
+        targetFace,
+        faceColorMap: settings.showAllCrossColors
+          ? faceColorMap
+          : getCrossSearchFaceColorMap(crossColor),
+        scrambleMoves: parsedScramble.moves,
+        maxDepth: settings.maxDepth,
+        maxSolutions: 5,
+      };
+    });
 
     crossWorkerRef.current = worker;
     worker.onmessage = (event: MessageEvent<CrossSearchWorkerResponse>) => {
@@ -2286,6 +2310,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     worker.postMessage({ jobId, jobs });
   }, [
     canUseOrientation,
+    faceColorMap,
     getCrossSearchFaceColorMap,
     orientationError,
     parsedScramble.moves,
@@ -2776,6 +2801,40 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         })}
       </nav>
 
+      <section className="analyzer-command-bar" aria-label="Analyzer quick actions">
+        <div className="analyzer-command-status" aria-label="Analyzer status">
+          <span>Scramble {parsedScramble.moves.length}</span>
+          <span>Active {activeMoves.length}</span>
+          <span>
+            {selectedCrossSolution
+              ? `Cross ${selectedCrossSolution.moveCount} moves`
+              : "Cross未選択"}
+          </span>
+        </div>
+        <div className="analyzer-command-actions">
+          <button type="button" onClick={applyScramble} disabled={!canUseScramble}>
+            スクランブル反映
+          </button>
+          <button
+            type="button"
+            onClick={analyzeCross}
+            disabled={isSearchingCross || !canUseScramble}
+          >
+            {isSearchingCross ? "Cross探索中" : "Cross探索"}
+          </button>
+          <button
+            type="button"
+            onClick={() => runBasicF2lAnalysis()}
+            disabled={!selectedCrossSolution || isAnalyzingBasicF2l}
+          >
+            {isAnalyzingBasicF2l ? "F2L解析中" : "F2L解析"}
+          </button>
+          <button type="button" onClick={enterAnalyzerFullscreen}>
+            3D全画面
+          </button>
+        </div>
+      </section>
+
       <div className="analyzer-layout">
         <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
           <div className="analyzer-input-controls">
@@ -3196,8 +3255,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 ))}
             </div>
 
-            <div className="analyzer-study-note">
-              <p className="eyebrow">Practice memo</p>
+            <details className="analyzer-study-note">
+              <summary>Practice memo</summary>
               <ul>
                 <li>クロスは手順暗記より、インスペクション中に4つのエッジを読む練習が大事です。</li>
                 <li>D面の色だけでなく、側面色がセンターと合っているかまで見ます。</li>
@@ -3206,7 +3265,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 <li>最初は7〜8手以内を目安に、読んだCrossを手元を見ずに回す練習へつなげます。</li>
                 <li>Crossが終わる位置を予測できると、最初のF2Lペア探しがかなり楽になります。</li>
               </ul>
-            </div>
+            </details>
           </section>
 
           <section className="analyzer-f2l-card" id="analyzer-f2l-section" aria-label="F2L Analyzer">
@@ -3589,36 +3648,39 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 F2L bestを作ると、その完成状態からOLLを判定します。
               </p>
             )}
-            <div className="analyzer-candidate-grid">
-              {ollCandidates.length === 0 ? (
-                <p className="analyzer-muted">
-                  src/assets/learn/oll に画像を追加すると、OLL候補が表示されます。
-                </p>
-              ) : (
-                ollCandidates.map((candidate) => (
-                  <article className="analyzer-candidate-card" key={candidate.id}>
-                    <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
-                    <h3>{candidate.name}</h3>
-                    <code>{candidate.algorithm}</code>
-                    <p>{candidate.description}</p>
-                    <div className="analyzer-f2l-tags">
-                      <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
-                      {(candidate.tags ?? []).slice(0, 3).map((tag) => (
-                        <span key={`${candidate.id}-${tag}`}>{tag}</span>
-                      ))}
-                    </div>
-                    <div className="analyzer-f2l-actions">
-                      <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
-                        メイン3Dで見る
-                      </button>
-                      <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
-                        Learn詳細
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
+            <details className="analyzer-library-details">
+              <summary>OLLライブラリ {ollCandidates.length}件</summary>
+              <div className="analyzer-candidate-grid">
+                {ollCandidates.length === 0 ? (
+                  <p className="analyzer-muted">
+                    src/assets/learn/oll に画像を追加すると、OLL候補が表示されます。
+                  </p>
+                ) : (
+                  ollCandidates.map((candidate) => (
+                    <article className="analyzer-candidate-card" key={candidate.id}>
+                      <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
+                      <h3>{candidate.name}</h3>
+                      <code>{candidate.algorithm}</code>
+                      <p>{candidate.description}</p>
+                      <div className="analyzer-f2l-tags">
+                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                        {(candidate.tags ?? []).slice(0, 3).map((tag) => (
+                          <span key={`${candidate.id}-${tag}`}>{tag}</span>
+                        ))}
+                      </div>
+                      <div className="analyzer-f2l-actions">
+                        <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
+                          メイン3Dで見る
+                        </button>
+                        <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
+                          Learn詳細
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </details>
           </section>
 
           <section className="analyzer-candidate-section" aria-label="PLL candidate preview">
@@ -3662,36 +3724,39 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 OLLを判定できる状態になると、その後のPLLも判定します。
               </p>
             )}
-            <div className="analyzer-candidate-grid">
-              {pllCandidates.length === 0 ? (
-                <p className="analyzer-muted">
-                  src/assets/learn/pll に画像を追加すると、PLL候補が表示されます。
-                </p>
-              ) : (
-                pllCandidates.map((candidate) => (
-                  <article className="analyzer-candidate-card" key={candidate.id}>
-                    <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
-                    <h3>{candidate.name}</h3>
-                    <code>{candidate.algorithm}</code>
-                    <p>{candidate.description}</p>
-                    <div className="analyzer-f2l-tags">
-                      <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
-                      {(candidate.tags ?? []).slice(0, 3).map((tag) => (
-                        <span key={`${candidate.id}-${tag}`}>{tag}</span>
-                      ))}
-                    </div>
-                    <div className="analyzer-f2l-actions">
-                      <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
-                        メイン3Dで見る
-                      </button>
-                      <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
-                        Learn詳細
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
+            <details className="analyzer-library-details">
+              <summary>PLLライブラリ {pllCandidates.length}件</summary>
+              <div className="analyzer-candidate-grid">
+                {pllCandidates.length === 0 ? (
+                  <p className="analyzer-muted">
+                    src/assets/learn/pll に画像を追加すると、PLL候補が表示されます。
+                  </p>
+                ) : (
+                  pllCandidates.map((candidate) => (
+                    <article className="analyzer-candidate-card" key={candidate.id}>
+                      <p className="eyebrow">{candidate.phase.toUpperCase()}</p>
+                      <h3>{candidate.name}</h3>
+                      <code>{candidate.algorithm}</code>
+                      <p>{candidate.description}</p>
+                      <div className="analyzer-f2l-tags">
+                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                        {(candidate.tags ?? []).slice(0, 3).map((tag) => (
+                          <span key={`${candidate.id}-${tag}`}>{tag}</span>
+                        ))}
+                      </div>
+                      <div className="analyzer-f2l-actions">
+                        <button type="button" onClick={() => playAnalyzerCandidate(candidate)}>
+                          メイン3Dで見る
+                        </button>
+                        <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
+                          Learn詳細
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </details>
           </section>
           </div>
         </section>

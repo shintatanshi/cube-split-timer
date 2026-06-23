@@ -48,6 +48,23 @@ export async function signInWithEmail(email: string, password: string): Promise<
   return data.user;
 }
 
+function getLoginRedirectUrl(): string {
+  return `${window.location.origin}/login`;
+}
+
+export async function signInWithGoogle(): Promise<void> {
+  const { error } = await getSupabaseClient().auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: getLoginRedirectUrl(),
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 export async function signUpWithEmail(
   email: string,
   password: string,

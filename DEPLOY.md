@@ -397,3 +397,27 @@ Publish directory: dist
 
 現時点のクラウド保存は、ログイン中に新しく保存した記録と、Account画面またはログイン時に
 この端末の未削除ローカル履歴をアップロードする構成です。タイマー中はSupabase通信を行いません。
+
+### Googleログインを有効にする
+
+アプリ側にはGoogleログインボタンを実装していますが、公開先で使うにはSupabaseとGoogle Cloud側の設定が必要です。
+
+1. Google Cloud ConsoleでOAuth clientを作成する
+2. Authorized redirect URIsにSupabaseのcallback URLを追加する
+
+```text
+https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback
+```
+
+3. Supabase Dashboardを開く
+4. Authentication > Providers > Google を有効にする
+5. Google CloudのClient IDとClient Secretを入力する
+6. Authentication > URL Configuration のRedirect URLsに公開URLとローカルURLを追加する
+
+```text
+http://localhost:5173/login
+https://YOUR_PUBLIC_DOMAIN/login
+```
+
+`YOUR_PUBLIC_DOMAIN` はVercelやNetlifyで実際に公開しているドメインに置き換えてください。
+service_role keyやGoogle Client Secretはフロントエンド、`.env.local`、Vercelの公開環境変数には置かないでください。

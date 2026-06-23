@@ -3,7 +3,7 @@ import { BASIC_F2L_41_CASES, type BasicF2lCase } from "./f2lBasic41";
 
 export type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 export type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
-export type TargetFace = "D" | "U";
+export type TargetFace = FaceName;
 export type PieceKind = "edge" | "corner";
 export type Vec3 = [number, number, number];
 
@@ -281,10 +281,19 @@ const OPPOSITE_FACE: Record<FaceName, FaceName> = {
   B: "F",
 };
 
-const SIDE_FACES: FaceName[] = ["F", "R", "B", "L"];
 const CROSS_LOCATION_BASE = 24;
-const CROSS_PRUNING_STATE_COUNT = CROSS_LOCATION_BASE ** SIDE_FACES.length;
+const CROSS_EDGE_COUNT = 4;
+const CROSS_PRUNING_STATE_COUNT = CROSS_LOCATION_BASE ** CROSS_EDGE_COUNT;
 const CROSS_PRUNING_UNKNOWN_DISTANCE = 255;
+
+const CROSS_SIDE_FACE_ORDER: Record<TargetFace, FaceName[]> = {
+  D: ["F", "R", "B", "L"],
+  U: ["F", "R", "B", "L"],
+  F: ["U", "R", "D", "L"],
+  B: ["U", "L", "D", "R"],
+  R: ["U", "B", "D", "F"],
+  L: ["U", "F", "D", "B"],
+};
 
 const F2L_SLOT_SPECS: Array<{
   name: F2lSlotName;
@@ -303,6 +312,10 @@ export const CROSS_SEARCH_NODE_LIMIT = 1_200_000;
 
 const CROSS_PRUNING_TABLES = new Map<TargetFace, CrossPruningTable>();
 const MOVE_DESCRIPTOR_CACHE = new Map<string, ReturnType<typeof getMoveDescriptor>>();
+
+function getCrossSideFaces(targetFace: TargetFace): FaceName[] {
+  return CROSS_SIDE_FACE_ORDER[targetFace];
+}
 
 function getCachedMoveDescriptor(move: string): ReturnType<typeof getMoveDescriptor> {
   if (MOVE_DESCRIPTOR_CACHE.has(move)) {
@@ -894,7 +907,7 @@ export function getCrossEdgeStatuses(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): CrossEdgeStatus[] {
-  return SIDE_FACES.map((sideFace) => {
+  return getCrossSideFaces(targetFace).map((sideFace) => {
     const sideColor = state.faceColorMap[sideFace];
     const piece = getPieceByColors(state, "edge", [crossColor, sideColor]);
     const expectedCoord = addVectors(FACE_VECTORS[targetFace], FACE_VECTORS[sideFace]);
@@ -918,7 +931,7 @@ export function isCrossSolved(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): boolean {
-  return SIDE_FACES.every((sideFace) => {
+  return getCrossSideFaces(targetFace).every((sideFace) => {
     const sideColor = state.faceColorMap[sideFace];
     const piece = getPieceByColors(state, "edge", [crossColor, sideColor]);
     const expectedCoord = addVectors(FACE_VECTORS[targetFace], FACE_VECTORS[sideFace]);
@@ -937,7 +950,7 @@ function isFastCrossSolved(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): boolean {
-  return SIDE_FACES.every((sideFace) => {
+  return getCrossSideFaces(targetFace).every((sideFace) => {
     const sideColor = state.faceColorMap[sideFace];
     const pieceIndex = getFastPieceIndexByColors(state, "edge", [crossColor, sideColor]);
 
@@ -982,7 +995,7 @@ function getCrossSignature(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): string {
-  return SIDE_FACES.map((sideFace) => {
+  return getCrossSideFaces(targetFace).map((sideFace) => {
     const sideColor = state.faceColorMap[sideFace];
     const piece = getPieceByColors(state, "edge", [crossColor, sideColor]);
 
@@ -1115,7 +1128,7 @@ function createSolvedCrossEdgeState(
   crossColor: CubeColorName,
   targetFace: TargetFace,
 ): CrossEdgePieceState[] {
-  return SIDE_FACES.map((sideFace) => {
+  return getCrossSideFaces(targetFace).map((sideFace) => {
     const sideColor = faceColorMap[sideFace];
 
     return {
@@ -1238,7 +1251,7 @@ function createCrossSolutionFromPath(
 }
 
 function createCanonicalSolvedCrossEdges(targetFace: TargetFace): CrossEdgePieceState[] {
-  return SIDE_FACES.map((sideFace) => ({
+  return getCrossSideFaces(targetFace).map((sideFace) => ({
     sideColor: "white",
     sideFace,
     coord: addVectors(FACE_VECTORS[targetFace], FACE_VECTORS[sideFace]),

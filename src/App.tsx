@@ -16,6 +16,7 @@ import {
   isAuthConfigured,
   requestPasswordResetEmail,
   signInWithEmail,
+  signInWithGoogle,
   signOutCurrentUser,
   signUpWithEmail,
   subscribeToAuthUserChange,
@@ -2339,6 +2340,7 @@ function AuthPage({
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [importText, setImportText] = useState("");
   const [dataStatus, setDataStatus] = useState<"idle" | "success" | "error">("idle");
@@ -2384,6 +2386,22 @@ function AuthPage({
       setStatusMessage(getAuthErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsSigningInWithGoogle(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await signInWithGoogle();
+      setStatus("success");
+      setStatusMessage("Googleのログイン画面へ移動しています。");
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+      setIsSigningInWithGoogle(false);
     }
   };
 
@@ -2574,6 +2592,24 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             >
               新規登録
             </button>
+          </div>
+
+          <div className="auth-provider-actions" aria-label="External login">
+            <button
+              className="auth-provider-button"
+              type="button"
+              onClick={() => void handleGoogleSignIn()}
+              disabled={isSigningInWithGoogle || isSubmitting}
+            >
+              <span className="auth-provider-mark" aria-hidden="true">G</span>
+              {isSigningInWithGoogle ? "Googleへ移動中..." : "Googleで続ける"}
+            </button>
+          </div>
+
+          <div className="auth-separator" aria-hidden="true">
+            <span />
+            <strong>または</strong>
+            <span />
           </div>
 
           <form className="feedback-form" onSubmit={handleSubmit}>

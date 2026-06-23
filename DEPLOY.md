@@ -1,18 +1,18 @@
 # Cube Split Timer 公開手順
 
-この手順は、現在の未完成版をいったん GitHub + Supabase + Netlify で公開し、あとから完成版を `git push` して上書き公開するためのメモです。
+この手順は、現在の未完成版をいったん GitHub + Supabase + Vercel で公開し、あとから完成版を `git push` して上書き公開するためのメモです。
 
 現在のアプリは React + Vite + TypeScript で作られています。
 
 - 開発サーバー: `npm run dev`
 - 本番ビルド: `npm run build`
-- Netlify publish directory: `dist`
+- Vercel output directory: `dist`
 - Supabase接続環境変数: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
 参考:
 
 - Vite env: https://vite.dev/guide/env-and-mode
-- Netlify Vite: https://docs.netlify.com/build/frameworks/framework-setup-guides/vite/
+- Vercel Vite: https://vercel.com/docs/frameworks/vite
 - Supabase Auth: https://supabase.com/docs/guides/auth
 - Supabase RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
 
@@ -31,14 +31,14 @@ GitHubに入れるもの:
 - `.gitignore`
 - `.env.example`
 - `.github/workflows/deploy.yml`
-- `netlify.toml`
+- `vercel.json`
 - `DEPLOY.md`
 
 GitHubに入れないもの:
 
 - `node_modules/`
 - `dist/`
-- `.netlify/`
+- `.vercel/`
 - `.env`
 - `.env.local`
 - `.env.production`
@@ -47,7 +47,7 @@ GitHubに入れないもの:
 
 このプロジェクトの `.gitignore` では、上の入れてはいけないファイルを除外しています。
 
-`.github/workflows/deploy.yml` はGitHub Pagesへ公開するものではなく、GitHub上で `npm run build` が通るかを確認するためのワークフローです。公開本番はNetlifyを使います。
+`.github/workflows/deploy.yml` はGitHub Pagesへ公開するものではなく、GitHub上で `npm run build` が通るかを確認するためのワークフローです。公開本番はVercelを使います。
 
 ## 2. 現在のgit状態について
 
@@ -194,7 +194,7 @@ where email = 'YOUR_ADMIN_EMAIL@example.com';
 
 - `service_role` key
 
-`service_role` key は管理者用で、フロントエンドやGitHub、Netlifyの通常環境変数に入れないでください。
+`service_role` key は管理者用で、フロントエンドやGitHub、Vercelの通常環境変数に入れないでください。
 
 ## 7. ローカルの .env.local を作る
 
@@ -215,7 +215,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key
 
 ## 8. ローカルでビルド確認する
 
-GitHubやNetlifyへ行く前に、必ずローカルで確認します。
+GitHubやVercelへ行く前に、必ずローカルで確認します。
 
 ```bash
 npm install
@@ -224,34 +224,33 @@ npm run build
 
 成功すると `dist/` が作られます。
 
-`dist/` はNetlifyが自動生成するため、GitHubには入れません。
+`dist/` はVercelが自動生成するため、GitHubには入れません。
 
-## 9. Netlifyで公開する
+## 9. Vercelで公開する
 
-1. https://www.netlify.com/ を開く
+1. https://vercel.com/ を開く
 2. ログインする
-3. `Add new site`
-4. `Import an existing project`
-5. GitHubを選ぶ
-6. GitHubリポジトリを選ぶ
-7. Build settings を確認する
+3. `Add New...` から `Project`
+4. GitHubリポジトリを選ぶ
+5. Framework Preset が `Vite` になっているか確認する
+6. Build and Output Settings を確認する
 
 Viteの場合:
 
 ```text
 Build command: npm run build
-Publish directory: dist
+Output directory: dist
 ```
 
-このプロジェクトには `netlify.toml` があるので、基本的には自動でこの設定が使われます。
+このプロジェクトには `vercel.json` があり、SPAの直接URLアクセスが `/index.html` に戻るようにしています。
 
-## 10. Netlifyの環境変数を設定する
+## 10. Vercelの環境変数を設定する
 
-Netlifyのサイト設定で:
+Vercelのプロジェクト設定で:
 
-1. `Site configuration`
+1. `Settings`
 2. `Environment variables`
-3. `Add a variable`
+3. `Add`
 4. 以下を追加
 
 ```text
@@ -263,13 +262,13 @@ VITE_SUPABASE_ANON_KEY
 
 追加したら、再デプロイします。
 
-## 11. GitHubへpushするとNetlifyが自動更新される流れ
+## 11. GitHubへpushするとVercelが自動更新される流れ
 
 1. ローカルでコードを変更する
 2. `npm run build` で確認
 3. gitに追加してcommit
 4. GitHubへpush
-5. Netlifyが自動でbuild
+5. Vercelが自動でbuild
 6. 公開サイトが上書きされる
 
 例:
@@ -282,7 +281,7 @@ git push
 ```
 
 未完成版を先に公開しても大丈夫です。
-あとからF2L / OLL / PLLなどを完成させてpushすれば、Netlify上の公開版も上書きされます。
+あとからF2L / OLL / PLLなどを完成させてpushすれば、Vercel上の公開版も上書きされます。
 
 ## 12. よくあるエラーと対処法
 
@@ -308,15 +307,15 @@ npm run dev
 
 - `VITE_SUPABASE_URL` が間違っている
 - `VITE_SUPABASE_ANON_KEY` が間違っている
-- Netlifyに環境変数を入れていない
+- Vercelに環境変数を入れていない
 
 対処:
 
 - SupabaseのProject SettingsでURLとanon keyを再確認
-- NetlifyのEnvironment variablesを確認
-- 変更後にNetlifyで再デプロイ
+- VercelのEnvironment Variablesを確認
+- 変更後にVercelで再デプロイ
 
-### Netlifyでビルド失敗
+### Vercelでビルド失敗
 
 原因:
 
@@ -332,7 +331,7 @@ npm run build
 ```
 
 をローカルで実行し、先にエラーを直してください。
-このプロジェクトでは `netlify.toml` で Node 20 を指定しています。
+Vercel側でNodeのバージョンが古い場合は、Project SettingsでNode.js Versionを20系にしてください。
 
 ### RLSで保存できない
 
@@ -358,11 +357,11 @@ npm run build
 
 対処:
 
-Netlify設定を以下にします。
+Vercel設定を以下にします。
 
 ```text
 Build command: npm run build
-Publish directory: dist
+Output directory: dist
 ```
 
 ## 13. ログインUIと保存関数
@@ -420,7 +419,7 @@ http://localhost:5173/login
 https://YOUR_PUBLIC_DOMAIN/login
 ```
 
-`YOUR_PUBLIC_DOMAIN` はVercelやNetlifyで実際に公開しているドメインに置き換えてください。
+`YOUR_PUBLIC_DOMAIN` はVercelで実際に公開しているドメインに置き換えてください。
 service_role keyやGoogle Client Secretはフロントエンド、`.env.local`、Vercelの公開環境変数には置かないでください。
 
 ログイン中ユーザーはAccount画面の「Googleアカウントを連携」から、既存のメール/パスワードアカウントへGoogleログインを後付けできます。

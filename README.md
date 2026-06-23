@@ -11,7 +11,7 @@ Current public-ready scope:
 - PWA foundation
 - Supabase connection and solve session save helpers
 - Supabase email login, admin page, role management, and password reset emails
-- Netlify deployment configuration
+- Vercel deployment configuration
 
 Some analyzer and learning features are still in progress. The app can be published now, then updated later by pushing new commits to GitHub.
 
@@ -43,4 +43,4 @@ Never commit `.env.local` or a Supabase `service_role` key.
 
 ## Deploy
 
-See [DEPLOY.md](./DEPLOY.md) for the full GitHub, Supabase, and Netlify setup guide.
+See [DEPLOY.md](./DEPLOY.md) for the full GitHub, Supabase, and Vercel setup guide.

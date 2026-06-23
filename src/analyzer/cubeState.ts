@@ -24,6 +24,13 @@ export interface CubeState {
   pieces: CubePiece[];
 }
 
+export type CubeStickerColorGrid = Record<FaceName, CubeColorName[]>;
+
+export interface CubeStateFromStickerColorsResult {
+  state: CubeState | null;
+  errors: string[];
+}
+
 export interface CrossSolution {
   id: string;
   color: CubeColorName;
@@ -181,10 +188,22 @@ export interface CrossSearchInput {
   crossColor: CubeColorName;
   targetFace: TargetFace;
   faceColorMap: Record<FaceName, CubeColorName>;
-  scrambleMoves: string[];
+  scrambleMoves?: string[];
+  initialState?: CubeState;
   maxDepth?: number;
   maxSolutions?: number;
   maxNodes?: number;
+}
+
+interface NormalizedCrossSearchInput {
+  crossColor: CubeColorName;
+  targetFace: TargetFace;
+  faceColorMap: Record<FaceName, CubeColorName>;
+  scrambleMoves: string[];
+  initialState: CubeState;
+  maxDepth: number;
+  maxSolutions: number;
+  maxNodes: number;
 }
 
 interface CrossEdgePieceState {
@@ -224,6 +243,81 @@ const FACE_VECTORS: Record<FaceName, Vec3> = {
   R: [1, 0, 0],
   L: [-1, 0, 0],
 };
+
+const FACE_STICKER_COORDS: Record<FaceName, Vec3[]> = {
+  U: [
+    [-1, 1, -1],
+    [0, 1, -1],
+    [1, 1, -1],
+    [-1, 1, 0],
+    [0, 1, 0],
+    [1, 1, 0],
+    [-1, 1, 1],
+    [0, 1, 1],
+    [1, 1, 1],
+  ],
+  D: [
+    [-1, -1, 1],
+    [0, -1, 1],
+    [1, -1, 1],
+    [-1, -1, 0],
+    [0, -1, 0],
+    [1, -1, 0],
+    [-1, -1, -1],
+    [0, -1, -1],
+    [1, -1, -1],
+  ],
+  F: [
+    [-1, 1, 1],
+    [0, 1, 1],
+    [1, 1, 1],
+    [-1, 0, 1],
+    [0, 0, 1],
+    [1, 0, 1],
+    [-1, -1, 1],
+    [0, -1, 1],
+    [1, -1, 1],
+  ],
+  B: [
+    [1, 1, -1],
+    [0, 1, -1],
+    [-1, 1, -1],
+    [1, 0, -1],
+    [0, 0, -1],
+    [-1, 0, -1],
+    [1, -1, -1],
+    [0, -1, -1],
+    [-1, -1, -1],
+  ],
+  R: [
+    [1, 1, 1],
+    [1, 1, 0],
+    [1, 1, -1],
+    [1, 0, 1],
+    [1, 0, 0],
+    [1, 0, -1],
+    [1, -1, 1],
+    [1, -1, 0],
+    [1, -1, -1],
+  ],
+  L: [
+    [-1, 1, -1],
+    [-1, 1, 0],
+    [-1, 1, 1],
+    [-1, 0, -1],
+    [-1, 0, 0],
+    [-1, 0, 1],
+    [-1, -1, -1],
+    [-1, -1, 0],
+    [-1, -1, 1],
+  ],
+};
+
+const FACE_STICKER_INDEX_BY_COORD = new Map<string, number>(
+  (Object.entries(FACE_STICKER_COORDS) as Array<[FaceName, Vec3[]]>).flatMap(
+    ([face, coords]) => coords.map((coord, index) => [`${face}:${vectorKey(coord)}`, index]),
+  ),
+);
 
 const FACE_CODE_BY_NAME: Record<FaceName, number> = {
   U: 0,
@@ -557,6 +651,156 @@ export function createSolvedCubeState(faceColorMap: Record<FaceName, CubeColorNa
   return {
     faceColorMap,
     pieces,
+  };
+}
+
+function createColorCountMap(): Record<CubeColorName, number> {
+  return {
+    white: 0,
+    yellow: 0,
+    blue: 0,
+    green: 0,
+    red: 0,
+    orange: 0,
+  };
+}
+
+function isCubeColorName(value: unknown): value is CubeColorName {
+  return (
+    value === "white" ||
+    value === "yellow" ||
+    value === "blue" ||
+    value === "green" ||
+    value === "red" ||
+    value === "orange"
+  );
+}
+
+export function createSolvedStickerColorGrid(
+  faceColorMap: Record<FaceName, CubeColorName>,
+): CubeStickerColorGrid {
+  return {
+    U: Array<CubeColorName>(9).fill(faceColorMap.U),
+    D: Array<CubeColorName>(9).fill(faceColorMap.D),
+    F: Array<CubeColorName>(9).fill(faceColorMap.F),
+    B: Array<CubeColorName>(9).fill(faceColorMap.B),
+    R: Array<CubeColorName>(9).fill(faceColorMap.R),
+    L: Array<CubeColorName>(9).fill(faceColorMap.L),
+  };
+}
+
+export function cubeStateToStickerColorGrid(state: CubeState): CubeStickerColorGrid {
+  const grid = createSolvedStickerColorGrid(state.faceColorMap);
+
+  state.pieces.forEach((piece) => {
+    piece.stickers.forEach((sticker) => {
+      const index = FACE_STICKER_INDEX_BY_COORD.get(
+        `${sticker.face}:${vectorKey(piece.coord)}`,
+      );
+
+      if (index !== undefined) {
+        grid[sticker.face][index] = sticker.color;
+      }
+    });
+  });
+
+  return grid;
+}
+
+export function createCubeStateFromStickerColors(
+  stickerColors: CubeStickerColorGrid,
+  faceColorMap: Record<FaceName, CubeColorName>,
+): CubeStateFromStickerColorsResult {
+  const errors: string[] = [];
+  const colorCounts = createColorCountMap();
+  const stickersByCoord = new Map<string, { coord: Vec3; stickers: CubieSticker[] }>();
+  const solvedPieces = createSolvedCubeState(faceColorMap).pieces;
+  const expectedPieceKinds = new Map(solvedPieces.map((piece) => [piece.id, piece.kind]));
+
+  (Object.keys(FACE_STICKER_COORDS) as FaceName[]).forEach((face) => {
+    const colors = stickerColors[face];
+
+    if (!Array.isArray(colors) || colors.length !== 9) {
+      errors.push(`${face}面のステッカー数が9個ではありません。`);
+      return;
+    }
+
+    colors.forEach((color, index) => {
+      if (!isCubeColorName(color)) {
+        errors.push(`${face}${index + 1}に未対応の色があります。`);
+        return;
+      }
+
+      colorCounts[color] += 1;
+
+      if (index === 4 && color !== faceColorMap[face]) {
+        errors.push(`${face}面センターは${faceColorMap[face]}で固定です。`);
+      }
+
+      const coord = FACE_STICKER_COORDS[face][index];
+      const nonZeroCount = coord.filter((value) => value !== 0).length;
+
+      if (nonZeroCount < 2) {
+        return;
+      }
+
+      const coordKey = vectorKey(coord);
+      const entry = stickersByCoord.get(coordKey) ?? {
+        coord,
+        stickers: [],
+      };
+
+      entry.stickers.push({ color, face });
+      stickersByCoord.set(coordKey, entry);
+    });
+  });
+
+  (Object.entries(colorCounts) as Array<[CubeColorName, number]>).forEach(([color, count]) => {
+    if (count !== 9) {
+      errors.push(`${color} が${count}枚です。各色9枚にしてください。`);
+    }
+  });
+
+  const seenPieceIds = new Set<string>();
+  const pieces: CubePiece[] = [];
+
+  stickersByCoord.forEach((entry) => {
+    const kind: PieceKind = entry.stickers.length === 2 ? "edge" : "corner";
+    const id = entry.stickers.map((sticker) => sticker.color).sort().join("-");
+    const expectedKind = expectedPieceKinds.get(id);
+    const positionLabel = getCoordLabel(entry.coord) || entry.coord.join(",");
+
+    if (entry.stickers.length !== 2 && entry.stickers.length !== 3) {
+      errors.push(`${positionLabel}のステッカー構成が正しくありません。`);
+      return;
+    }
+
+    if (!expectedKind || expectedKind !== kind) {
+      errors.push(`${positionLabel}の色組み合わせが実在する${kind}ではありません。`);
+      return;
+    }
+
+    if (seenPieceIds.has(id)) {
+      errors.push(`${id} のピースが重複しています。`);
+      return;
+    }
+
+    seenPieceIds.add(id);
+    pieces.push({
+      id,
+      kind,
+      coord: [...entry.coord] as Vec3,
+      stickers: entry.stickers.map((sticker) => ({ ...sticker })),
+    });
+  });
+
+  if (pieces.length !== 20) {
+    errors.push(`認識できたピースが${pieces.length}個です。20個になるようにしてください。`);
+  }
+
+  return {
+    state: errors.length === 0 ? { faceColorMap: { ...faceColorMap }, pieces } : null,
+    errors,
   };
 }
 
@@ -1141,6 +1385,31 @@ function createSolvedCrossEdgeState(
   });
 }
 
+function createCrossEdgeStateFromCubeState(
+  state: CubeState,
+  crossColor: CubeColorName,
+  targetFace: TargetFace,
+): CrossEdgePieceState[] {
+  return getCrossSideFaces(targetFace).map((sideFace) => {
+    const sideColor = state.faceColorMap[sideFace];
+    const piece = getPieceByColors(state, "edge", [crossColor, sideColor]);
+    const crossStickerFace = getStickerFace(piece, crossColor);
+    const sideStickerFace = getStickerFace(piece, sideColor);
+
+    if (!piece || !crossStickerFace || !sideStickerFace) {
+      throw new Error(`${crossColor}-${sideColor} のクロスエッジを認識できませんでした。`);
+    }
+
+    return {
+      sideColor,
+      sideFace,
+      coord: [...piece.coord] as Vec3,
+      crossStickerFace,
+      sideStickerFace,
+    };
+  });
+}
+
 function cloneCrossEdges(edges: CrossEdgePieceState[]): CrossEdgePieceState[] {
   return edges.map((edge) => ({
     sideColor: edge.sideColor,
@@ -1227,15 +1496,12 @@ function crossEdgeStateToStatuses(
 }
 
 function createCrossSolutionFromPath(
-  input: Required<CrossSearchInput>,
+  input: NormalizedCrossSearchInput,
   path: string[],
   index: number,
   nodes: number,
 ): CrossSolution {
-  const stateAfterCross = applyAlgorithm(
-    createSolvedCubeState(input.faceColorMap),
-    [...input.scrambleMoves, ...path],
-  );
+  const stateAfterCross = applyAlgorithm(input.initialState, path);
 
   return {
     id: `${input.crossColor}-${input.targetFace}-${index}`,
@@ -1315,7 +1581,7 @@ function searchCrossWithPruning(
   path: string[],
   lastMove: string | null,
   seenPath: Set<number>,
-  input: Required<CrossSearchInput>,
+  input: NormalizedCrossSearchInput,
   pruningTable: CrossPruningTable,
   solutions: CrossSolution[],
   nodeCounter: { nodes: number; truncated: boolean },
@@ -1387,19 +1653,23 @@ function searchCrossWithPruning(
 }
 
 export function findCrossSolutionsFromScramble(input: CrossSearchInput): CrossSearchResult {
-  const normalizedInput: Required<CrossSearchInput> = {
+  const scrambleMoves = input.scrambleMoves ?? [];
+  const initialState =
+    input.initialState ?? applyAlgorithm(createSolvedCubeState(input.faceColorMap), scrambleMoves);
+  const normalizedInput: NormalizedCrossSearchInput = {
     maxDepth: CROSS_SEARCH_MAX_DEPTH,
     maxSolutions: 5,
     maxNodes: CROSS_SEARCH_NODE_LIMIT,
     ...input,
+    scrambleMoves,
+    initialState,
   };
-  const solvedEdges = createSolvedCrossEdgeState(
-    normalizedInput.faceColorMap,
+  const startEdges = createCrossEdgeStateFromCubeState(
+    normalizedInput.initialState,
     normalizedInput.crossColor,
     normalizedInput.targetFace,
   );
-  const solvedKey = encodeCrossEdgeStateKey(solvedEdges);
-  const scrambledKey = applyAlgorithmToCrossStateKey(solvedKey, normalizedInput.scrambleMoves);
+  const scrambledKey = encodeCrossEdgeStateKey(startEdges);
   const pruningTable = getCrossPruningTable(normalizedInput.targetFace);
   const startDistance = pruningTable.distances[scrambledKey];
   const solutions: CrossSolution[] = [];

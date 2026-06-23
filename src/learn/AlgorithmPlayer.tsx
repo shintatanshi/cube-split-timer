@@ -472,28 +472,6 @@ function addSlotHighlight(group: THREE.Group, slot: string) {
   group.add(slotBox);
 }
 
-function addOllHighlights(group: THREE.Group, pattern: LearningSticker[]) {
-  pattern.forEach((sticker, index) => {
-    if (sticker !== "primary") {
-      return;
-    }
-
-    const row = Math.floor(index / 3);
-    const column = index % 3;
-    const plane = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.74, 0.74),
-      new THREE.MeshBasicMaterial({
-        color: CUBE_COLORS.U,
-        opacity: 0.34,
-        transparent: true,
-      }),
-    );
-    plane.position.set(column - 1, 1.54, 1 - row);
-    plane.rotation.x = -Math.PI / 2;
-    group.add(plane);
-  });
-}
-
 function addPllArrow(group: THREE.Group, arrow: PllArrow) {
   const from = getSpotVector(arrow.from, 0.82);
   const to = getSpotVector(arrow.to, 0.82);
@@ -535,7 +513,6 @@ function applyHighlights(group: THREE.Group, caseItem: LearningCase, focus: Reso
   }
 
   if (caseItem.highlightConfig.kind === "oll") {
-    addOllHighlights(highlightGroup, caseItem.highlightConfig.yellowPattern);
     return;
   }
 
@@ -795,7 +772,7 @@ export default function AlgorithmPlayer({
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.45);
     keyLight.position.set(3.5, 4.8, 5.5);
     scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(0x77a7ff, 0.85);
+    const fillLight = new THREE.DirectionalLight(0x4fd1b0, 0.85);
     fillLight.position.set(-5, 2, 4);
     scene.add(fillLight);
 

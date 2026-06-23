@@ -401,7 +401,7 @@ export default function ScramblePreviewPage({
     keyLight.position.set(3.5, 4.8, 5.5);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0x77a7ff, 0.85);
+    const fillLight = new THREE.DirectionalLight(0x4fd1b0, 0.85);
     fillLight.position.set(-5, 2, 4);
     scene.add(fillLight);
 

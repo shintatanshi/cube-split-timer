@@ -81,6 +81,9 @@ const AdminPage = lazy(() => import("./admin/AdminPage"));
 
 type AppPage =
   | "timer"
+  | "history"
+  | "analysis"
+  | "practice"
   | "help"
   | "learn"
   | "analyzer"
@@ -255,28 +258,53 @@ interface LocalImportResult {
   total: number;
 }
 
+interface AppNavItem {
+  key: AppPage;
+  label: string;
+  path: string;
+}
+
+const APP_NAV_ITEMS: AppNavItem[] = [
+  { key: "timer", label: "計測", path: "/" },
+  { key: "learn", label: "学ぶ", path: "/learn" },
+  { key: "analyzer", label: "解析", path: "/analyzer" },
+  { key: "history", label: "履歴", path: "/history" },
+  { key: "analysis", label: "分析", path: "/analysis" },
+  { key: "practice", label: "練習", path: "/practice" },
+  { key: "help", label: "ヘルプ", path: "/help" },
+  { key: "feedback", label: "意見箱", path: "/feedback" },
+];
+
 function getLocationInfo(): LocationInfo {
   const { pathname, hash } = window.location;
+  let page: AppPage = "timer";
+
+  if (pathname === "/history" || (pathname === "/" && hash === "#history")) {
+    page = "history";
+  } else if (pathname === "/analysis" || (pathname === "/" && hash === "#analysis")) {
+    page = "analysis";
+  } else if (pathname === "/practice" || (pathname === "/" && hash === "#practice")) {
+    page = "practice";
+  } else if (pathname === "/help") {
+    page = "help";
+  } else if (pathname.startsWith("/learn")) {
+    page = "learn";
+  } else if (pathname === "/analyzer") {
+    page = "analyzer";
+  } else if (pathname === "/scramble") {
+    page = "scramble";
+  } else if (pathname === "/feedback") {
+    page = "feedback";
+  } else if (pathname === "/login") {
+    page = "login";
+  } else if (pathname === "/admin") {
+    page = "admin";
+  } else if (pathname === "/reset-password") {
+    page = "reset-password";
+  }
 
   return {
-    page:
-      pathname === "/help"
-        ? "help"
-        : pathname.startsWith("/learn")
-          ? "learn"
-          : pathname === "/analyzer"
-            ? "analyzer"
-            : pathname === "/scramble"
-              ? "scramble"
-              : pathname === "/feedback"
-                ? "feedback"
-                : pathname === "/login"
-                  ? "login"
-                  : pathname === "/admin"
-                    ? "admin"
-                    : pathname === "/reset-password"
-                      ? "reset-password"
-                      : "timer",
+    page,
     path: pathname,
     hash,
   };
@@ -533,6 +561,58 @@ function copyTextWithFallback(text: string): Promise<void> {
   document.body.removeChild(textarea);
 
   return Promise.resolve();
+}
+
+interface GlobalAppNavProps {
+  activePage: AppPage;
+  isAdmin: boolean;
+  onNavigate: (path: string) => void;
+  onOpenLogin: () => void;
+  authLabel: string;
+  isAuthLoading: boolean;
+  isSignedIn: boolean;
+}
+
+function GlobalAppNav({
+  activePage,
+  isAdmin,
+  onNavigate,
+  onOpenLogin,
+  authLabel,
+  isAuthLoading,
+  isSignedIn,
+}: GlobalAppNavProps) {
+  const visibleItems = isAdmin
+    ? [...APP_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
+    : APP_NAV_ITEMS;
+
+  return (
+    <nav className="global-app-nav" aria-label="Primary navigation">
+      <button className="global-brand" type="button" onClick={() => onNavigate("/")}>
+        <span>Cube Split Timer</span>
+        <small>計測・学習・解析</small>
+      </button>
+      <div className="global-nav-links">
+        {visibleItems.map((item) => {
+          const isCurrent = activePage === item.key;
+
+          return (
+            <button
+              type="button"
+              key={item.key}
+              aria-current={isCurrent ? "page" : undefined}
+              onClick={() => onNavigate(item.path)}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+      <button className="global-account-button" type="button" onClick={onOpenLogin}>
+        {isAuthLoading ? "アカウント" : isSignedIn ? authLabel : "ログイン"}
+      </button>
+    </nav>
+  );
 }
 
 export default function App() {
@@ -1595,18 +1675,21 @@ const handleTimerPointerCancel = useCallback(
   }, [shareText, todaySolves, todayStats]);
 
   const navigateTo = useCallback((path: string, hash = "") => {
-    const nextUrl = `${path}${hash}`;
+    const [pathname, inlineHash = ""] = path.split("#");
+    const nextHash = hash || (inlineHash ? `#${inlineHash}` : "");
+    const nextPath = pathname || "/";
+    const nextUrl = `${nextPath}${nextHash}`;
 
     window.history.pushState(null, "", nextUrl);
     setLocationInfo(getLocationInfo());
 
     window.setTimeout(() => {
-      if (!hash) {
+      if (!nextHash) {
         window.scrollTo({ top: 0 });
         return;
       }
 
-      document.getElementById(hash.slice(1))?.scrollIntoView({ block: "start" });
+      document.getElementById(nextHash.slice(1))?.scrollIntoView({ block: "start" });
     }, 0);
   }, []);
 
@@ -1724,6 +1807,17 @@ const handleTimerPointerCancel = useCallback(
     .join(" ");
   const timerDisplayText = isPreparingToStart ? "0.00" : formatTime(elapsedMs);
   const timerButtonHint = getTimerPrepareHint(timerState, timerMode);
+  const globalNav = (
+    <GlobalAppNav
+      activePage={locationInfo.page}
+      isAdmin={authProfile?.role === "admin"}
+      onNavigate={navigateTo}
+      onOpenLogin={openLogin}
+      authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
+      isAuthLoading={isAuthLoading}
+      isSignedIn={Boolean(authUser)}
+    />
+  );
 
   if (timerState === "running") {
     const currentCfopPhase =
@@ -1773,167 +1867,366 @@ const handleTimerPointerCancel = useCallback(
 
   if (locationInfo.page === "help") {
     return (
-      <HelpPage
-        activeTopicId={getHelpTopicId(locationInfo.hash)}
-        onBack={closeHelp}
-        onOpenTimer={openTimer}
-      />
+      <>
+        {globalNav}
+        <HelpPage
+          activeTopicId={getHelpTopicId(locationInfo.hash)}
+          onBack={closeHelp}
+          onOpenTimer={openTimer}
+        />
+      </>
     );
   }
 
   if (locationInfo.page === "learn") {
     return (
-      <Suspense
-        fallback={
-          <main className="app-shell learn-page">
-            <div className="notice" role="status">
-              Learnページを読み込んでいます。
-            </div>
-          </main>
-        }
-      >
-        <LearnPage path={locationInfo.path} onNavigate={navigateTo} onOpenTimer={openTimer} />
-      </Suspense>
+      <>
+        {globalNav}
+        <Suspense
+          fallback={
+            <main className="app-shell learn-page">
+              <div className="notice" role="status">
+                Learnページを読み込んでいます。
+              </div>
+            </main>
+          }
+        >
+          <LearnPage path={locationInfo.path} onNavigate={navigateTo} onOpenTimer={openTimer} />
+        </Suspense>
+      </>
     );
   }
 
   if (locationInfo.page === "analyzer") {
     return (
-      <Suspense
-        fallback={
-          <main className="app-shell analyzer-page">
-            <div className="notice" role="status">
-              Analyzerページを読み込んでいます。
-            </div>
-          </main>
-        }
-      >
-        <AnalyzerPage onNavigate={navigateTo} onOpenTimer={openTimer} />
-      </Suspense>
+      <>
+        {globalNav}
+        <Suspense
+          fallback={
+            <main className="app-shell analyzer-page">
+              <div className="notice" role="status">
+                Analyzerページを読み込んでいます。
+              </div>
+            </main>
+          }
+        >
+          <AnalyzerPage onNavigate={navigateTo} onOpenTimer={openTimer} />
+        </Suspense>
+      </>
     );
   }
 
   if (locationInfo.page === "scramble") {
     return (
-      <Suspense
-        fallback={
-          <main className="app-shell scramble-preview-page">
-            <div className="notice" role="status">
-              スクランブル確認ページを読み込んでいます。
-            </div>
-          </main>
-        }
-      >
-        <ScramblePreviewPage onNavigate={navigateTo} onOpenTimer={openTimer} />
-      </Suspense>
+      <>
+        {globalNav}
+        <Suspense
+          fallback={
+            <main className="app-shell scramble-preview-page">
+              <div className="notice" role="status">
+                スクランブル確認ページを読み込んでいます。
+              </div>
+            </main>
+          }
+        >
+          <ScramblePreviewPage onNavigate={navigateTo} onOpenTimer={openTimer} />
+        </Suspense>
+      </>
     );
   }
 
   if (locationInfo.page === "feedback") {
     return (
-      <FeedbackPage
-        currentScramble={scramble}
-        timerMode={timerMode}
-        onBack={openTimer}
-        onOpenTimer={openTimer}
-      />
+      <>
+        {globalNav}
+        <FeedbackPage
+          currentScramble={scramble}
+          timerMode={timerMode}
+          onBack={openTimer}
+          onOpenTimer={openTimer}
+        />
+      </>
     );
   }
 
   if (locationInfo.page === "login") {
     return (
-      <AuthPage
-        user={authUser}
-        isAdmin={authProfile?.role === "admin"}
-        isLoading={isAuthLoading}
-        isConfigured={isAuthConfigured()}
-        onBack={openTimer}
-        onOpenTimer={openTimer}
-        onOpenAdmin={openAdmin}
-        onSignedIn={(message) => {
-          setAuthNotice(message);
-          openTimer();
-        }}
-        onSignedOut={handleSignOut}
-        localSolveCount={activeSolves.length}
-        onExportLocalSolves={exportLocalSolves}
-        onImportLocalSolves={importLocalSolves}
-        onUploadLocalSolves={uploadLocalSolvesToAccount}
-      />
+      <>
+        {globalNav}
+        <AuthPage
+          user={authUser}
+          isAdmin={authProfile?.role === "admin"}
+          isLoading={isAuthLoading}
+          isConfigured={isAuthConfigured()}
+          onBack={openTimer}
+          onOpenTimer={openTimer}
+          onOpenAdmin={openAdmin}
+          onSignedIn={(message) => {
+            setAuthNotice(message);
+            openTimer();
+          }}
+          onSignedOut={handleSignOut}
+          localSolveCount={activeSolves.length}
+          onExportLocalSolves={exportLocalSolves}
+          onImportLocalSolves={importLocalSolves}
+          onUploadLocalSolves={uploadLocalSolvesToAccount}
+        />
+      </>
     );
   }
 
   if (locationInfo.page === "admin") {
     return (
-      <Suspense
-        fallback={
-          <main className="app-shell admin-page">
-            <div className="notice" role="status">
-              管理者画面を読み込んでいます。
-            </div>
-          </main>
-        }
-      >
-        <AdminPage user={authUser} onOpenLogin={openLogin} onOpenTimer={openTimer} />
-      </Suspense>
+      <>
+        {globalNav}
+        <Suspense
+          fallback={
+            <main className="app-shell admin-page">
+              <div className="notice" role="status">
+                管理者画面を読み込んでいます。
+              </div>
+            </main>
+          }
+        >
+          <AdminPage user={authUser} onOpenLogin={openLogin} onOpenTimer={openTimer} />
+        </Suspense>
+      </>
     );
   }
 
   if (locationInfo.page === "reset-password") {
-    return <ResetPasswordPage onOpenLogin={openLogin} onOpenTimer={openTimer} />;
+    return (
+      <>
+        {globalNav}
+        <ResetPasswordPage onOpenLogin={openLogin} onOpenTimer={openTimer} />
+      </>
+    );
+  }
+
+  if (locationInfo.page === "analysis") {
+    return (
+      <>
+        {globalNav}
+        <main className="app-shell">
+          <header className="app-header">
+            <div>
+              <p className="eyebrow">Analysis</p>
+              <h1>記録分析</h1>
+            </div>
+            <div className="header-actions">
+              <button className="ghost-button" type="button" onClick={shareTodaySummary}>
+                今日のまとめ共有
+              </button>
+              <HelpButton label="Open analysis help" onClick={() => openHelp("cfop")} />
+            </div>
+          </header>
+
+          <section className="quick-stats" aria-label="Quick statistics">
+            <StatCard label="ao5" value={formatAverage(stats.ao5)} />
+            <StatCard label="ao12" value={formatAverage(stats.ao12)} />
+          </section>
+
+          <section className="stats-grid" aria-label="Statistics">
+            <StatCard label="Solves" value={String(stats.count)} />
+            <StatCard label="Average" value={formatAverage(stats.average)} />
+            <StatCard label="Best" value={formatAverage(stats.best)} />
+            <StatCard label="Worst" value={formatAverage(stats.worst)} />
+          </section>
+
+          <section className="analysis-section" aria-label="Analysis">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Session</p>
+                <h2>Session Overview</h2>
+              </div>
+            </div>
+
+            <div className="analysis-grid">
+              <StatCard label="Solves" value={String(stats.count)} />
+              <StatCard label="Average" value={formatAverage(stats.average)} />
+              <StatCard label="Best" value={formatAverage(stats.best)} />
+              <StatCard label="Worst" value={formatAverage(stats.worst)} />
+              <StatCard label="ao5" value={formatAverage(stats.ao5)} />
+              <StatCard label="ao12" value={formatAverage(stats.ao12)} />
+              <StatCard label="ao50" value={formatAverage(stats.ao50)} />
+              <StatCard label="ao100" value={formatAverage(stats.ao100)} />
+            </div>
+
+            <article className="weak-phase-card">
+              <div>
+                <p className="eyebrow">Weak Phase</p>
+                <h3>苦手フェーズ</h3>
+              </div>
+              {weakPhase ? (
+                <div className="weak-phase-result">
+                  <strong>{weakPhase.label}</strong>
+                  <span>
+                    平均 {formatTime(weakPhase.average)}
+                    {weakPhase.delta > 0 &&
+                      ` / フェーズ平均より ${formatTime(weakPhase.delta)} 遅め`}
+                  </span>
+                </div>
+              ) : (
+                <p>CFOP Splitの記録がまだありません。</p>
+              )}
+            </article>
+
+            <div className="analysis-subheading">
+              <p className="eyebrow">CFOP Split</p>
+              <h3>Phase Stats</h3>
+            </div>
+            <div className="phase-grid">
+              {CFOP_PHASES.map(({ phase, label }) => (
+                <PhaseStatCard key={phase} label={label} stat={cfopPhaseStats[phase]} />
+              ))}
+            </div>
+
+            <RecentChart solves={recentChartSolves} />
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  if (locationInfo.page === "practice") {
+    return (
+      <>
+        {globalNav}
+        <main className="app-shell">
+          <header className="app-header">
+            <div>
+              <p className="eyebrow">Practice</p>
+              <h1>練習モード</h1>
+            </div>
+            <HelpButton label="Open practice help" onClick={() => openHelp("practice")} />
+          </header>
+
+          <section className="practice-section" aria-label="Practice statistics">
+            <div className="practice-grid">
+              <PracticeStatCard title="Cross Practice" stats={practiceStats.crossPractice} />
+              <PracticeStatCard title="F2L Practice" stats={practiceStats.f2lPractice} />
+              <PracticeStatCard title="F2L Pair Split" stats={practiceStats.f2lPairSplit} />
+            </div>
+
+            <div className="analysis-subheading">
+              <p className="eyebrow">F2L Pair Split</p>
+              <h3>Pair Stats</h3>
+            </div>
+            <div className="phase-grid pair-grid" aria-label="F2L pair statistics">
+              {F2L_PAIR_PHASES.map(({ phase, label }) => (
+                <PhaseStatCard key={phase} label={label} stat={practiceStats.pairs[phase]} />
+              ))}
+            </div>
+
+            <div className="practice-history-grid">
+              <PracticeHistory title="Cross History" solves={crossPracticeHistory} />
+              <PracticeHistory title="F2L History" solves={f2lPracticeHistory} />
+              <PracticeHistory title="F2L Pair History" solves={f2lPairHistory} />
+            </div>
+          </section>
+        </main>
+      </>
+    );
+  }
+
+  if (locationInfo.page === "history") {
+    return (
+      <>
+        {globalNav}
+        <main className="app-shell">
+          <header className="app-header">
+            <div>
+              <p className="eyebrow">Latest 100</p>
+              <h1>履歴</h1>
+            </div>
+            <HelpButton label="Open history help" onClick={() => openHelp("penalty-delete")} />
+          </header>
+
+          <section className="history-section" aria-label="History">
+            {recentSolves.length === 0 ? (
+              <div className="empty-state">
+                <p>No solves yet.</p>
+                <span>Start the timer to save your first local record.</span>
+              </div>
+            ) : (
+              <ol className="history-list">
+                {recentSolves.map((solve) => (
+                  <li className="history-item" key={solve.id}>
+                    <div className="history-main">
+                      <div>
+                        <p className="history-time">
+                          {formatSolveTime(solve)}
+                          {solve.penalty === "+2" && <span> +2</span>}
+                        </p>
+                        <p className="history-meta">
+                          <span className="mode-badge">{getModeLabel(solve.mode)}</span>
+                          {formatDateTime(solve.createdAt)}
+                        </p>
+                      </div>
+                      <p className="history-scramble">{solve.scramble}</p>
+                      {getSavedSplits(solve).length > 0 && (
+                        <div className="history-splits" aria-label="Saved splits">
+                          {getSavedSplits(solve).map((split) => (
+                            <span key={split.key}>
+                              {split.label} {formatTime(split.time)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="history-actions">
+                      <button type="button" onClick={() => shareSolve(solve)}>
+                        Share
+                      </button>
+                      <button type="button" onClick={() => updatePenalty(solve.id, "+2")}>
+                        {solve.penalty === "+2" ? "Clear +2" : "+2"}
+                      </button>
+                      <button type="button" onClick={() => updatePenalty(solve.id, "DNF")}>
+                        {solve.penalty === "DNF" ? "Clear DNF" : "DNF"}
+                      </button>
+                      <button type="button" onClick={() => softDeleteSolve(solve.id)}>
+                        Delete
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </section>
+        </main>
+      </>
+    );
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">3x3 speedcubing timer</p>
-          <h1>Cube Split Timer</h1>
-        </div>
-        <div className="header-actions">
-          <button className="ghost-button" type="button" onClick={() => navigateTo("/learn")}>
-            Learn
-          </button>
-          <button className="ghost-button" type="button" onClick={() => navigateTo("/analyzer")}>
-            Analyzer
-          </button>
-          <button className="ghost-button" type="button" onClick={openFeedback}>
-            意見箱
-          </button>
-          {authProfile?.role === "admin" && (
-            <button className="ghost-button" type="button" onClick={openAdmin}>
-              Admin
-            </button>
-          )}
-          <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
-          {authUser ? (
-            <div className="auth-chip" aria-label="Logged in account">
-              <button className="auth-chip-main" type="button" onClick={openLogin}>
-                {getAuthUserLabel(authUser)}
-              </button>
-              <button className="auth-chip-logout" type="button" onClick={() => void handleSignOut()}>
-                Logout
-              </button>
-            </div>
-          ) : (
-            <button className="ghost-button auth-login-button" type="button" onClick={openLogin}>
-              {isAuthLoading ? "..." : "Login"}
-            </button>
-          )}
-          <div className="theme-control" aria-label="Theme setting">
-            <label htmlFor="theme-select">Theme</label>
-            <select
-              id="theme-select"
-              value={themePreference}
-              onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
-            >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="system">System</option>
-            </select>
+    <>
+      {globalNav}
+      <main className="app-shell">
+        <header className="app-header app-home-header">
+          <div>
+            <p className="eyebrow">3x3 speedcubing timer</p>
+            <h1>Cube Split Timer</h1>
+            <p className="app-header-copy">
+              スクランブルを確認して、モードを選んだらすぐ計測できます。
+            </p>
           </div>
-        </div>
-      </header>
+          <div className="header-actions">
+            <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
+            <div className="theme-control" aria-label="Theme setting">
+              <label htmlFor="theme-select">Theme</label>
+              <select
+                id="theme-select"
+                value={themePreference}
+                onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
+              >
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="system">System</option>
+              </select>
+            </div>
+          </div>
+        </header>
 
       {draftMessage && (
         <div className="notice" role="status">
@@ -1967,9 +2260,6 @@ const handleTimerPointerCancel = useCallback(
               </button>
             ))}
           </div>
-          <button className="ghost-button" type="button" onClick={openFeedback}>
-            意見箱
-          </button>
           <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
         </div>
 
@@ -2044,214 +2334,11 @@ const handleTimerPointerCancel = useCallback(
         </div>
       )}
 
-      <section className="quick-stats" aria-label="Quick statistics">
-        <StatCard label="ao5" value={formatAverage(stats.ao5)} />
-        <StatCard label="ao12" value={formatAverage(stats.ao12)} />
-      </section>
-
-      <section className="stats-grid" aria-label="Statistics">
-        <StatCard label="Solves" value={String(stats.count)} />
-        <StatCard label="Average" value={formatAverage(stats.average)} />
-        <StatCard label="Best" value={formatAverage(stats.best)} />
-        <StatCard label="Worst" value={formatAverage(stats.worst)} />
-      </section>
-
-      <section className="analysis-section" id="analysis" aria-label="Analysis">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Analysis</p>
-            <h2>Session Overview</h2>
-          </div>
-          <div className="section-actions">
-            <button className="ghost-button" type="button" onClick={shareTodaySummary}>
-              今日のまとめ共有
-            </button>
-            <HelpButton label="Open analysis help" onClick={() => openHelp("cfop")} />
-          </div>
-        </div>
-
-        <div className="analysis-grid">
-          <StatCard label="Solves" value={String(stats.count)} />
-          <StatCard label="Average" value={formatAverage(stats.average)} />
-          <StatCard label="Best" value={formatAverage(stats.best)} />
-          <StatCard label="Worst" value={formatAverage(stats.worst)} />
-          <StatCard label="ao5" value={formatAverage(stats.ao5)} />
-          <StatCard label="ao12" value={formatAverage(stats.ao12)} />
-          <StatCard label="ao50" value={formatAverage(stats.ao50)} />
-          <StatCard label="ao100" value={formatAverage(stats.ao100)} />
-        </div>
-
-        <article className="weak-phase-card">
-          <div>
-            <p className="eyebrow">Weak Phase</p>
-            <h3>苦手フェーズ</h3>
-          </div>
-          {weakPhase ? (
-            <div className="weak-phase-result">
-              <strong>{weakPhase.label}</strong>
-              <span>
-                平均 {formatTime(weakPhase.average)}
-                {weakPhase.delta > 0 && ` / フェーズ平均より ${formatTime(weakPhase.delta)} 遅め`}
-              </span>
-            </div>
-          ) : (
-            <p>CFOP Splitの記録がまだありません。</p>
-          )}
-        </article>
-
-        <div className="analysis-subheading">
-          <p className="eyebrow">CFOP Split</p>
-          <h3>Phase Stats</h3>
-        </div>
-        <div className="phase-grid">
-          {CFOP_PHASES.map(({ phase, label }) => (
-            <PhaseStatCard key={phase} label={label} stat={cfopPhaseStats[phase]} />
-          ))}
-        </div>
-
-        <RecentChart solves={recentChartSolves} />
-      </section>
-
-      <section className="practice-section" id="practice" aria-label="Practice statistics">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Practice</p>
-            <h2>Practice Mode</h2>
-          </div>
-          <HelpButton label="Open practice help" onClick={() => openHelp("practice")} />
-        </div>
-
-        <div className="practice-grid">
-          <PracticeStatCard title="Cross Practice" stats={practiceStats.crossPractice} />
-          <PracticeStatCard title="F2L Practice" stats={practiceStats.f2lPractice} />
-          <PracticeStatCard title="F2L Pair Split" stats={practiceStats.f2lPairSplit} />
-        </div>
-
-        <div className="phase-grid pair-grid" aria-label="F2L pair statistics">
-          {F2L_PAIR_PHASES.map(({ phase, label }) => (
-            <PhaseStatCard key={phase} label={label} stat={practiceStats.pairs[phase]} />
-          ))}
-        </div>
-
-        <div className="practice-history-grid">
-          <PracticeHistory title="Cross History" solves={crossPracticeHistory} />
-          <PracticeHistory title="F2L History" solves={f2lPracticeHistory} />
-          <PracticeHistory title="F2L Pair History" solves={f2lPairHistory} />
-        </div>
-      </section>
-
-      <section className="history-section" id="history" aria-label="History">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Latest 100</p>
-            <h2>History</h2>
-          </div>
-          <HelpButton label="Open history help" onClick={() => openHelp("penalty-delete")} />
-        </div>
-
-        {recentSolves.length === 0 ? (
-          <div className="empty-state">
-            <p>No solves yet.</p>
-            <span>Start the timer to save your first local record.</span>
-          </div>
-        ) : (
-          <ol className="history-list">
-            {recentSolves.map((solve) => (
-              <li className="history-item" key={solve.id}>
-                <div className="history-main">
-                  <div>
-                    <p className="history-time">
-                      {formatSolveTime(solve)}
-                      {solve.penalty === "+2" && <span> +2</span>}
-                    </p>
-                    <p className="history-meta">
-                      <span className="mode-badge">{getModeLabel(solve.mode)}</span>
-                      {formatDateTime(solve.createdAt)}
-                    </p>
-                  </div>
-                  <p className="history-scramble">{solve.scramble}</p>
-                  {getSavedSplits(solve).length > 0 && (
-                    <div className="history-splits" aria-label="Saved splits">
-                      {getSavedSplits(solve).map((split) => (
-                        <span key={split.key}>
-                          {split.label} {formatTime(split.time)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="history-actions">
-                  <button type="button" onClick={() => shareSolve(solve)}>
-                    Share
-                  </button>
-                  <button type="button" onClick={() => updatePenalty(solve.id, "+2")}>
-                    {solve.penalty === "+2" ? "Clear +2" : "+2"}
-                  </button>
-                  <button type="button" onClick={() => updatePenalty(solve.id, "DNF")}>
-                    {solve.penalty === "DNF" ? "Clear DNF" : "DNF"}
-                  </button>
-                  <button type="button" onClick={() => softDeleteSolve(solve.id)}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      <nav className="bottom-nav" aria-label="Main navigation">
-        <a aria-current="page" href="#timer">
-          Timer
-        </a>
-        <a href="#history">History</a>
-        <a href="#analysis">Analysis</a>
-        <a href="#practice">Practice</a>
-        <a
-          href="/learn"
-          onClick={(event) => {
-            event.preventDefault();
-            navigateTo("/learn");
-          }}
-        >
-          Learn
-        </a>
-        <a
-          href="/analyzer"
-          onClick={(event) => {
-            event.preventDefault();
-            navigateTo("/analyzer");
-          }}
-        >
-          Analyzer
-        </a>
-        <a
-          href="/help"
-          onClick={(event) => {
-            event.preventDefault();
-            openHelp("overview");
-          }}
-        >
-          Help
-        </a>
-        {authProfile?.role === "admin" && (
-          <a
-            href="/admin"
-            onClick={(event) => {
-              event.preventDefault();
-              openAdmin();
-            }}
-          >
-            Admin
-          </a>
-        )}
-      </nav>
-
       {isTutorialOpen && (
         <TutorialDialog onClose={dismissTutorial} onOpenHelp={openHelpFromTutorial} />
       )}
-    </main>
+      </main>
+    </>
   );
 }
 

@@ -20,12 +20,18 @@ import {
 } from "../learn/viewpointMoves";
 import {
   CROSS_SEARCH_MAX_DEPTH,
+  applyAlgorithm,
+  createCubeStateFromStickerColors,
+  createSolvedCubeState,
+  createSolvedStickerColorGrid,
+  cubeStateToStickerColorGrid,
   getColorJapanese,
   getF2lPairCandidates,
 } from "./cubeState";
 import {
   recognizeOll,
   recognizePll,
+  type LastLayerRecognition,
   type LastLayerRecognitionResult,
 } from "./lastLayerRecognition";
 import type {
@@ -33,17 +39,30 @@ import type {
   BasicF2lAnalysisPlan,
   BasicF2lAnalysisStep,
   BasicF2lOrderAnalysisResult,
+  CubeState,
+  CubeStickerColorGrid,
   CrossSearchInput,
   CrossSearchResult,
   CrossSolution,
   F2lPairCandidate,
+  F2lSlotName,
 } from "./cubeState";
-import type { AnalyzerCandidate, LearningCase } from "../types";
+import type {
+  AnalyzerCandidate,
+  F2lPieceSpot,
+  LearningCase,
+  LearningCategory,
+  LearningSticker,
+  OllCaseImage,
+  PllCaseImage,
+} from "../types";
 
 type PlaybackMode = "scramble" | "scramble-solve";
+type AnalyzerInputMode = "scramble" | "color";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
 type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
 type AnalyzerQuickPhase = "cross" | "f2l" | "oll" | "pll";
+type LastLayerLearnPhase = "oll" | "pll";
 type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
 type CrossTargetFace = "D" | "U";
@@ -99,6 +118,7 @@ interface AnalyzerPageProps {
 interface Cubie {
   group: THREE.Group;
   coord: THREE.Vector3;
+  stickerColors: CubeColorName[];
 }
 
 interface SceneState {
@@ -111,6 +131,7 @@ interface SceneState {
   resizeObserver: ResizeObserver;
   animationStart: number;
   cubeScale: AnalyzerCubeScale;
+  pairHighlightSignature: string | null;
 }
 
 interface DragState {
@@ -124,7 +145,10 @@ interface DragState {
 interface StoredAnalyzerState {
   version: 1;
   settings: AnalyzerSettings;
+  inputMode?: AnalyzerInputMode;
   scrambleInput: string;
+  stickerColorGrid?: CubeStickerColorGrid;
+  selectedPaintColor?: CubeColorName;
   solveInput: string;
   playbackScrambleInput: string;
   playbackSolveInput: string;
@@ -134,6 +158,15 @@ interface StoredAnalyzerState {
   crossError: string | null;
   selectedCrossSolution: CrossSolution | null;
   selectedF2lPairId: string | null;
+  isF2lPairHighlightEnabled?: boolean;
+  helperCaseId?: string | null;
+  basicF2lPlan?: BasicF2lAnalysisPlan | null;
+  basicF2lOrderPlans?: BasicF2lAnalysisPlan[];
+  basicF2lComparedOrderCount?: number;
+  basicF2lAnalysisPhase?: BasicF2lAnalysisPhase | null;
+  showBasicF2lOrderDetails?: boolean;
+  basicF2lError?: string | null;
+  highlightF2lSteps?: BasicF2lAnalysisStep[];
 }
 
 const TURN_DURATION_MS = 360;
@@ -191,6 +224,8 @@ const COLOR_OPTIONS: Array<{ value: CubeColorName; label: string; shortLabel: st
   { value: "red", label: "Red", shortLabel: "R" },
   { value: "orange", label: "Orange", shortLabel: "O" },
 ];
+const COLOR_FACE_ORDER: FaceName[] = ["U", "L", "F", "R", "B", "D"];
+const STICKER_CENTER_INDEX = 4;
 const COLOR_HEX: Record<CubeColorName, number> = {
   white: CUBE_COLOR_HEX.white,
   yellow: CUBE_COLOR_HEX.yellow,
@@ -231,6 +266,7 @@ const DEFAULT_ANALYZER_SETTINGS: AnalyzerSettings = {
   showAllCrossColors: false,
   maxDepth: CROSS_SEARCH_MAX_DEPTH,
 };
+const F2L_PAIR_HIGHLIGHT_CHILD_NAME = "f2l-pair-highlight";
 const CUBE_COLORS = {
   body: CUBE_DETAIL_COLORS.body,
   edge: CUBE_DETAIL_COLORS.edge,
@@ -242,6 +278,10 @@ function isCubeColorName(value: unknown): value is CubeColorName {
 
 function getColorLabel(color: CubeColorName): string {
   return COLOR_OPTIONS.find((option) => option.value === color)?.label ?? color;
+}
+
+function getColorCss(color: CubeColorName): string {
+  return `#${COLOR_HEX[color].toString(16).padStart(6, "0")}`;
 }
 
 function vectorKey(vector: ColorVector): string {
@@ -383,6 +423,48 @@ function saveAnalyzerSettings(settings: AnalyzerSettings): void {
   }
 }
 
+function isAnalyzerInputMode(value: unknown): value is AnalyzerInputMode {
+  return value === "scramble" || value === "color";
+}
+
+function isPlaybackMode(value: unknown): value is PlaybackMode {
+  return value === "scramble" || value === "scramble-solve";
+}
+
+function isBasicF2lAnalysisPhase(value: unknown): value is BasicF2lAnalysisPhase {
+  return value === "basic41" || value === "fallback";
+}
+
+function normalizeStickerColorGrid(
+  value: unknown,
+  faceColorMap: Record<FaceName, CubeColorName>,
+): CubeStickerColorGrid {
+  if (!value || typeof value !== "object") {
+    return createSolvedStickerColorGrid(faceColorMap);
+  }
+
+  const rawGrid = value as Partial<Record<FaceName, unknown>>;
+  const nextGrid = createSolvedStickerColorGrid(faceColorMap);
+
+  (Object.keys(nextGrid) as FaceName[]).forEach((face) => {
+    const colors = rawGrid[face];
+
+    if (!Array.isArray(colors) || colors.length !== 9) {
+      return;
+    }
+
+    nextGrid[face] = colors.map((color, index) =>
+      index === STICKER_CENTER_INDEX
+        ? faceColorMap[face]
+        : isCubeColorName(color)
+          ? color
+          : nextGrid[face][index],
+    );
+  });
+
+  return nextGrid;
+}
+
 function loadAnalyzerSpeed(): AnimationSpeed {
   return loadAnimationSpeed([ANALYZER_SPEED_STORAGE_KEY]);
 }
@@ -478,23 +560,34 @@ function loadAnalyzerState(): StoredAnalyzerState | null {
           ? Math.min(8, Math.max(1, Math.round(settings.maxDepth)))
           : DEFAULT_ANALYZER_SETTINGS.maxDepth,
     };
+    const normalizedFaceColorMap = buildFaceColorMap(normalizedSettings) ?? DEFAULT_FACE_COLOR_MAP;
 
     const scrambleInput =
       typeof parsed.scrambleInput === "string" ? parsed.scrambleInput : "R U R' U'";
     const solveInput = typeof parsed.solveInput === "string" ? parsed.solveInput : "";
+    const inputMode = isAnalyzerInputMode(parsed.inputMode) ? parsed.inputMode : "scramble";
+    const basicF2lPlan =
+      parsed.basicF2lPlan && typeof parsed.basicF2lPlan === "object"
+        ? (parsed.basicF2lPlan as BasicF2lAnalysisPlan)
+        : null;
 
     return {
       version: 1,
       settings: normalizedSettings,
+      inputMode,
       scrambleInput,
+      stickerColorGrid: normalizeStickerColorGrid(parsed.stickerColorGrid, normalizedFaceColorMap),
+      selectedPaintColor: isCubeColorName(parsed.selectedPaintColor)
+        ? parsed.selectedPaintColor
+        : normalizedSettings.crossColor,
       solveInput,
       playbackScrambleInput:
-        typeof parsed.playbackScrambleInput === "string"
+        typeof parsed.playbackScrambleInput === "string" && isAnalyzerInputMode(parsed.inputMode)
           ? parsed.playbackScrambleInput
-          : scrambleInput,
+          : "",
       playbackSolveInput:
         typeof parsed.playbackSolveInput === "string" ? parsed.playbackSolveInput : solveInput,
-      playbackMode: "scramble-solve",
+      playbackMode: isPlaybackMode(parsed.playbackMode) ? parsed.playbackMode : "scramble-solve",
       currentIndex:
         typeof parsed.currentIndex === "number" && Number.isFinite(parsed.currentIndex)
           ? Math.max(0, Math.round(parsed.currentIndex))
@@ -504,6 +597,28 @@ function loadAnalyzerState(): StoredAnalyzerState | null {
       selectedCrossSolution: parsed.selectedCrossSolution ?? null,
       selectedF2lPairId:
         typeof parsed.selectedF2lPairId === "string" ? parsed.selectedF2lPairId : null,
+      isF2lPairHighlightEnabled:
+        typeof parsed.isF2lPairHighlightEnabled === "boolean"
+          ? parsed.isF2lPairHighlightEnabled
+          : true,
+      helperCaseId: typeof parsed.helperCaseId === "string" ? parsed.helperCaseId : null,
+      basicF2lPlan,
+      basicF2lOrderPlans: Array.isArray(parsed.basicF2lOrderPlans)
+        ? (parsed.basicF2lOrderPlans as BasicF2lAnalysisPlan[])
+        : [],
+      basicF2lComparedOrderCount:
+        typeof parsed.basicF2lComparedOrderCount === "number" &&
+          Number.isFinite(parsed.basicF2lComparedOrderCount)
+          ? Math.max(0, Math.round(parsed.basicF2lComparedOrderCount))
+          : 0,
+      basicF2lAnalysisPhase: isBasicF2lAnalysisPhase(parsed.basicF2lAnalysisPhase)
+        ? parsed.basicF2lAnalysisPhase
+        : null,
+      showBasicF2lOrderDetails: Boolean(parsed.showBasicF2lOrderDetails),
+      basicF2lError: typeof parsed.basicF2lError === "string" ? parsed.basicF2lError : null,
+      highlightF2lSteps: Array.isArray(parsed.highlightF2lSteps) && parsed.highlightF2lSteps.length > 0
+        ? (parsed.highlightF2lSteps as BasicF2lAnalysisStep[])
+        : basicF2lPlan?.steps ?? [],
     };
   } catch {
     return null;
@@ -572,12 +687,12 @@ function createStickerMaterial(color: number, opacity = 1) {
 function addSticker(
   cubie: THREE.Group,
   face: FaceName,
-  faceColorMap: Record<FaceName, CubeColorName>,
+  color: number,
   opacity: number,
 ) {
   const sticker = new THREE.Mesh(
     new THREE.PlaneGeometry(0.68, 0.68),
-    createStickerMaterial(COLOR_HEX[faceColorMap[face]], opacity),
+    createStickerMaterial(color, opacity),
   );
   const offset = 0.466;
 
@@ -601,6 +716,122 @@ function addSticker(
   }
 
   cubie.add(sticker);
+}
+
+function getCubieStickerColorsFromSolvedPosition(
+  x: number,
+  y: number,
+  z: number,
+  faceColorMap: Record<FaceName, CubeColorName>,
+): CubeColorName[] {
+  const colors: CubeColorName[] = [];
+
+  if (y === 1) {
+    colors.push(faceColorMap.U);
+  }
+
+  if (y === -1) {
+    colors.push(faceColorMap.D);
+  }
+
+  if (z === 1) {
+    colors.push(faceColorMap.F);
+  }
+
+  if (z === -1) {
+    colors.push(faceColorMap.B);
+  }
+
+  if (x === 1) {
+    colors.push(faceColorMap.R);
+  }
+
+  if (x === -1) {
+    colors.push(faceColorMap.L);
+  }
+
+  return colors;
+}
+
+function getColorSetSignature(colors: CubeColorName[]): string {
+  return [...colors].sort().join("|");
+}
+
+function hasSameColorSet(actualColors: CubeColorName[], targetColors: CubeColorName[]): boolean {
+  return (
+    actualColors.length === targetColors.length &&
+    getColorSetSignature(actualColors) === getColorSetSignature(targetColors)
+  );
+}
+
+function clearF2lPairHighlights(cubies: Cubie[]) {
+  cubies.forEach((cubie) => {
+    cubie.group.scale.setScalar(1);
+    cubie.group.children
+      .filter((child) => child.name === F2L_PAIR_HIGHLIGHT_CHILD_NAME)
+      .forEach((child) => {
+        cubie.group.remove(child);
+        disposeObject(child);
+      });
+  });
+}
+
+function addF2lPairHighlight(cubie: Cubie, color: number) {
+  const highlight = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(1.08, 1.08, 1.08)),
+    new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.96,
+    }),
+  );
+
+  highlight.name = F2L_PAIR_HIGHLIGHT_CHILD_NAME;
+  cubie.group.add(highlight);
+  cubie.group.scale.setScalar(1.07);
+}
+
+function syncF2lPairHighlight(
+  state: SceneState,
+  candidate: F2lPairCandidate | null,
+  isEnabled: boolean,
+) {
+  const signature =
+    isEnabled && candidate
+      ? `${candidate.id}:${getColorSetSignature(candidate.cornerColors)}:${getColorSetSignature(
+          candidate.edgeColors,
+        )}`
+      : "off";
+
+  if (state.pairHighlightSignature === signature) {
+    return;
+  }
+
+  clearF2lPairHighlights(state.cubies);
+  state.pairHighlightSignature = signature;
+
+  if (!isEnabled || !candidate) {
+    return;
+  }
+
+  const cornerCubie = state.cubies.find((cubie) =>
+    hasSameColorSet(cubie.stickerColors, candidate.cornerColors),
+  );
+  const edgeCubie = state.cubies.find((cubie) =>
+    hasSameColorSet(cubie.stickerColors, candidate.edgeColors),
+  );
+
+  if (cornerCubie) {
+    addF2lPairHighlight(cornerCubie, 0xf2b84b);
+  }
+
+  if (edgeCubie) {
+    addF2lPairHighlight(edgeCubie, 0x4fd1b0);
+  }
+}
+
+function markSceneCubiesChanged(state: SceneState) {
+  state.pairHighlightSignature = null;
 }
 
 function createCubie(
@@ -633,32 +864,99 @@ function createCubie(
   group.add(outline);
 
   if (y === 1) {
-    addSticker(group, "U", faceColorMap, stickerOpacity);
+    addSticker(group, "U", COLOR_HEX[faceColorMap.U], stickerOpacity);
   }
 
   if (y === -1) {
-    addSticker(group, "D", faceColorMap, stickerOpacity);
+    addSticker(group, "D", COLOR_HEX[faceColorMap.D], stickerOpacity);
   }
 
   if (z === 1) {
-    addSticker(group, "F", faceColorMap, stickerOpacity);
+    addSticker(group, "F", COLOR_HEX[faceColorMap.F], stickerOpacity);
   }
 
   if (z === -1) {
-    addSticker(group, "B", faceColorMap, stickerOpacity);
+    addSticker(group, "B", COLOR_HEX[faceColorMap.B], stickerOpacity);
   }
 
   if (x === 1) {
-    addSticker(group, "R", faceColorMap, stickerOpacity);
+    addSticker(group, "R", COLOR_HEX[faceColorMap.R], stickerOpacity);
   }
 
   if (x === -1) {
-    addSticker(group, "L", faceColorMap, stickerOpacity);
+    addSticker(group, "L", COLOR_HEX[faceColorMap.L], stickerOpacity);
   }
 
   return {
     group,
     coord: new THREE.Vector3(x, y, z),
+    stickerColors: getCubieStickerColorsFromSolvedPosition(x, y, z, faceColorMap),
+  };
+}
+
+function getCenterFaceFromCoord(x: number, y: number, z: number): FaceName | null {
+  if (y === 1) {
+    return "U";
+  }
+
+  if (y === -1) {
+    return "D";
+  }
+
+  if (z === 1) {
+    return "F";
+  }
+
+  if (z === -1) {
+    return "B";
+  }
+
+  if (x === 1) {
+    return "R";
+  }
+
+  if (x === -1) {
+    return "L";
+  }
+
+  return null;
+}
+
+function createCubieWithStickers(
+  x: number,
+  y: number,
+  z: number,
+  stickers: Array<{ face: FaceName; color: CubeColorName }>,
+): Cubie {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.92, 0.92, 0.92),
+    new THREE.MeshStandardMaterial({
+      color: CUBE_COLORS.body,
+      metalness: 0.02,
+      roughness: 0.78,
+    }),
+  );
+  const outline = new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(0.94, 0.94, 0.94)),
+    new THREE.LineBasicMaterial({
+      color: CUBE_COLORS.edge,
+      transparent: true,
+      opacity: 0.76,
+    }),
+  );
+
+  group.position.set(x, y, z);
+  group.add(body);
+  group.add(outline);
+  stickers.forEach((sticker) => {
+    addSticker(group, sticker.face, COLOR_HEX[sticker.color], 1);
+  });
+
+  return {
+    group,
+    coord: new THREE.Vector3(x, y, z),
+    stickerColors: stickers.map((sticker) => sticker.color),
   };
 }
 
@@ -675,6 +973,38 @@ function createSolvedCubies(
     for (let y = -1; y <= 1; y += 1) {
       for (let z = -1; z <= 1; z += 1) {
         const cubie = createCubie(x, y, z, faceColorMap);
+        cubies.push(cubie);
+        cubeGroup.add(cubie.group);
+      }
+    }
+  }
+
+  return cubies;
+}
+
+function createCubiesFromCubeState(cubeGroup: THREE.Group, cubeState: CubeState): Cubie[] {
+  disposeObject(cubeGroup);
+  cubeGroup.clear();
+  cubeGroup.position.set(0, 0, 0);
+
+  const piecesByCoord = new Map(
+    cubeState.pieces.map((piece) => [piece.coord.join(","), piece]),
+  );
+  const cubies: Cubie[] = [];
+
+  for (let x = -1; x <= 1; x += 1) {
+    for (let y = -1; y <= 1; y += 1) {
+      for (let z = -1; z <= 1; z += 1) {
+        const nonZeroCount = [x, y, z].filter((value) => value !== 0).length;
+        const piece = piecesByCoord.get([x, y, z].join(","));
+        const centerFace = nonZeroCount === 1 ? getCenterFaceFromCoord(x, y, z) : null;
+        const stickers = piece
+          ? piece.stickers
+          : centerFace
+            ? [{ face: centerFace, color: cubeState.faceColorMap[centerFace] }]
+            : [];
+        const cubie = createCubieWithStickers(x, y, z, stickers);
+
         cubies.push(cubie);
         cubeGroup.add(cubie.group);
       }
@@ -794,6 +1124,32 @@ function getAlgorithmMoveCount(algorithm: string): number {
   return parseAlgorithm(algorithm).moves.length;
 }
 
+function movesStartWith(moves: string[], prefix: string[]): boolean {
+  return (
+    prefix.length <= moves.length &&
+    prefix.every((move, index) => moves[index] === move)
+  );
+}
+
+function movesEqual(a: string[], b: string[]): boolean {
+  return a.length === b.length && movesStartWith(a, b);
+}
+
+function getCandidateSlotName(candidate: F2lPairCandidate): F2lSlotName | null {
+  const slotName = candidate.slotLabel.split(" ")[0];
+
+  return slotName === "FR" || slotName === "FL" || slotName === "BR" || slotName === "BL"
+    ? slotName
+    : null;
+}
+
+function getF2lCandidateBySlot(
+  candidates: F2lPairCandidate[],
+  slotName: F2lSlotName,
+): F2lPairCandidate | null {
+  return candidates.find((candidate) => getCandidateSlotName(candidate) === slotName) ?? null;
+}
+
 function getAlgorithmFaces(algorithm: string): Set<string> {
   return new Set(parseAlgorithm(algorithm).parsedMoves.map((move) => move.canonical[0] ?? ""));
 }
@@ -882,6 +1238,222 @@ function getF2lRecommendation(
   };
 }
 
+const ANALYZER_PREVIEW_SPOTS: F2lPieceSpot[] = [
+  "topLeft",
+  "top",
+  "topRight",
+  "left",
+  "center",
+  "right",
+  "bottomLeft",
+  "bottom",
+  "bottomRight",
+];
+
+const ANALYZER_PREVIEW_POINTS: Record<F2lPieceSpot, { x: number; y: number }> = {
+  topLeft: { x: 54, y: 36 },
+  top: { x: 95, y: 30 },
+  topRight: { x: 136, y: 36 },
+  left: { x: 45, y: 74 },
+  center: { x: 95, y: 74 },
+  right: { x: 145, y: 74 },
+  bottomLeft: { x: 54, y: 112 },
+  bottom: { x: 95, y: 118 },
+  bottomRight: { x: 136, y: 112 },
+};
+
+function getAnalyzerStickerClass(sticker: LearningSticker): string {
+  return `case-sticker case-sticker-${sticker}`;
+}
+
+function AnalyzerLastLayerCasePreview({
+  caseItem,
+  phase,
+  title,
+}: {
+  caseItem: LearningCase | null;
+  phase: LastLayerLearnPhase;
+  title: string;
+}) {
+  const className = `case-preview case-preview-${phase} case-preview-detail analyzer-learn-preview-shape`;
+
+  if (!caseItem) {
+    return (
+      <div className="analyzer-learn-preview-skip" role="img" aria-label={`${phase.toUpperCase()} skip`}>
+        <span>{phase.toUpperCase()}</span>
+        <strong>Skip</strong>
+      </div>
+    );
+  }
+
+  if (caseItem.image.kind === "asset") {
+    return (
+      <span
+        aria-label={`${caseItem.name} image`}
+        className={`${className} case-preview-image-shell`}
+        role="img"
+      >
+        <img alt="" className="case-preview-image" src={caseItem.imageUrl} />
+      </span>
+    );
+  }
+
+  if (caseItem.image.kind === "oll") {
+    return (
+      <AnalyzerOllPreview
+        image={caseItem.image}
+        label={caseItem.name}
+        className={className}
+      />
+    );
+  }
+
+  if (caseItem.image.kind === "pll") {
+    return (
+      <AnalyzerPllPreview
+        caseId={caseItem.id}
+        image={caseItem.image}
+        label={caseItem.name}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <div className="analyzer-learn-preview-skip" role="img" aria-label={title}>
+      <span>{phase.toUpperCase()}</span>
+      <strong>{caseItem.name}</strong>
+    </div>
+  );
+}
+
+function AnalyzerOllPreview({
+  image,
+  label,
+  className,
+}: {
+  image: OllCaseImage;
+  label: string;
+  className: string;
+}) {
+  const sidePositions = [
+    { x: 53, y: 12 },
+    { x: 82, y: 12 },
+    { x: 111, y: 12 },
+    { x: 139, y: 32 },
+    { x: 139, y: 61 },
+    { x: 139, y: 90 },
+    { x: 111, y: 119 },
+    { x: 82, y: 119 },
+    { x: 53, y: 119 },
+    { x: 24, y: 90 },
+    { x: 24, y: 61 },
+    { x: 24, y: 32 },
+  ];
+
+  return (
+    <svg aria-label={`${label} shape`} className={className} role="img" viewBox="0 0 190 150">
+      <rect className="case-preview-bg" height="140" rx="16" width="180" x="5" y="5" />
+      <path className="oll-thumb-side oll-thumb-front" d="M52 122 H140 L127 138 H64 Z" />
+      <path className="oll-thumb-side oll-thumb-right" d="M140 34 L158 51 V105 L140 122 Z" />
+      <text className="case-preview-badge" x="16" y="25">
+        OLL {image.number}
+      </text>
+      {sidePositions.map((position, index) => (
+        <rect
+          className={getAnalyzerStickerClass(image.side[index] ?? "empty")}
+          height="16"
+          key={`${image.number}-side-${index}`}
+          rx="4"
+          width="24"
+          x={position.x}
+          y={position.y}
+        />
+      ))}
+      <g className="oll-top-grid">
+        {image.top.map((sticker, index) => {
+          const row = Math.floor(index / 3);
+          const column = index % 3;
+
+          return (
+            <rect
+              className={getAnalyzerStickerClass(sticker)}
+              height="28"
+              key={`${image.number}-${index}`}
+              rx="6"
+              width="28"
+              x={53 + column * 29}
+              y={34 + row * 29}
+            />
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+function AnalyzerPllPreview({
+  caseId,
+  image,
+  label,
+  className,
+}: {
+  caseId: string;
+  image: PllCaseImage;
+  label: string;
+  className: string;
+}) {
+  const markerId = `analyzer-arrow-${caseId}`;
+
+  return (
+    <svg aria-label={`${label} shape`} className={className} role="img" viewBox="0 0 190 150">
+      <defs>
+        <marker id={markerId} markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+          <path className="pll-arrow-head" d="M0,0 L8,4 L0,8 Z" />
+        </marker>
+      </defs>
+      <rect className="case-preview-bg" height="140" rx="16" width="180" x="5" y="5" />
+      <path className="pll-thumb-side pll-thumb-front" d="M55 121 H142 L128 138 H66 Z" />
+      <path className="pll-thumb-side pll-thumb-right" d="M142 36 L160 53 V105 L142 121 Z" />
+      <text className="case-preview-badge" x="16" y="25">
+        {image.label}
+      </text>
+      {image.top.map((sticker, index) => {
+        const row = Math.floor(index / 3);
+        const column = index % 3;
+        const spot = ANALYZER_PREVIEW_SPOTS[index];
+
+        return (
+          <rect
+            className={`${getAnalyzerStickerClass(sticker)} ${
+              spot && image.blocks.includes(spot) ? "pll-block-sticker" : ""
+            }`}
+            height="26"
+            key={`${image.label}-${index}`}
+            rx="6"
+            width="26"
+            x={56 + column * 29}
+            y={36 + row * 29}
+          />
+        );
+      })}
+      {image.arrows.map((arrow, index) => {
+        const from = ANALYZER_PREVIEW_POINTS[arrow.from];
+        const to = ANALYZER_PREVIEW_POINTS[arrow.to];
+
+        return (
+          <path
+            className={`pll-arrow pll-arrow-${arrow.kind}`}
+            d={`M${from.x} ${from.y} Q95 75 ${to.x} ${to.y}`}
+            key={`${image.label}-${index}`}
+            markerEnd={`url(#${markerId})`}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
 function isSameCrossSolution(a: CrossSolution | null, b: CrossSolution | null): boolean {
   return Boolean(
     a &&
@@ -926,9 +1498,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     return {
       version: 1,
       settings: savedState?.settings ?? loadAnalyzerSettings(),
+      inputMode: "scramble",
       scrambleInput: incomingScramble,
+      stickerColorGrid:
+        savedState?.stickerColorGrid ??
+        createSolvedStickerColorGrid(
+          buildFaceColorMap(savedState?.settings ?? loadAnalyzerSettings()) ?? DEFAULT_FACE_COLOR_MAP,
+        ),
+      selectedPaintColor: savedState?.selectedPaintColor ?? DEFAULT_ANALYZER_SETTINGS.crossColor,
       solveInput: "",
-      playbackScrambleInput: incomingScramble,
+      playbackScrambleInput: "",
       playbackSolveInput: "",
       playbackMode: "scramble-solve",
       currentIndex: 0,
@@ -950,20 +1529,37 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const f2lAnalysisJobIdRef = useRef(0);
   const pendingQuickPhaseRef = useRef<AnalyzerQuickPhase | null>(null);
   const playerPanelRef = useRef<HTMLElement | null>(null);
-  const skipInitialCrossClearCountRef = useRef(initialAnalyzerState ? 2 : 0);
+  const lastAnalyzerStartStateSignatureRef = useRef<string | null>(null);
+  const lastSelectedCrossSolutionSignatureRef = useRef<string | null>(null);
   const lastRestoredSceneIdRef = useRef(0);
   const skipNextSettingsSaveCountRef = useRef(0);
   const skipNextAnalyzerStateSaveCountRef = useRef(0);
+  const selectedF2lPairRef = useRef<F2lPairCandidate | null>(null);
+  const isF2lPairHighlightEnabledRef = useRef(
+    initialAnalyzerState?.isF2lPairHighlightEnabled ?? true,
+  );
   const [sceneReadyId, setSceneReadyId] = useState(0);
   const [settings, setSettings] = useState<AnalyzerSettings>(
     () => initialAnalyzerState?.settings ?? loadAnalyzerSettings(),
   );
+  const [inputMode, setInputMode] = useState<AnalyzerInputMode>(
+    () => initialAnalyzerState?.inputMode ?? "scramble",
+  );
   const [scrambleInput, setScrambleInput] = useState(
     () => initialAnalyzerState?.scrambleInput ?? "R U R' U'",
   );
+  const [stickerColorGrid, setStickerColorGrid] = useState<CubeStickerColorGrid>(() => {
+    const initialSettings = initialAnalyzerState?.settings ?? loadAnalyzerSettings();
+    const initialFaceColorMap = buildFaceColorMap(initialSettings) ?? DEFAULT_FACE_COLOR_MAP;
+
+    return initialAnalyzerState?.stickerColorGrid ?? createSolvedStickerColorGrid(initialFaceColorMap);
+  });
+  const [selectedPaintColor, setSelectedPaintColor] = useState<CubeColorName>(
+    () => initialAnalyzerState?.selectedPaintColor ?? DEFAULT_ANALYZER_SETTINGS.crossColor,
+  );
   const [solveInput, setSolveInput] = useState(() => initialAnalyzerState?.solveInput ?? "");
   const [playbackScrambleInput, setPlaybackScrambleInput] = useState(
-    () => initialAnalyzerState?.playbackScrambleInput ?? initialAnalyzerState?.scrambleInput ?? "R U R' U'",
+    () => initialAnalyzerState?.playbackScrambleInput ?? "",
   );
   const [playbackSolveInput, setPlaybackSolveInput] = useState(
     () => initialAnalyzerState?.playbackSolveInput ?? initialAnalyzerState?.solveInput ?? "",
@@ -1001,23 +1597,58 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [selectedF2lPairId, setSelectedF2lPairId] = useState<string | null>(
     () => initialAnalyzerState?.selectedF2lPairId ?? null,
   );
-  const [helperCaseId, setHelperCaseId] = useState<string | null>(null);
-  const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(null);
-  const [basicF2lOrderPlans, setBasicF2lOrderPlans] = useState<BasicF2lAnalysisPlan[]>([]);
-  const [basicF2lComparedOrderCount, setBasicF2lComparedOrderCount] = useState(0);
-  const [basicF2lAnalysisPhase, setBasicF2lAnalysisPhase] = useState<BasicF2lAnalysisPhase | null>(null);
-  const [showBasicF2lOrderDetails, setShowBasicF2lOrderDetails] = useState(false);
+  const [isF2lPairHighlightEnabled, setIsF2lPairHighlightEnabled] = useState(
+    () => initialAnalyzerState?.isF2lPairHighlightEnabled ?? true,
+  );
+  const [helperCaseId, setHelperCaseId] = useState<string | null>(
+    () => initialAnalyzerState?.helperCaseId ?? null,
+  );
+  const [basicF2lPlan, setBasicF2lPlan] = useState<BasicF2lAnalysisPlan | null>(
+    () => initialAnalyzerState?.basicF2lPlan ?? null,
+  );
+  const [basicF2lOrderPlans, setBasicF2lOrderPlans] = useState<BasicF2lAnalysisPlan[]>(
+    () => initialAnalyzerState?.basicF2lOrderPlans ?? [],
+  );
+  const [basicF2lComparedOrderCount, setBasicF2lComparedOrderCount] = useState(
+    () => initialAnalyzerState?.basicF2lComparedOrderCount ?? 0,
+  );
+  const [basicF2lAnalysisPhase, setBasicF2lAnalysisPhase] = useState<BasicF2lAnalysisPhase | null>(
+    () => initialAnalyzerState?.basicF2lAnalysisPhase ?? null,
+  );
+  const [showBasicF2lOrderDetails, setShowBasicF2lOrderDetails] = useState(
+    () => initialAnalyzerState?.showBasicF2lOrderDetails ?? false,
+  );
   const [isAnalyzingBasicF2l, setIsAnalyzingBasicF2l] = useState(false);
   const [isLoadingBasicF2lOrderDetails, setIsLoadingBasicF2lOrderDetails] = useState(false);
-  const [basicF2lError, setBasicF2lError] = useState<string | null>(null);
+  const [basicF2lError, setBasicF2lError] = useState<string | null>(
+    () => initialAnalyzerState?.basicF2lError ?? null,
+  );
+  const [highlightF2lSteps, setHighlightF2lSteps] = useState<BasicF2lAnalysisStep[]>(
+    () => initialAnalyzerState?.highlightF2lSteps ?? [],
+  );
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [quickPlaybackStatus, setQuickPlaybackStatus] = useState("待機中");
+  const [lastLayerLearnPreviewPhase, setLastLayerLearnPreviewPhase] =
+    useState<LastLayerLearnPhase | null>(null);
 
   const orientationError = useMemo(() => getOrientationError(settings), [settings]);
   const faceColorMap = useMemo(
     () => buildFaceColorMap(settings) ?? DEFAULT_FACE_COLOR_MAP,
     [settings],
+  );
+  const canUseOrientation = orientationError === null;
+  const selectedCrossSolutionSignature = useMemo(
+    () =>
+      selectedCrossSolution
+        ? [
+          selectedCrossSolution.color,
+          selectedCrossSolution.targetFace,
+          selectedCrossSolution.algorithm,
+          selectedCrossSolution.moveCount,
+        ].join("|")
+        : "none",
+    [selectedCrossSolution],
   );
   const parsedScramble = useMemo(() => parseAlgorithm(scrambleInput), [scrambleInput]);
   const parsedSolve = useMemo(() => parseAlgorithm(solveInput), [solveInput]);
@@ -1038,6 +1669,75 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     ],
     [parsedScramble.invalidTokens, parsedScramble.parsedMoves],
   );
+  const canUseScramble = unsupportedScrambleTokens.length === 0 && canUseOrientation;
+  const stickerColorSignature = useMemo(
+    () => COLOR_FACE_ORDER.map((face) => stickerColorGrid[face].join(",")).join("|"),
+    [stickerColorGrid],
+  );
+  const analyzerStartStateSignature = useMemo(
+    () =>
+      [
+        inputMode,
+        scrambleInput,
+        settings.crossColor,
+        settings.crossTargetFace,
+        settings.frontColor,
+        settings.maxDepth,
+        settings.showAllCrossColors ? "all" : "single",
+        settings.topColor,
+        stickerColorSignature,
+      ].join("|"),
+    [
+      inputMode,
+      scrambleInput,
+      settings.crossColor,
+      settings.crossTargetFace,
+      settings.frontColor,
+      settings.maxDepth,
+      settings.showAllCrossColors,
+      settings.topColor,
+      stickerColorSignature,
+    ],
+  );
+  const colorInputResult = useMemo(
+    () => createCubeStateFromStickerColors(stickerColorGrid, faceColorMap),
+    [faceColorMap, stickerColorGrid],
+  );
+  const scrambleStartState = useMemo(
+    () =>
+      unsupportedScrambleTokens.length === 0 && canUseOrientation
+        ? applyAlgorithm(createSolvedCubeState(faceColorMap), parsedScramble.moves)
+        : null,
+    [canUseOrientation, faceColorMap, parsedScramble.moves, unsupportedScrambleTokens.length],
+  );
+  const activeStartState = inputMode === "color" ? colorInputResult.state : scrambleStartState;
+  const canUseColorInput = Boolean(colorInputResult.state) && canUseOrientation;
+  const canUseStartState = inputMode === "color" ? canUseColorInput : canUseScramble;
+  const startInputLabel = inputMode === "color" ? "Color" : "Scramble";
+  const startInputCount =
+    inputMode === "color"
+      ? colorInputResult.state
+        ? "OK"
+        : `${colorInputResult.errors.length} errors`
+      : String(parsedScramble.moves.length);
+  const stickerColorCounts = useMemo(() => {
+    const counts: Record<CubeColorName, number> = {
+      white: 0,
+      yellow: 0,
+      blue: 0,
+      green: 0,
+      red: 0,
+      orange: 0,
+    };
+
+    COLOR_FACE_ORDER.forEach((face) => {
+      stickerColorGrid[face].forEach((color) => {
+        counts[color] += 1;
+      });
+    });
+
+    return counts;
+  }, [stickerColorGrid]);
   const crossCandidates = useMemo(
     () => buildCrossCandidates(settings, parsedScramble.moves, faceColorMap),
     [faceColorMap, parsedScramble.moves, settings],
@@ -1078,9 +1778,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   );
   const currentMove = currentIndex > 0 ? activeMoves[currentIndex - 1] : null;
   const nextMove = currentIndex < activeMoves.length ? activeMoves[currentIndex] : null;
-  const canUseOrientation = orientationError === null;
-  const canUseScramble = unsupportedScrambleTokens.length === 0 && canUseOrientation;
-  const canUseActiveSequence = activeInvalidTokens.length === 0 && canUseOrientation;
+  const canUseActiveSequence =
+    activeInvalidTokens.length === 0 &&
+    canUseOrientation &&
+    (inputMode !== "color" || canUseColorInput);
   const isComplete = activeMoves.length > 0 && currentIndex >= activeMoves.length;
   const otherBasicF2lOrderPlans = useMemo(
     () => basicF2lOrderPlans.filter((plan) => plan.id !== basicF2lPlan?.id),
@@ -1119,7 +1820,22 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     animationRunRef.current += 1;
     isAnimatingRef.current = false;
     state.cubies = createSolvedCubies(state.cubeGroup, faceColorMap);
+    markSceneCubiesChanged(state);
   }, [faceColorMap]);
+
+  const applyStartStateInstant = useCallback(() => {
+    const state = sceneStateRef.current;
+
+    if (!state || !activeStartState) {
+      return false;
+    }
+
+    animationRunRef.current += 1;
+    isAnimatingRef.current = false;
+    state.cubies = createCubiesFromCubeState(state.cubeGroup, activeStartState);
+    markSceneCubiesChanged(state);
+    return true;
+  }, [activeStartState]);
 
   const resetCameraView = useCallback(() => {
     const state = sceneStateRef.current;
@@ -1133,7 +1849,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
   const resetCubeToPlaybackStart = useCallback(
     (mode: PlaybackMode = playbackMode) => {
-      resetCubeState();
+      if (!applyStartStateInstant()) {
+        resetCubeState();
+      }
 
       if (mode !== "scramble-solve") {
         return;
@@ -1151,7 +1869,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         parsedPlaybackScramble.moves,
       );
     },
-    [parsedPlaybackScramble.moves, playbackMode, resetCubeState],
+    [applyStartStateInstant, parsedPlaybackScramble.moves, playbackMode, resetCubeState],
   );
 
   const animateDescriptor = useCallback(async (descriptor: MoveDescriptor | null | undefined) => {
@@ -1360,7 +2078,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.45);
     keyLight.position.set(3.5, 4.8, 5.5);
     scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(0x77a7ff, 0.85);
+    const fillLight = new THREE.DirectionalLight(0x4fd1b0, 0.85);
     fillLight.position.set(-5, 2, 4);
     scene.add(fillLight);
 
@@ -1374,6 +2092,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       resizeObserver: new ResizeObserver(() => resizeRenderer(state, canvas)),
       animationStart: performance.now(),
       cubeScale,
+      pairHighlightSignature: null,
     };
 
     sceneStateRef.current = state;
@@ -1384,6 +2103,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     const render = (now: number) => {
       const elapsed = now - state.animationStart;
       state.cubeGroup.position.y = Math.sin(elapsed / 980) * 0.03;
+      syncF2lPairHighlight(
+        state,
+        selectedF2lPairRef.current,
+        isF2lPairHighlightEnabledRef.current,
+      );
       state.renderer.render(state.scene, state.camera);
       state.frameId = requestAnimationFrame(render);
     };
@@ -1439,11 +2163,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   ]);
 
   useEffect(() => {
-    if (skipInitialCrossClearCountRef.current > 0) {
-      skipInitialCrossClearCountRef.current -= 1;
+    if (lastAnalyzerStartStateSignatureRef.current === null) {
+      lastAnalyzerStartStateSignatureRef.current = analyzerStartStateSignature;
       return;
     }
 
+    if (lastAnalyzerStartStateSignatureRef.current === analyzerStartStateSignature) {
+      return;
+    }
+
+    lastAnalyzerStartStateSignatureRef.current = analyzerStartStateSignature;
     crossWorkerRef.current?.terminate();
     crossWorkerRef.current = null;
     crossJobIdRef.current += 1;
@@ -1453,6 +2182,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedCrossSolution(null);
     setF2lCandidates([]);
     setSelectedF2lPairId(null);
+    setIsF2lPairHighlightEnabled(true);
     setHelperCaseId(null);
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
@@ -1465,16 +2195,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setShowBasicF2lOrderDetails(false);
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
+    setHighlightF2lSteps([]);
     setAiNotice(null);
-  }, [
-    scrambleInput,
-    settings.crossColor,
-    settings.crossTargetFace,
-    settings.frontColor,
-    settings.maxDepth,
-    settings.showAllCrossColors,
-    settings.topColor,
-  ]);
+  }, [analyzerStartStateSignature]);
 
   useEffect(() => {
     if (skipNextSettingsSaveCountRef.current > 0) {
@@ -1502,6 +2225,26 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     state.cubeScale = cubeScale;
     resizeRenderer(state, canvas);
   }, [cubeScale]);
+
+  useEffect(() => {
+    setStickerColorGrid((currentGrid) => {
+      let changed = false;
+      const nextGrid = { ...currentGrid } as CubeStickerColorGrid;
+
+      (Object.keys(faceColorMap) as FaceName[]).forEach((face) => {
+        if (currentGrid[face][STICKER_CENTER_INDEX] === faceColorMap[face]) {
+          return;
+        }
+
+        const nextFaceColors = [...currentGrid[face]];
+        nextFaceColors[STICKER_CENTER_INDEX] = faceColorMap[face];
+        nextGrid[face] = nextFaceColors;
+        changed = true;
+      });
+
+      return changed ? nextGrid : currentGrid;
+    });
+  }, [faceColorMap]);
 
   const enterAnalyzerFullscreen = useCallback(() => {
     setIsAnalyzerFullscreen(true);
@@ -1574,7 +2317,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     saveAnalyzerState({
       version: 1,
       settings,
+      inputMode,
       scrambleInput,
+      stickerColorGrid,
+      selectedPaintColor,
       solveInput,
       playbackScrambleInput,
       playbackSolveInput,
@@ -1584,22 +2330,45 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       crossError,
       selectedCrossSolution,
       selectedF2lPairId,
+      isF2lPairHighlightEnabled,
+      helperCaseId,
+      basicF2lPlan,
+      basicF2lAnalysisPhase,
+      basicF2lError,
     });
   }, [
+    basicF2lAnalysisPhase,
+    basicF2lError,
+    basicF2lPlan,
     crossError,
     crossResults,
     currentIndex,
+    helperCaseId,
+    inputMode,
+    isF2lPairHighlightEnabled,
     playbackMode,
     playbackScrambleInput,
     playbackSolveInput,
     scrambleInput,
     selectedCrossSolution,
     selectedF2lPairId,
+    selectedPaintColor,
     settings,
     solveInput,
+    stickerColorGrid,
   ]);
 
   useEffect(() => {
+    if (lastSelectedCrossSolutionSignatureRef.current === null) {
+      lastSelectedCrossSolutionSignatureRef.current = selectedCrossSolutionSignature;
+      return;
+    }
+
+    if (lastSelectedCrossSolutionSignatureRef.current === selectedCrossSolutionSignature) {
+      return;
+    }
+
+    lastSelectedCrossSolutionSignatureRef.current = selectedCrossSolutionSignature;
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
     f2lAnalysisJobIdRef.current += 1;
@@ -1611,7 +2380,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setShowBasicF2lOrderDetails(false);
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
-  }, [selectedCrossSolution]);
+    setHighlightF2lSteps([]);
+  }, [selectedCrossSolutionSignature]);
 
   useEffect(
     () => () => {
@@ -1732,6 +2502,40 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     );
   };
 
+  const paintSticker = (face: FaceName, stickerIndex: number) => {
+    if (stickerIndex === STICKER_CENTER_INDEX) {
+      return;
+    }
+
+    setStickerColorGrid((currentGrid) => {
+      if (currentGrid[face][stickerIndex] === selectedPaintColor) {
+        return currentGrid;
+      }
+
+      const nextFaceColors = [...currentGrid[face]];
+      nextFaceColors[stickerIndex] = selectedPaintColor;
+
+      return {
+        ...currentGrid,
+        [face]: nextFaceColors,
+      };
+    });
+  };
+
+  const resetStickerColorGrid = () => {
+    setStickerColorGrid(createSolvedStickerColorGrid(faceColorMap));
+  };
+
+  const loadScrambleIntoStickerGrid = () => {
+    if (!canUseScramble) {
+      return;
+    }
+
+    const state = applyAlgorithm(createSolvedCubeState(faceColorMap), parsedScramble.moves);
+    setStickerColorGrid(cubeStateToStickerColorGrid(state));
+    setInputMode("color");
+  };
+
   const resetAnalyzerState = () => {
     if (!window.confirm("Analyzerの状態をリセットしますか？")) {
       return;
@@ -1750,7 +2554,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     window.setTimeout(clearAnalyzerState, 250);
     window.history.replaceState(null, "", "/analyzer");
     setSettings(DEFAULT_ANALYZER_SETTINGS);
+    setInputMode("scramble");
     setScrambleInput("");
+    setStickerColorGrid(createSolvedStickerColorGrid(DEFAULT_FACE_COLOR_MAP));
+    setSelectedPaintColor(DEFAULT_ANALYZER_SETTINGS.crossColor);
     setSolveInput("");
     setPlaybackScrambleInput("");
     setPlaybackSolveInput("");
@@ -1773,6 +2580,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setBasicF2lError(null);
     setIsAnalyzingBasicF2l(false);
     setManualMoveHistory([]);
+    setHighlightF2lSteps([]);
     setCopyStatus("idle");
     setAiNotice(null);
 
@@ -1782,52 +2590,39 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       animationRunRef.current += 1;
       isAnimatingRef.current = false;
       state.cubies = createSolvedCubies(state.cubeGroup, DEFAULT_FACE_COLOR_MAP);
+      markSceneCubiesChanged(state);
       resetViewRotation(state.cubeGroup);
     }
   };
 
   const applyScramble = () => {
-    if (!canUseScramble) {
+    if (!canUseStartState) {
       return;
     }
 
-    setPlaybackScrambleInput(scrambleInput);
+    setPlaybackScrambleInput("");
     setPlaybackSolveInput(solveInput);
     setPlaybackMode("scramble-solve");
     setIsPlaying(false);
     setManualMoveHistory([]);
-    resetCubeState();
-
-    const state = sceneStateRef.current;
-
-    if (!state) {
-      return;
-    }
-
-    parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
+    applyStartStateInstant();
     setCurrentIndex(0);
   };
 
   const playCombined = () => {
     if (
-      unsupportedScrambleTokens.length > 0 ||
+      (inputMode === "scramble" && unsupportedScrambleTokens.length > 0) ||
       parsedSolve.invalidTokens.length > 0 ||
-      !canUseOrientation
+      !canUseStartState
     ) {
       return;
     }
 
-    setPlaybackScrambleInput(scrambleInput);
+    setPlaybackScrambleInput("");
     setPlaybackSolveInput(solveInput);
     setPlaybackMode("scramble-solve");
     setManualMoveHistory([]);
-    resetCubeState();
-    const state = sceneStateRef.current;
-
-    if (state) {
-      parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
-    }
-
+    applyStartStateInstant();
     setCurrentIndex(0);
     setIsPlaying(parsedSolve.moves.length > 0);
   };
@@ -1898,6 +2693,128 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     f2lCandidates.find((candidate) => candidate.id === selectedF2lPairId) ??
     f2lCandidates[0] ??
     null;
+  const basicF2lStepRanges = useMemo(() => {
+    let start = 0;
+
+    return highlightF2lSteps.map((step) => {
+      const moves = parseAlgorithm(step.fullAlgorithm).moves;
+      const range = {
+        step,
+        start,
+        end: start + moves.length,
+        moves,
+      };
+      start = range.end;
+
+      return range;
+    });
+  }, [highlightF2lSteps]);
+  const basicF2lPlanMoves = useMemo(
+    () => basicF2lStepRanges.flatMap((range) => range.moves),
+    [basicF2lStepRanges],
+  );
+  const f2lPlaybackStartIndex = useMemo(() => {
+    if (!selectedCrossSolution) {
+      return null;
+    }
+
+    if (movesEqual(parsedPlaybackScramble.moves, selectedCrossSolution.moves)) {
+      return 0;
+    }
+
+    if (movesStartWith(activeMoves, selectedCrossSolution.moves)) {
+      return selectedCrossSolution.moves.length;
+    }
+
+    if (
+      selectedF2lPairId &&
+      currentIndex >= selectedCrossSolution.moves.length &&
+      activeMoves.length === selectedCrossSolution.moves.length
+    ) {
+      return selectedCrossSolution.moves.length;
+    }
+
+    return null;
+  }, [
+    activeMoves,
+    currentIndex,
+    parsedPlaybackScramble.moves,
+    selectedCrossSolution,
+    selectedF2lPairId,
+  ]);
+  const activeF2lMoves =
+    f2lPlaybackStartIndex === null ? [] : activeMoves.slice(f2lPlaybackStartIndex);
+  const activeF2lMoveIndex =
+    f2lPlaybackStartIndex === null ? -1 : currentIndex - f2lPlaybackStartIndex;
+  const activeF2lMovesMatchHighlightSteps =
+    basicF2lPlanMoves.length > 0 &&
+    activeF2lMoves.length > 0 &&
+    (movesStartWith(activeF2lMoves, basicF2lPlanMoves) ||
+      movesStartWith(basicF2lPlanMoves, activeF2lMoves));
+  const activeBasicF2lStep = useMemo(() => {
+    if (
+      !activeF2lMovesMatchHighlightSteps ||
+      activeF2lMoveIndex < 0 ||
+      activeF2lMoveIndex >= basicF2lPlanMoves.length
+    ) {
+      return null;
+    }
+
+    return (
+      basicF2lStepRanges.find(
+        (range) => activeF2lMoveIndex >= range.start && activeF2lMoveIndex < range.end,
+      )?.step ?? null
+    );
+  }, [
+    activeF2lMoveIndex,
+    activeF2lMovesMatchHighlightSteps,
+    basicF2lPlanMoves.length,
+    basicF2lStepRanges,
+  ]);
+  const currentF2lHighlightPair = useMemo(() => {
+    if (!selectedCrossSolution || f2lPlaybackStartIndex === null || activeF2lMoveIndex < 0) {
+      return null;
+    }
+
+    if (activeBasicF2lStep) {
+      return getF2lCandidateBySlot(f2lCandidates, activeBasicF2lStep.targetSlot);
+    }
+
+    if (
+      activeF2lMovesMatchHighlightSteps &&
+      activeF2lMoveIndex >= basicF2lPlanMoves.length
+    ) {
+      return null;
+    }
+
+    if (!selectedF2lPairId || !selectedF2lPair) {
+      return null;
+    }
+
+    return selectedF2lPair;
+  }, [
+    activeBasicF2lStep,
+    activeF2lMoveIndex,
+    activeF2lMovesMatchHighlightSteps,
+    basicF2lPlanMoves.length,
+    f2lCandidates,
+    f2lPlaybackStartIndex,
+    selectedCrossSolution,
+    selectedF2lPair,
+    selectedF2lPairId,
+  ]);
+
+  useEffect(() => {
+    selectedF2lPairRef.current = currentF2lHighlightPair;
+    isF2lPairHighlightEnabledRef.current = isF2lPairHighlightEnabled;
+
+    const state = sceneStateRef.current;
+
+    if (state) {
+      syncF2lPairHighlight(state, currentF2lHighlightPair, isF2lPairHighlightEnabled);
+    }
+  }, [currentF2lHighlightPair, isF2lPairHighlightEnabled]);
+
   const selectedF2lRecommendation = useMemo(() => {
     if (!selectedF2lPair || f2lLearningCases.length === 0) {
       return null;
@@ -1926,7 +2843,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return "oll";
     }
 
-    if (parsedScramble.moves.length === 0) {
+    if (!activeStartState) {
       return "scramble";
     }
 
@@ -1945,7 +2862,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     return `f2l${Math.min(4, completedF2lSteps + 1)}` as AnalyzerStepKey;
-  }, [basicF2lPlan, helperCase?.category, isComplete, parsedScramble.moves.length, selectedCrossSolution]);
+  }, [activeStartState, basicF2lPlan, helperCase?.category, isComplete, selectedCrossSolution]);
   const analyzerStepItems: Array<{ key: AnalyzerStepKey; label: string }> = [
     { key: "scramble", label: "Scramble" },
     { key: "cross", label: "Cross" },
@@ -2016,6 +2933,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       pllLearningCases,
     );
   }, [ollRecognition, pllLearningCases, selectedCrossSolution]);
+  const lastLayerLearnPreview = useMemo<{
+    phase: LastLayerLearnPhase;
+    recognition: LastLayerRecognition;
+  } | null>(() => {
+    if (lastLayerLearnPreviewPhase === "oll" && ollRecognition?.ok) {
+      return { phase: "oll", recognition: ollRecognition.recognition };
+    }
+
+    if (lastLayerLearnPreviewPhase === "pll" && pllRecognition?.ok) {
+      return { phase: "pll", recognition: pllRecognition.recognition };
+    }
+
+    return null;
+  }, [lastLayerLearnPreviewPhase, ollRecognition, pllRecognition]);
   const getCrossSearchFaceColorMap = useCallback(
     (targetCrossColor = settings.crossColor): Record<FaceName, CubeColorName> =>
       faceColorMap[settings.crossTargetFace] === targetCrossColor
@@ -2029,15 +2960,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   );
 
   const applyScrambleInstant = useCallback(() => {
-    const state = sceneStateRef.current;
-
-    if (!state) {
-      return;
-    }
-
-    resetCubeState();
-    parsedScramble.moves.forEach((move) => applyMoveInstant(state.cubeGroup, state.cubies, move));
-  }, [parsedScramble.moves, resetCubeState]);
+    applyStartStateInstant();
+  }, [applyStartStateInstant]);
 
   const scrollToPlayerPanel = useCallback(() => {
     window.setTimeout(() => {
@@ -2058,10 +2982,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       }
 
       setSolveInput(algorithm);
-      setPlaybackScrambleInput(scrambleInput);
+      setPlaybackScrambleInput("");
       setPlaybackSolveInput(algorithm);
       setPlaybackMode("scramble-solve");
       setManualMoveHistory([]);
+      setHighlightF2lSteps([]);
       setIsPlaying(false);
 
       window.setTimeout(() => {
@@ -2074,7 +2999,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         }
       }, 0);
     },
-    [applyScrambleInstant, scrambleInput, scrollToPlayerPanel],
+    [applyScrambleInstant, scrollToPlayerPanel],
   );
 
   const selectAnalyzerCandidateFromPlaybackBase = useCallback(
@@ -2096,10 +3021,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setPlaybackSolveInput(algorithm);
       setPlaybackMode("scramble-solve");
       setManualMoveHistory([]);
+      setHighlightF2lSteps([]);
       setIsPlaying(false);
 
       window.setTimeout(() => {
-        resetCubeState();
+        if (!applyStartStateInstant()) {
+          resetCubeState();
+        }
 
         const state = sceneStateRef.current;
 
@@ -2115,7 +3043,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         }
       }, 0);
     },
-    [resetCubeState, scrollToPlayerPanel],
+    [applyStartStateInstant, resetCubeState, scrollToPlayerPanel],
   );
 
   const selectCrossSolution = useCallback(
@@ -2135,7 +3063,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const selectCrossSolutionForF2l = useCallback(
     (solution: CrossSolution) => {
       selectCrossSolution(solution, { scroll: false });
-      setPlaybackScrambleInput(scrambleInput);
+      setPlaybackScrambleInput("");
       setPlaybackSolveInput(solution.algorithm);
       setPlaybackMode("scramble-solve");
       setManualMoveHistory([]);
@@ -2155,7 +3083,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           ?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 0);
     },
-    [applyScrambleInstant, scrambleInput, selectCrossSolution],
+    [applyScrambleInstant, selectCrossSolution],
   );
 
   const showAiPlaceholder = useCallback((targetLabel: string) => {
@@ -2181,8 +3109,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setShowBasicF2lOrderDetails(false);
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
+    setHighlightF2lSteps([]);
 
-    if (!scrambleInput.trim()) {
+    if (inputMode === "scramble" && !scrambleInput.trim()) {
       setCrossError("スクランブルを入力してください。");
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
@@ -2200,9 +3129,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return;
     }
 
-    if (unsupportedScrambleTokens.length > 0) {
+    if (inputMode === "scramble" && unsupportedScrambleTokens.length > 0) {
       setCrossError(
         `対応していない回転記号があります: ${unsupportedScrambleTokens.join(", ")}`,
+      );
+      if (pendingQuickPhaseRef.current === "cross") {
+        pendingQuickPhaseRef.current = null;
+        setQuickPlaybackStatus("Cross解析を開始できませんでした。");
+      }
+      return;
+    }
+
+    if (inputMode === "color" && !colorInputResult.state) {
+      setCrossError(
+        colorInputResult.errors[0] ?? "色配置を認識できませんでした。ステッカーの色を確認してください。",
       );
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
@@ -2226,14 +3166,17 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       const targetFace = settings.showAllCrossColors
         ? getFaceForColor(faceColorMap, crossColor) ?? settings.crossTargetFace
         : settings.crossTargetFace;
+      const searchFaceColorMap =
+        inputMode === "scramble" && !settings.showAllCrossColors
+          ? getCrossSearchFaceColorMap(crossColor)
+          : faceColorMap;
 
       return {
         crossColor,
         targetFace,
-        faceColorMap: settings.showAllCrossColors
-          ? faceColorMap
-          : getCrossSearchFaceColorMap(crossColor),
-        scrambleMoves: parsedScramble.moves,
+        faceColorMap: searchFaceColorMap,
+        scrambleMoves: inputMode === "scramble" ? parsedScramble.moves : [],
+        initialState: inputMode === "color" ? colorInputResult.state ?? undefined : undefined,
         maxDepth: settings.maxDepth,
         maxSolutions: 5,
       };
@@ -2310,8 +3253,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     worker.postMessage({ jobId, jobs });
   }, [
     canUseOrientation,
+    colorInputResult.errors,
+    colorInputResult.state,
     faceColorMap,
     getCrossSearchFaceColorMap,
+    inputMode,
     orientationError,
     parsedScramble.moves,
     scrambleInput,
@@ -2327,6 +3273,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setSelectedF2lPairId(candidate.id);
     setAiNotice(null);
     setManualMoveHistory([]);
+    setHighlightF2lSteps([]);
 
     window.setTimeout(() => {
       applyScrambleInstant();
@@ -2386,14 +3333,37 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
   };
 
-  const openAnalyzerCandidateLearn = (candidate: AnalyzerCandidate) => {
-    const caseItem = getAnalyzerCandidateCase(candidate);
+  const openLastLayerLearnPreview = (phase: LastLayerLearnPhase) => {
+    setLastLayerLearnPreviewPhase(phase);
+  };
 
+  const closeLastLayerLearnPreview = () => {
+    setLastLayerLearnPreviewPhase(null);
+  };
+
+  const openLearningCaseLearn = (
+    caseItem: LearningCase | null,
+    fallbackCategory?: LearningCategory,
+  ) => {
     if (caseItem) {
       onNavigate(
         `/learn/${caseItem.category}/${encodeURIComponent(getLearningCaseRouteKey(caseItem))}`,
       );
+      return;
     }
+
+    if (fallbackCategory) {
+      onNavigate(`/learn/${fallbackCategory}`);
+    }
+  };
+
+  const openAnalyzerCandidateLearn = (candidate: AnalyzerCandidate) => {
+    const caseItem = getAnalyzerCandidateCase(candidate);
+
+    openLearningCaseLearn(
+      caseItem,
+      candidate.phase === "oll" || candidate.phase === "pll" ? candidate.phase : undefined,
+    );
   };
 
   const playF2lRecommendation = (recommendation: F2lRecommendation) => {
@@ -2422,7 +3392,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         .map((step) => step.fullAlgorithm)
         .filter(Boolean)
         .join(" ");
-      const playbackBaseAlgorithm = [scrambleInput, selectedCrossSolution.algorithm]
+      const playbackBaseAlgorithm = [selectedCrossSolution.algorithm]
         .map((algorithm) => algorithm.trim())
         .filter(Boolean)
         .join(" ");
@@ -2434,9 +3404,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         },
         { play: Boolean(options.play), scroll: false },
       );
+      setHighlightF2lSteps(plan.steps);
       return true;
     },
-    [scrambleInput, selectAnalyzerCandidateFromPlaybackBase, selectedCrossSolution],
+    [selectAnalyzerCandidateFromPlaybackBase, selectedCrossSolution],
   );
 
   const runBasicF2lAnalysis = useCallback((options: {
@@ -2460,6 +3431,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setBasicF2lAnalysisPhase(null);
       setShowBasicF2lOrderDetails(false);
       setIsLoadingBasicF2lOrderDetails(false);
+      setHighlightF2lSteps([]);
     }
     setIsLoadingBasicF2lOrderDetails(includeAllPlans);
     setBasicF2lError(null);
@@ -2587,6 +3559,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       .join(" ");
 
     selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
+    setHighlightF2lSteps(steps);
   };
 
   const playBasicF2lStep = (step: BasicF2lAnalysisStep) => {
@@ -2657,7 +3630,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return;
     }
 
-    const baseAlgorithm = [scrambleInput, selectedCrossSolution.algorithm, basicF2lAlgorithm]
+    const baseAlgorithm = [selectedCrossSolution.algorithm, basicF2lAlgorithm]
       .map((algorithm) => algorithm.trim())
       .filter(Boolean)
       .join(" ");
@@ -2680,7 +3653,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     basicF2lAlgorithm,
     basicF2lPlan,
     ollRecognition,
-    scrambleInput,
     selectAnalyzerCandidateFromPlaybackBase,
     selectedCrossSolution,
   ]);
@@ -2704,7 +3676,6 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     const baseAlgorithm = [
-      scrambleInput,
       selectedCrossSolution.algorithm,
       basicF2lAlgorithm,
       ollRecognition.recognition.algorithm,
@@ -2732,15 +3703,17 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     basicF2lPlan,
     ollRecognition,
     pllRecognition,
-    scrambleInput,
     selectAnalyzerCandidateFromPlaybackBase,
     selectedCrossSolution,
   ]);
 
   const invalidSummary = [
     orientationError ? `キューブの向き設定に問題があります: ${orientationError}` : "",
-    unsupportedScrambleTokens.length > 0
+    inputMode === "scramble" && unsupportedScrambleTokens.length > 0
       ? `対応していない回転記号があります: ${unsupportedScrambleTokens.join(", ")}`
+      : "",
+    inputMode === "color" && colorInputResult.errors.length > 0
+      ? `色配置に問題があります: ${colorInputResult.errors[0]}`
       : "",
     parsedSolve.invalidTokens.length > 0
       ? `ソルブ手順に未対応の記号があります: ${parsedSolve.invalidTokens.join(", ")}`
@@ -2755,14 +3728,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           <h1>Analyzer</h1>
         </div>
         <div className="header-actions">
-          <button className="ghost-button" type="button" onClick={onOpenTimer}>
-            Timer
-          </button>
-          <button className="ghost-button" type="button" onClick={() => onNavigate("/learn")}>
-            Learn
-          </button>
           <button className="ghost-button" type="button" onClick={resetAnalyzerState}>
-            状態をリセット
+            リセット
           </button>
         </div>
       </header>
@@ -2803,7 +3770,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
       <section className="analyzer-command-bar" aria-label="Analyzer quick actions">
         <div className="analyzer-command-status" aria-label="Analyzer status">
-          <span>Scramble {parsedScramble.moves.length}</span>
+          <span>{startInputLabel} {startInputCount}</span>
           <span>Active {activeMoves.length}</span>
           <span>
             {selectedCrossSolution
@@ -2812,13 +3779,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </span>
         </div>
         <div className="analyzer-command-actions">
-          <button type="button" onClick={applyScramble} disabled={!canUseScramble}>
-            スクランブル反映
+          <button type="button" onClick={applyScramble} disabled={!canUseStartState}>
+            {inputMode === "color" ? "色配置反映" : "スクランブル反映"}
           </button>
           <button
             type="button"
             onClick={analyzeCross}
-            disabled={isSearchingCross || !canUseScramble}
+            disabled={isSearchingCross || !canUseStartState}
           >
             {isSearchingCross ? "Cross探索中" : "Cross探索"}
           </button>
@@ -2948,6 +3915,25 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             </div>
           </section>
 
+          <div className="analyzer-mode-toggle analyzer-input-mode-toggle" aria-label="Start state input mode">
+            <button
+              type="button"
+              aria-pressed={inputMode === "scramble"}
+              onClick={() => setInputMode("scramble")}
+            >
+              スクランブル入力
+            </button>
+            <button
+              type="button"
+              aria-pressed={inputMode === "color"}
+              onClick={() => setInputMode("color")}
+            >
+              色パレット
+            </button>
+          </div>
+
+          {inputMode === "scramble" ? (
+            <>
           <label className="analyzer-field">
             <span>Scramble</span>
             <textarea
@@ -2977,7 +3963,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             <button type="button" onClick={clearScrambleInput}>
               全消し
             </button>
-            <button type="button" onClick={applyScramble} disabled={!canUseScramble}>
+            <button type="button" onClick={applyScramble} disabled={!canUseStartState}>
               スクランブル適用
             </button>
             <button type="button" onClick={() => void copyScrambleInput()}>
@@ -2987,6 +3973,88 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               スクランブルを確認する
             </button>
           </div>
+            </>
+          ) : (
+            <section className="analyzer-color-editor" aria-label="Color palette state input">
+              <div className="analyzer-color-toolbar">
+                <div className="analyzer-color-palette" aria-label="Paint color">
+                  {COLOR_OPTIONS.map((option) => (
+                    <button
+                      type="button"
+                      key={option.value}
+                      className={selectedPaintColor === option.value ? "is-selected" : ""}
+                      onClick={() => setSelectedPaintColor(option.value)}
+                      aria-pressed={selectedPaintColor === option.value}
+                      title={option.label}
+                    >
+                      <span
+                        aria-hidden="true"
+                        style={{ backgroundColor: getColorCss(option.value) }}
+                      />
+                      {option.shortLabel}
+                    </button>
+                  ))}
+                </div>
+                <div className="analyzer-color-tools">
+                  <button type="button" onClick={resetStickerColorGrid}>
+                    初期状態に戻す
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadScrambleIntoStickerGrid}
+                    disabled={!canUseScramble}
+                  >
+                    スクランブルから作成
+                  </button>
+                </div>
+              </div>
+
+              <div className="analyzer-color-net" aria-label="Sticker color net">
+                {COLOR_FACE_ORDER.map((face) => (
+                  <div
+                    className={`analyzer-color-face analyzer-color-face-${face.toLowerCase()}`}
+                    key={face}
+                  >
+                    <span>{face}</span>
+                    <div className="analyzer-color-stickers">
+                      {stickerColorGrid[face].map((color, stickerIndex) => {
+                        const isCenter = stickerIndex === STICKER_CENTER_INDEX;
+
+                        return (
+                          <button
+                            type="button"
+                            key={`${face}-${stickerIndex}`}
+                            className={isCenter ? "is-center" : ""}
+                            onClick={() => paintSticker(face, stickerIndex)}
+                            disabled={isCenter}
+                            title={`${face}${stickerIndex + 1} ${getColorLabel(color)}`}
+                            style={{ backgroundColor: getColorCss(color) }}
+                          >
+                            {isCenter ? face : ""}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="analyzer-color-counts" aria-label="Sticker color counts">
+                {COLOR_OPTIONS.map((option) => (
+                  <span
+                    key={option.value}
+                    className={stickerColorCounts[option.value] === 9 ? "is-ok" : "is-warn"}
+                  >
+                    <i
+                      aria-hidden="true"
+                      style={{ backgroundColor: getColorCss(option.value) }}
+                    />
+                    {option.shortLabel}: {stickerColorCounts[option.value]}/9
+                  </span>
+                ))}
+              </div>
+            </section>
+          )}
 
           {copyStatus !== "idle" && (
             <p className="analyzer-copy-status" role="status">
@@ -3022,19 +4090,23 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           )}
 
           <div className="analyzer-action-grid">
-            <button type="button" onClick={applyScramble} disabled={!canUseScramble}>
-              スクランブルを反映
+            <button type="button" onClick={applyScramble} disabled={!canUseStartState}>
+              {inputMode === "color" ? "色配置を反映" : "スクランブルを反映"}
             </button>
-            <button type="button" onClick={openScramblePreview} disabled={!scrambleInput.trim()}>
+            <button
+              type="button"
+              onClick={openScramblePreview}
+              disabled={inputMode !== "scramble" || !scrambleInput.trim()}
+            >
               スクランブルを確認する
             </button>
             <button
               type="button"
               onClick={playCombined}
               disabled={
-                unsupportedScrambleTokens.length > 0 ||
+                (inputMode === "scramble" && unsupportedScrambleTokens.length > 0) ||
                 parsedSolve.invalidTokens.length > 0 ||
-                !canUseOrientation
+                !canUseStartState
               }
             >
               崩した状態から手順を再生
@@ -3043,8 +4115,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
           <div className="analyzer-stats" aria-label="Move counts">
             <div>
-              <span>Scramble</span>
-              <strong>{parsedScramble.moves.length}</strong>
+              <span>Start</span>
+              <strong>{startInputCount}</strong>
             </div>
             <div>
               <span>Solve</span>
@@ -3067,7 +4139,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
               <button
                 className="analyzer-primary-action"
                 type="button"
-                disabled={isSearchingCross || !canUseScramble}
+                disabled={isSearchingCross || !canUseStartState}
                 onClick={analyzeCross}
               >
                 {isSearchingCross ? "探索中..." : "最短手順を探す"}
@@ -3536,7 +4608,19 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
                 {selectedF2lPair && (
                   <article className="analyzer-f2l-detail">
-                    <h3>{selectedF2lPair.slotLabel}</h3>
+                    <div className="analyzer-f2l-detail-head">
+                      <h3>{selectedF2lPair.slotLabel}</h3>
+                      <label className="analyzer-f2l-highlight-toggle">
+                        <input
+                          type="checkbox"
+                          checked={isF2lPairHighlightEnabled}
+                          onChange={(event) =>
+                            setIsF2lPairHighlightEnabled(event.currentTarget.checked)
+                          }
+                        />
+                        <span>F2L中のペアを強調</span>
+                      </label>
+                    </div>
                     <p>{selectedF2lPair.note}</p>
                     <div className="analyzer-f2l-tags">
                       <span>Corner: {selectedF2lPair.cornerColors.map(getColorJapanese).join("")}</span>
@@ -3637,6 +4721,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                       <button type="button" onClick={prepareBestOllPlayback}>
                         OLLを3D再生待ち
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => openLastLayerLearnPreview("oll")}
+                      >
+                        Learnで勉強
+                      </button>
                     </div>
                   </>
                 ) : (
@@ -3712,6 +4802,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     <div className="analyzer-f2l-actions">
                       <button type="button" onClick={prepareBestPllPlayback}>
                         PLLを3D再生待ち
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openLastLayerLearnPreview("pll")}
+                      >
+                        Learnで勉強
                       </button>
                     </div>
                   </>
@@ -3810,6 +4906,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="analyzer-f2l-highlight-toggle analyzer-f2l-highlight-toggle-compact">
+                <input
+                  type="checkbox"
+                  checked={isF2lPairHighlightEnabled}
+                  onChange={(event) =>
+                    setIsF2lPairHighlightEnabled(event.currentTarget.checked)
+                  }
+                />
+                <span>F2L強調</span>
               </label>
               <div className="analyzer-step">
                 Step: {currentIndex} / {activeMoves.length}
@@ -3918,7 +5024,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   <button
                     type="button"
                     onClick={prepareBestCrossPlayback}
-                    disabled={isSearchingCross || !canUseScramble}
+                    disabled={isSearchingCross || !canUseStartState}
                   >
                     {isSearchingCross ? "Cross..." : "Cross"}
                   </button>
@@ -3936,10 +5042,136 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     PLL
                   </button>
                 </div>
+                <div className="analyzer-phase-learn-actions" aria-label="Last layer learn links">
+                  <button
+                    type="button"
+                    disabled={!ollRecognition?.ok}
+                    onClick={() => openLastLayerLearnPreview("oll")}
+                  >
+                    OLL Learn
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!pllRecognition?.ok}
+                    onClick={() => openLastLayerLearnPreview("pll")}
+                  >
+                    PLL Learn
+                  </button>
+                </div>
               </div>
             </aside>
           </div>
 
+          {lastLayerLearnPreview && (
+            <div
+              className="analyzer-learn-preview-overlay"
+              role="presentation"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) {
+                  closeLastLayerLearnPreview();
+                }
+              }}
+            >
+              <article
+                aria-label={`${lastLayerLearnPreview.phase.toUpperCase()} learn preview`}
+                aria-modal="true"
+                className="analyzer-learn-preview-modal"
+                role="dialog"
+              >
+                <button
+                  className="analyzer-learn-preview-close"
+                  type="button"
+                  onClick={closeLastLayerLearnPreview}
+                >
+                  閉じる
+                </button>
+
+                <section className="analyzer-learn-preview-study">
+                  <div className="analyzer-learn-preview-head">
+                    <div>
+                      <p className="eyebrow">
+                        {lastLayerLearnPreview.phase.toUpperCase()} Learn Preview
+                      </p>
+                      <h3>{lastLayerLearnPreview.recognition.caseTitle}</h3>
+                    </div>
+                    <span>
+                      {lastLayerLearnPreview.recognition.isSkip
+                        ? `${lastLayerLearnPreview.phase.toUpperCase()} Skip`
+                        : "自動認識したケース"}
+                    </span>
+                  </div>
+
+                  <div className="analyzer-learn-preview-case">
+                    <AnalyzerLastLayerCasePreview
+                      caseItem={lastLayerLearnPreview.recognition.caseItem}
+                      phase={lastLayerLearnPreview.phase}
+                      title={lastLayerLearnPreview.recognition.caseTitle}
+                    />
+                    <div className="analyzer-learn-preview-copy">
+                      <p>
+                        {lastLayerLearnPreview.recognition.caseItem?.subtitle ??
+                          "この状態はこの工程をスキップできます。必要なら一覧から近いケースを復習できます。"}
+                      </p>
+                      <div className="analyzer-f2l-tags">
+                        <span>{lastLayerLearnPreview.recognition.moveCount} moves</span>
+                        <span>{lastLayerLearnPreview.recognition.setupAlgorithm || "AUFなし"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="algorithm-box analyzer-learn-preview-algorithm">
+                    <span>手順</span>
+                    <code>{lastLayerLearnPreview.recognition.algorithm || "Skip"}</code>
+                  </div>
+
+                  <p className="analyzer-learn-preview-description">
+                    {lastLayerLearnPreview.recognition.caseItem?.description ??
+                      `${lastLayerLearnPreview.phase.toUpperCase()}は完成済みです。次の工程に進めます。`}
+                  </p>
+
+                  {lastLayerLearnPreview.recognition.caseItem && (
+                    <div className="learn-tags" aria-label="Case tags">
+                      {lastLayerLearnPreview.recognition.caseItem.tags.slice(0, 5).map((tag) => (
+                        <span key={tag}>{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="analyzer-learn-preview-actions">
+                    <button type="button" onClick={closeLastLayerLearnPreview}>
+                      閉じる
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (lastLayerLearnPreview.phase === "oll") {
+                          prepareBestOllPlayback();
+                        } else {
+                          prepareBestPllPlayback();
+                        }
+
+                        closeLastLayerLearnPreview();
+                      }}
+                    >
+                      3Dで見る
+                    </button>
+                    <button
+                      className="analyzer-primary-action"
+                      type="button"
+                      onClick={() =>
+                        openLearningCaseLearn(
+                          lastLayerLearnPreview.recognition.caseItem,
+                          lastLayerLearnPreview.phase,
+                        )
+                      }
+                    >
+                      {lastLayerLearnPreview.recognition.caseItem ? "Learn詳細へ" : "Learn一覧へ"}
+                    </button>
+                  </div>
+                </section>
+              </article>
+            </div>
+          )}
         </section>
       </div>
     </main>

@@ -5118,11 +5118,12 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
 
 @supports (padding: max(0px)) {
   .global-app-nav {
-    top: max(10px, env(safe-area-inset-top));
+    top: max(12px, calc(env(safe-area-inset-top) + 10px));
     width: min(
       calc(100% - max(28px, calc(20px + env(safe-area-inset-left) + env(safe-area-inset-right)))),
       1180px
     );
+    margin-top: max(12px, calc(env(safe-area-inset-top) + 10px));
   }
 
   .app-shell {
@@ -5529,10 +5530,21 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
 
 @media (max-width: 520px) {
   .global-app-nav {
-    top: 6px;
+    top: 34px;
     width: calc(100% - 16px);
-    margin-top: 6px;
+    margin-top: 34px;
     padding: 8px;
+  }
+
+  @supports (padding: max(0px)) {
+    .global-app-nav {
+      top: max(34px, calc(env(safe-area-inset-top) + 10px));
+      width: min(
+        calc(100% - max(16px, calc(16px + env(safe-area-inset-left) + env(safe-area-inset-right)))),
+        100%
+      );
+      margin-top: max(34px, calc(env(safe-area-inset-top) + 10px));
+    }
   }
 
   .global-brand {
@@ -5540,7 +5552,7 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   }
 
   .global-brand span {
-    font-size: 0.88rem;
+    font-size: 0.84rem;
   }
 
   .global-brand small {
@@ -5551,6 +5563,8 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
     min-width: 76px;
     max-width: 108px;
     min-height: 40px;
+    padding: 0 8px;
+    font-size: 0.82rem;
   }
 
   .global-nav-links {

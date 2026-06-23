@@ -240,6 +240,12 @@ interface PointerStartCandidate {
   timeoutId: number;
 }
 
+interface PostStopInputGuard {
+  pointerId: number | null;
+  timeoutId: number | null;
+  waitingForRelease: boolean;
+}
+
 interface WeakPhase {
   label: string;
   average: number;
@@ -647,6 +653,10 @@ export default function App() {
   const holdReturnStateRef = useRef<StartReturnState>("idle");
   const pointerStartCandidateRef = useRef<PointerStartCandidate | null>(null);
   const elapsedBeforeHoldRef = useRef(0);
+  const timerReturnScrollXRef = useRef(0);
+  const timerReturnScrollYRef = useRef(0);
+  const restoreTimerScrollFrameRef = useRef<number | null>(null);
+  const postStopInputGuardRef = useRef<PostStopInputGuard | null>(null);
   const syncedLocalSolvesUserIdRef = useRef<string | null>(null);
 
   const activeSolves = useMemo(() => getActiveSolves(solves), [solves]);
@@ -693,6 +703,78 @@ export default function App() {
     holdTimeoutRef.current = null;
   }, []);
 
+  const rememberTimerReturnScroll = useCallback(() => {
+    timerReturnScrollXRef.current = window.scrollX;
+    timerReturnScrollYRef.current = window.scrollY;
+  }, []);
+
+  const restoreTimerReturnScroll = useCallback(() => {
+    const left = timerReturnScrollXRef.current;
+    const top = timerReturnScrollYRef.current;
+
+    if (restoreTimerScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(restoreTimerScrollFrameRef.current);
+      restoreTimerScrollFrameRef.current = null;
+    }
+
+    restoreTimerScrollFrameRef.current = window.requestAnimationFrame(() => {
+      restoreTimerScrollFrameRef.current = window.requestAnimationFrame(() => {
+        window.scrollTo({ left, top, behavior: "auto" });
+        restoreTimerScrollFrameRef.current = null;
+      });
+    });
+  }, []);
+
+  const clearPostStopInputGuard = useCallback(() => {
+    const guard = postStopInputGuardRef.current;
+
+    if (guard?.timeoutId !== null && guard?.timeoutId !== undefined) {
+      window.clearTimeout(guard.timeoutId);
+    }
+
+    postStopInputGuardRef.current = null;
+  }, []);
+
+  const armPostStopInputGuard = useCallback(
+    (pointerId: number | null) => {
+      clearPostStopInputGuard();
+
+      const guard: PostStopInputGuard = {
+        pointerId,
+        timeoutId: null,
+        waitingForRelease: true,
+      };
+
+      guard.timeoutId = window.setTimeout(() => {
+        if (postStopInputGuardRef.current === guard) {
+          postStopInputGuardRef.current = null;
+        }
+      }, 1200);
+
+      postStopInputGuardRef.current = guard;
+    },
+    [clearPostStopInputGuard],
+  );
+
+  const releasePostStopInputGuard = useCallback(() => {
+    const guard = postStopInputGuardRef.current;
+
+    if (!guard) {
+      return;
+    }
+
+    if (guard.timeoutId !== null) {
+      window.clearTimeout(guard.timeoutId);
+    }
+
+    guard.waitingForRelease = false;
+    guard.timeoutId = window.setTimeout(() => {
+      if (postStopInputGuardRef.current === guard) {
+        postStopInputGuardRef.current = null;
+      }
+    }, 450);
+  }, []);
+
   useEffect(() => {
     const syncLocation = () => setLocationInfo(getLocationInfo());
 
@@ -704,6 +786,84 @@ export default function App() {
       window.removeEventListener("hashchange", syncLocation);
     };
   }, []);
+
+  useEffect(() => {
+    const stopGuardedEvent = (event: Event) => {
+      if (event.cancelable) {
+        event.preventDefault();
+      }
+
+      event.stopImmediatePropagation();
+    };
+
+    const matchesGuardedPointer = (event: PointerEvent, guard: PostStopInputGuard) =>
+      guard.pointerId === null || guard.pointerId === event.pointerId;
+
+    const handlePointerRelease = (event: PointerEvent) => {
+      const guard = postStopInputGuardRef.current;
+
+      if (!guard || !matchesGuardedPointer(event, guard)) {
+        return;
+      }
+
+      stopGuardedEvent(event);
+      releasePostStopInputGuard();
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!postStopInputGuardRef.current) {
+        return;
+      }
+
+      stopGuardedEvent(event);
+      releasePostStopInputGuard();
+    };
+
+    const handleDelayedPress = (event: PointerEvent) => {
+      const guard = postStopInputGuardRef.current;
+
+      if (!guard || guard.waitingForRelease) {
+        return;
+      }
+
+      stopGuardedEvent(event);
+    };
+
+    const handleDelayedClick = (event: MouseEvent) => {
+      if (!postStopInputGuardRef.current) {
+        return;
+      }
+
+      stopGuardedEvent(event);
+    };
+
+    window.addEventListener("pointerup", handlePointerRelease, true);
+    window.addEventListener("pointercancel", handlePointerRelease, true);
+    window.addEventListener("pointerdown", handleDelayedPress, true);
+    window.addEventListener("click", handleDelayedClick, true);
+    window.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
+    window.addEventListener("touchcancel", handleTouchEnd, { capture: true, passive: false });
+
+    return () => {
+      window.removeEventListener("pointerup", handlePointerRelease, true);
+      window.removeEventListener("pointercancel", handlePointerRelease, true);
+      window.removeEventListener("pointerdown", handleDelayedPress, true);
+      window.removeEventListener("click", handleDelayedClick, true);
+      window.removeEventListener("touchend", handleTouchEnd, true);
+      window.removeEventListener("touchcancel", handleTouchEnd, true);
+    };
+  }, [releasePostStopInputGuard]);
+
+  useEffect(
+    () => () => {
+      if (restoreTimerScrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(restoreTimerScrollFrameRef.current);
+      }
+
+      clearPostStopInputGuard();
+    },
+    [clearPostStopInputGuard],
+  );
 
   useEffect(() => {
     if (!isAuthConfigured()) {
@@ -976,13 +1136,15 @@ export default function App() {
       setUndoState(null);
       persistAndSetSolves([solve, ...solves]);
       syncSolveToCloud(solve);
+      restoreTimerReturnScroll();
     },
-    [persistAndSetSolves, setTimerStatus, solves, syncSolveToCloud],
+    [persistAndSetSolves, restoreTimerReturnScroll, setTimerStatus, solves, syncSolveToCloud],
   );
 
   const startTimer = useCallback(() => {
     const startTime = performance.now();
 
+    rememberTimerReturnScroll();
     startTimeRef.current = startTime;
     setElapsedMs(0);
     setSplitDrafts([]);
@@ -995,7 +1157,7 @@ export default function App() {
       scramble,
       splits: [],
     });
-  }, [scramble, setTimerStatus, timerMode]);
+  }, [rememberTimerReturnScroll, scramble, setTimerStatus, timerMode]);
 
   const stopNormalTimer = useCallback(() => {
     if (startTimeRef.current === null) {
@@ -1201,6 +1363,19 @@ export default function App() {
     stopNormalTimer,
     timerMode,
   ]);
+
+  const willRunningTimerInputFinishSolve = useCallback(() => {
+    switch (timerMode) {
+      case "normal":
+      case "cross_practice":
+      case "f2l_practice":
+        return true;
+      case "cfop_split":
+        return splitDrafts.length >= CFOP_PHASES.length - 1;
+      case "f2l_pair_split":
+        return splitDrafts.length >= F2L_PAIR_PHASES.length - 1;
+    }
+  }, [splitDrafts.length, timerMode]);
 
   const clearPointerStartCandidate = useCallback((restoreState: boolean) => {
     const candidate = pointerStartCandidateRef.current;
@@ -1436,6 +1611,14 @@ const hasPointerMovedEnoughToScroll = useCallback(
       }
 
       if (timerStateRef.current === "running") {
+        const willFinishSolve =
+          performance.now() - lastInputAtRef.current >= INPUT_DEBOUNCE_MS &&
+          willRunningTimerInputFinishSolve();
+
+        if (willFinishSolve && event.pointerType !== "mouse") {
+          armPostStopInputGuard(event.pointerId);
+        }
+
         event.preventDefault();
         event.stopPropagation();
         handleRunningTimerInput();
@@ -1452,7 +1635,12 @@ const hasPointerMovedEnoughToScroll = useCallback(
 
       beginPointerStartCandidate(event.pointerId, event.clientX, event.clientY);
     },
-    [beginPointerStartCandidate, handleRunningTimerInput],
+    [
+      armPostStopInputGuard,
+      beginPointerStartCandidate,
+      handleRunningTimerInput,
+      willRunningTimerInputFinishSolve,
+    ],
   );
 
   const handleTimerPointerMove = useCallback(

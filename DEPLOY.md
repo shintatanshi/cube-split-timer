@@ -412,7 +412,8 @@ https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback
 3. Supabase Dashboardを開く
 4. Authentication > Providers > Google を有効にする
 5. Google CloudのClient IDとClient Secretを入力する
-6. Authentication > URL Configuration のRedirect URLsに公開URLとローカルURLを追加する
+6. Authentication の設定で Manual Linking / Enable Manual Linking を有効にする
+7. Authentication > URL Configuration のRedirect URLsに公開URLとローカルURLを追加する
 
 ```text
 http://localhost:5173/login
@@ -421,3 +422,5 @@ https://YOUR_PUBLIC_DOMAIN/login
 
 `YOUR_PUBLIC_DOMAIN` はVercelやNetlifyで実際に公開しているドメインに置き換えてください。
 service_role keyやGoogle Client Secretはフロントエンド、`.env.local`、Vercelの公開環境変数には置かないでください。
+
+ログイン中ユーザーはAccount画面の「Googleアカウントを連携」から、既存のメール/パスワードアカウントへGoogleログインを後付けできます。

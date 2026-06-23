@@ -111,6 +111,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     points: [
       "未ログインでもタイマーと端末内履歴は今まで通り使えます。",
       "Googleログインを使うには、公開先のSupabaseプロジェクトでGoogle providerを有効にしておく必要があります。",
+      "ログイン後のAccount画面から、既存のメール/パスワードアカウントにGoogleアカウントを後から連携できます。",
       "ログイン中に保存した記録は、localStorageへ保存したあとSupabaseのsolve_sessionsにも保存します。",
       "ログイン時には、この端末にある未削除のローカル履歴もアカウントへアップロードします。",
       "Account画面では、端末内履歴の書き出し、別端末からの読み込み、アカウントへの手動保存ができます。",

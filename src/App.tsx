@@ -12,14 +12,17 @@ import type {
 } from "./types";
 import { HELP_TOPICS, TUTORIAL_STEPS } from "./helpContent";
 import {
+  getAuthIdentities,
   getCurrentAuthUser,
   isAuthConfigured,
+  linkGoogleIdentity,
   requestPasswordResetEmail,
   signInWithEmail,
   signInWithGoogle,
   signOutCurrentUser,
   signUpWithEmail,
   subscribeToAuthUserChange,
+  type AuthIdentity,
   type AuthUser,
   updateCurrentUserPassword,
 } from "./lib/auth";
@@ -394,6 +397,18 @@ function getAuthUserLabel(user: AuthUser): string {
   }
 
   return user.email ?? "ログイン中";
+}
+
+function getAuthIdentityLabel(identity: AuthIdentity): string {
+  if (identity.provider === "email") {
+    return "メール";
+  }
+
+  if (identity.provider === "google") {
+    return "Google";
+  }
+
+  return identity.provider;
 }
 
 function getLocalSyncNote(solve: SolveRecord): string {
@@ -2342,12 +2357,63 @@ function AuthPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSigningInWithGoogle, setIsSigningInWithGoogle] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [authIdentities, setAuthIdentities] = useState<AuthIdentity[]>([]);
+  const [isLoadingAuthIdentities, setIsLoadingAuthIdentities] = useState(false);
+  const [isLinkingGoogleIdentity, setIsLinkingGoogleIdentity] = useState(false);
+  const [accountStatus, setAccountStatus] = useState<"idle" | "success" | "error">("idle");
+  const [accountStatusMessage, setAccountStatusMessage] = useState("");
   const [importText, setImportText] = useState("");
   const [dataStatus, setDataStatus] = useState<"idle" | "success" | "error">("idle");
   const [dataStatusMessage, setDataStatusMessage] = useState("");
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isUploadingLocalSolves, setIsUploadingLocalSolves] = useState(false);
+  const hasGoogleIdentity = authIdentities.some((identity) => identity.provider === "google");
+  const authIdentityLabel = authIdentities.length > 0
+    ? authIdentities.map(getAuthIdentityLabel).join(" / ")
+    : "未確認";
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!user || !isConfigured) {
+      setAuthIdentities([]);
+      setIsLoadingAuthIdentities(false);
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setIsLoadingAuthIdentities(true);
+    setAccountStatus("idle");
+    setAccountStatusMessage("");
+
+    getAuthIdentities()
+      .then((identities) => {
+        if (!isActive) {
+          return;
+        }
+
+        setAuthIdentities(identities);
+      })
+      .catch(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setAccountStatus("error");
+        setAccountStatusMessage("ログイン方法の連携状態を確認できませんでした。");
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAuthIdentities(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isConfigured, user]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2402,6 +2468,28 @@ function AuthPage({
       setStatus("error");
       setStatusMessage(getAuthErrorMessage(error));
       setIsSigningInWithGoogle(false);
+    }
+  };
+
+  const handleLinkGoogleIdentity = async () => {
+    if (!user) {
+      setAccountStatus("error");
+      setAccountStatusMessage("Google連携にはログインが必要です。");
+      return;
+    }
+
+    setIsLinkingGoogleIdentity(true);
+    setAccountStatus("idle");
+    setAccountStatusMessage("");
+
+    try {
+      await linkGoogleIdentity();
+      setAccountStatus("success");
+      setAccountStatusMessage("Googleの確認画面へ移動しています。");
+    } catch (error) {
+      setAccountStatus("error");
+      setAccountStatusMessage(getAuthErrorMessage(error));
+      setIsLinkingGoogleIdentity(false);
     }
   };
 
@@ -2541,6 +2629,41 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           <p className="auth-lead">
             これ以降に保存した記録は、ローカル保存後にSupabaseの `solve_sessions` にも保存します。
           </p>
+          {accountStatus !== "idle" && (
+            <div className={`feedback-status feedback-status-${accountStatus}`} role="status">
+              {accountStatusMessage}
+            </div>
+          )}
+          <div className="auth-link-panel">
+            <div>
+              <p className="eyebrow">Login methods</p>
+              <h3>Googleアカウント連携</h3>
+              <p>
+                連携済み:{" "}
+                <strong>{isLoadingAuthIdentities ? "確認中..." : authIdentityLabel}</strong>
+              </p>
+              <p>
+                今のアカウントにGoogleログインを追加します。連携後はメール/パスワードでもGoogleでも同じ履歴へ入れます。
+              </p>
+            </div>
+            <button
+              className={hasGoogleIdentity ? "ghost-button" : "auth-provider-button"}
+              type="button"
+              onClick={() => void handleLinkGoogleIdentity()}
+              disabled={
+                hasGoogleIdentity ||
+                isLoadingAuthIdentities ||
+                isLinkingGoogleIdentity
+              }
+            >
+              <span className="auth-provider-mark" aria-hidden="true">G</span>
+              {hasGoogleIdentity
+                ? "Google連携済み"
+                : isLinkingGoogleIdentity
+                  ? "Googleへ移動中..."
+                  : "Googleアカウントを連携"}
+            </button>
+          </div>
           <div className="feedback-actions">
             <button className="primary-button" type="button" onClick={onOpenTimer}>
               Timerへ戻る

@@ -1,6 +1,6 @@
 # Cube Split Timer current status
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 This file is the handoff note for using the same project from multiple PCs with Codex.
 When starting work on another PC, ask Codex to read this file and `AGENTS.md` first.
@@ -12,21 +12,22 @@ When starting work on another PC, ask Codex to read this file and `AGENTS.md` fi
 
 ## Recent important commits
 
+- `bc0a914` Add Google login and improve analyzer
+- `17427f0` Backfill auth users into profiles
+- `9191e4e` Add admin management page
 - `a6db734` Add local history migration tools
 - `90043f2` Add Vercel SPA routing config
-- `7fb7cb5` Add Supabase email login
-- `7a81550` Move analyzer player above mobile analysis
-- `886b49a` Improve analyzer last layer playback
 
 ## Current app state
 
 - React + Vite + TypeScript app.
-- Supabase email login is implemented.
+- Supabase email/password login, Google OAuth login, and logged-in Google account linking are implemented.
 - Local solve history can be migrated/imported so old device data can be moved into a logged-in account.
 - Admin access is implemented with an `/admin` page, admin-only RLS, profile emails, cloud history visibility, role changes, password reset email support, and a profile backfill migration for existing Auth users. Passwords are never exposed in plaintext.
-- Analyzer has Cross / F2L / OLL / PLL playback improvements.
+- Analyzer has Cross / F2L / OLL / PLL playback improvements, and all-color cross candidates now use each color's actual target face instead of repeating the same pattern.
 - Analyzer mobile layout was adjusted so the animation appears above the analysis blocks on phone layouts.
 - Vercel SPA routing config is present.
+- Google login requires Google Provider configuration in Supabase. Google account linking also requires Manual Linking / Enable Manual Linking in Supabase Auth settings.
 
 ## Environment variables
 

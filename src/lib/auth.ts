@@ -1,7 +1,8 @@
-import type { User } from "@supabase/supabase-js";
+import type { User, UserIdentity } from "@supabase/supabase-js";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase";
 
 export type AuthUser = User;
+export type AuthIdentity = UserIdentity;
 
 export function isAuthConfigured(): boolean {
   return isSupabaseConfigured();
@@ -54,6 +55,29 @@ function getLoginRedirectUrl(): string {
 
 export async function signInWithGoogle(): Promise<void> {
   const { error } = await getSupabaseClient().auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: getLoginRedirectUrl(),
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+export async function getAuthIdentities(): Promise<AuthIdentity[]> {
+  const { data, error } = await getSupabaseClient().auth.getUserIdentities();
+
+  if (error) {
+    throw error;
+  }
+
+  return data.identities;
+}
+
+export async function linkGoogleIdentity(): Promise<void> {
+  const { error } = await getSupabaseClient().auth.linkIdentity({
     provider: "google",
     options: {
       redirectTo: getLoginRedirectUrl(),

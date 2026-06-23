@@ -126,7 +126,8 @@ body.learn-player-fullscreen-open {
 
 .global-brand,
 .global-nav-links button,
-.global-account-button {
+.global-account-button,
+.global-nav-collapse-button {
   min-height: 42px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -204,6 +205,10 @@ body.learn-player-fullscreen-open {
   font-weight: 950;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.global-nav-collapse-button {
+  display: none;
 }
 
 button {
@@ -5533,6 +5538,7 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
     top: 34px;
     width: calc(100% - 16px);
     margin-top: 34px;
+    margin-bottom: 26px;
     padding: 8px;
   }
 
@@ -5545,6 +5551,10 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
       );
       margin-top: max(34px, calc(env(safe-area-inset-top) + 10px));
     }
+  }
+
+  .global-app-nav.is-mobile-collapsed {
+    gap: 8px;
   }
 
   .global-brand {
@@ -5573,12 +5583,47 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
     overflow: visible;
   }
 
+  .global-app-nav.is-mobile-collapsed .global-nav-links {
+    display: none;
+  }
+
   .global-nav-links button {
     width: 100%;
     min-width: 0;
     min-height: 38px;
     padding: 0 6px;
     font-size: 0.82rem;
+  }
+
+  .global-nav-collapse-button {
+    position: absolute;
+    bottom: -25px;
+    left: 20px;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 58px;
+    min-height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-top: 0;
+    border-radius: 0 0 8px 8px;
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
+    box-shadow: 0 10px 24px var(--shadow);
+    backdrop-filter: blur(16px);
+  }
+
+  .global-nav-collapse-button::before {
+    content: "";
+    width: 12px;
+    height: 12px;
+    border-right: 3px solid var(--text-strong);
+    border-bottom: 3px solid var(--text-strong);
+    transform: translateY(-2px) rotate(45deg);
+  }
+
+  .global-nav-collapse-button[aria-expanded="true"]::before {
+    transform: translateY(4px) rotate(225deg);
   }
 
   .learn-tabs {

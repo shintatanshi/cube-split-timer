@@ -74,6 +74,7 @@ const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
+const MOBILE_NAV_COLLAPSED_STORAGE_KEY = "cubeSplitTimer.mobileNavCollapsed.v1";
 const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
@@ -338,6 +339,22 @@ function markTutorialSeen(): void {
   }
 }
 
+function loadMobileNavCollapsed(): boolean {
+  try {
+    return localStorage.getItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function saveMobileNavCollapsed(isCollapsed: boolean): void {
+  try {
+    localStorage.setItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY, String(isCollapsed));
+  } catch {
+    // localStorage may be unavailable in private modes; the in-memory state still works.
+  }
+}
+
 function loadCurrentScramble(): string | null {
   try {
     return sessionStorage.getItem(CURRENT_SCRAMBLE_STORAGE_KEY);
@@ -572,8 +589,10 @@ function copyTextWithFallback(text: string): Promise<void> {
 interface GlobalAppNavProps {
   activePage: AppPage;
   isAdmin: boolean;
+  isMobileCollapsed: boolean;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
+  onToggleMobileCollapse: () => void;
   authLabel: string;
   isAuthLoading: boolean;
   isSignedIn: boolean;
@@ -582,8 +601,10 @@ interface GlobalAppNavProps {
 function GlobalAppNav({
   activePage,
   isAdmin,
+  isMobileCollapsed,
   onNavigate,
   onOpenLogin,
+  onToggleMobileCollapse,
   authLabel,
   isAuthLoading,
   isSignedIn,
@@ -593,7 +614,10 @@ function GlobalAppNav({
     : APP_NAV_ITEMS;
 
   return (
-    <nav className="global-app-nav" aria-label="Primary navigation">
+    <nav
+      className={`global-app-nav${isMobileCollapsed ? " is-mobile-collapsed" : ""}`}
+      aria-label="Primary navigation"
+    >
       <button className="global-brand" type="button" onClick={() => onNavigate("/")}>
         <span>Cube Split Timer</span>
         <small>計測・学習・解析</small>
@@ -617,6 +641,13 @@ function GlobalAppNav({
       <button className="global-account-button" type="button" onClick={onOpenLogin}>
         {isAuthLoading ? "アカウント" : isSignedIn ? authLabel : "ログイン"}
       </button>
+      <button
+        className="global-nav-collapse-button"
+        type="button"
+        aria-expanded={!isMobileCollapsed}
+        aria-label={isMobileCollapsed ? "ナビを開く" : "ナビをたたむ"}
+        onClick={onToggleMobileCollapse}
+      />
     </nav>
   );
 }
@@ -636,6 +667,7 @@ export default function App() {
   const [authProfile, setAuthProfile] = useState<ProfileRow | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [isMobileNavCollapsed, setIsMobileNavCollapsed] = useState(loadMobileNavCollapsed);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
   const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
   const [timerState, setTimerState] = useState<TimerState>("idle");
@@ -1862,6 +1894,15 @@ const handleTimerPointerCancel = useCallback(
     void shareText(buildTodaySummaryShareText(todaySolves, todayStats), "今日のまとめ");
   }, [shareText, todaySolves, todayStats]);
 
+  const toggleMobileNavCollapse = useCallback(() => {
+    setIsMobileNavCollapsed((currentValue) => {
+      const nextValue = !currentValue;
+
+      saveMobileNavCollapsed(nextValue);
+      return nextValue;
+    });
+  }, []);
+
   const navigateTo = useCallback((path: string, hash = "") => {
     const [pathname, inlineHash = ""] = path.split("#");
     const nextHash = hash || (inlineHash ? `#${inlineHash}` : "");
@@ -1999,8 +2040,10 @@ const handleTimerPointerCancel = useCallback(
     <GlobalAppNav
       activePage={locationInfo.page}
       isAdmin={authProfile?.role === "admin"}
+      isMobileCollapsed={isMobileNavCollapsed}
       onNavigate={navigateTo}
       onOpenLogin={openLogin}
+      onToggleMobileCollapse={toggleMobileNavCollapse}
       authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
       isAuthLoading={isAuthLoading}
       isSignedIn={Boolean(authUser)}

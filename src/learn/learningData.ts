@@ -27,7 +27,7 @@ export const LEARNING_CATEGORY_LABELS: Record<LearningCategory, string> = {
 };
 
 export const LEARNING_CATEGORY_DESCRIPTIONS: Record<LearningCategory, string> = {
-  f2l: "src/assets/learn/f2l の画像ケースと、承認済みの追加F2Lデータを表示します。",
+  f2l: "src/assets/learn/f2l のF2L41ケースだけを表示します。",
   oll: "src/assets/learn/oll に入れた画像から自動でケースを読み込みます。",
   pll: "src/assets/learn/pll に入れた画像から自動でケースを読み込みます。",
 };
@@ -298,7 +298,12 @@ function getImageCasesByCategory(category: LearningCategory): LearningCase[] {
 
 export const LEARNING_CASES: LearningCase[] = LEARNING_CATEGORIES.flatMap((category) =>
   category === "f2l"
-    ? [...APPROVED_F2L_CASES.map(createApprovedF2lLearningCase), ...getImageCasesByCategory(category)]
+    ? [
+      ...APPROVED_F2L_CASES.filter((caseItem) => caseItem.caseType === "basic41").map(
+        createApprovedF2lLearningCase,
+      ),
+      ...getImageCasesByCategory(category),
+    ]
     : getImageCasesByCategory(category),
 );
 

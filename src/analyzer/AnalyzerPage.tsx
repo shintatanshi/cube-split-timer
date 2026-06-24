@@ -61,12 +61,25 @@ type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerInputMode = "scramble" | "color";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
 type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
-type AnalyzerQuickPhase = "cross" | "f2l" | "oll" | "pll";
+type AnalyzerQuickPhase = "cross" | "f2l" | "nextF2l" | "oll" | "pll";
+type AnalyzerPracticeStep =
+  | { phase: "cross" }
+  | { phase: "f2l" }
+  | { phase: "f2l-step"; stepIndex: number }
+  | { phase: "oll" }
+  | { phase: "pll" };
 type LastLayerLearnPhase = "oll" | "pll";
 type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
 type CrossTargetFace = "D" | "U";
 type ColorVector = [number, number, number];
+
+interface BasicF2lStepRange {
+  step: BasicF2lAnalysisStep;
+  start: number;
+  end: number;
+  moves: string[];
+}
 
 interface AnalyzerSettings {
   crossColor: CubeColorName;
@@ -1116,6 +1129,26 @@ function getPlaybackModeLabel(mode: PlaybackMode): string {
   return mode === "scramble" ? "崩した状態" : "崩した状態 + 手順";
 }
 
+function getPracticeStepLabel(step: AnalyzerPracticeStep | null): string {
+  if (!step) {
+    return "前ステップ";
+  }
+
+  if (step.phase === "f2l-step") {
+    return `F2L ${step.stepIndex + 1}`;
+  }
+
+  if (step.phase === "f2l") {
+    return "F2L";
+  }
+
+  if (step.phase === "cross") {
+    return "Cross";
+  }
+
+  return step.phase.toUpperCase();
+}
+
 function getLearningCaseRouteKey(caseItem: LearningCase): string {
   return caseItem.image.kind === "asset" ? caseItem.image.baseName : caseItem.id;
 }
@@ -1133,6 +1166,23 @@ function movesStartWith(moves: string[], prefix: string[]): boolean {
 
 function movesEqual(a: string[], b: string[]): boolean {
   return a.length === b.length && movesStartWith(a, b);
+}
+
+function buildBasicF2lStepRanges(steps: BasicF2lAnalysisStep[]): BasicF2lStepRange[] {
+  let start = 0;
+
+  return steps.map((step) => {
+    const moves = parseAlgorithm(step.fullAlgorithm).moves;
+    const range = {
+      step,
+      start,
+      end: start + moves.length,
+      moves,
+    };
+    start = range.end;
+
+    return range;
+  });
 }
 
 function getCandidateSlotName(candidate: F2lPairCandidate): F2lSlotName | null {
@@ -1629,6 +1679,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [quickPlaybackStatus, setQuickPlaybackStatus] = useState("待機中");
+  const [currentPracticeStep, setCurrentPracticeStep] =
+    useState<AnalyzerPracticeStep | null>(null);
   const [lastLayerLearnPreviewPhase, setLastLayerLearnPreviewPhase] =
     useState<LastLayerLearnPhase | null>(null);
 
@@ -2196,6 +2248,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
     setHighlightF2lSteps([]);
+    setCurrentPracticeStep(null);
     setAiNotice(null);
   }, [analyzerStartStateSignature]);
 
@@ -2381,6 +2434,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
     setHighlightF2lSteps([]);
+    setCurrentPracticeStep(null);
   }, [selectedCrossSolutionSignature]);
 
   useEffect(
@@ -2581,6 +2635,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setIsAnalyzingBasicF2l(false);
     setManualMoveHistory([]);
     setHighlightF2lSteps([]);
+    setCurrentPracticeStep(null);
     setCopyStatus("idle");
     setAiNotice(null);
 
@@ -2693,22 +2748,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     f2lCandidates.find((candidate) => candidate.id === selectedF2lPairId) ??
     f2lCandidates[0] ??
     null;
-  const basicF2lStepRanges = useMemo(() => {
-    let start = 0;
-
-    return highlightF2lSteps.map((step) => {
-      const moves = parseAlgorithm(step.fullAlgorithm).moves;
-      const range = {
-        step,
-        start,
-        end: start + moves.length,
-        moves,
-      };
-      start = range.end;
-
-      return range;
-    });
-  }, [highlightF2lSteps]);
+  const basicF2lStepRanges = useMemo(
+    () => buildBasicF2lStepRanges(highlightF2lSteps),
+    [highlightF2lSteps],
+  );
   const basicF2lPlanMoves = useMemo(
     () => basicF2lStepRanges.flatMap((range) => range.moves),
     [basicF2lStepRanges],
@@ -2742,10 +2785,31 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     selectedCrossSolution,
     selectedF2lPairId,
   ]);
+  const playbackBaseF2lMoves = useMemo(() => {
+    if (!selectedCrossSolution) {
+      return [];
+    }
+
+    if (!movesStartWith(parsedPlaybackScramble.moves, selectedCrossSolution.moves)) {
+      return [];
+    }
+
+    return parsedPlaybackScramble.moves.slice(selectedCrossSolution.moves.length);
+  }, [parsedPlaybackScramble.moves, selectedCrossSolution]);
   const activeF2lMoves =
-    f2lPlaybackStartIndex === null ? [] : activeMoves.slice(f2lPlaybackStartIndex);
+    f2lPlaybackStartIndex === null
+      ? playbackBaseF2lMoves.length > 0
+        ? [...playbackBaseF2lMoves, ...activeMoves]
+        : []
+      : [...playbackBaseF2lMoves, ...activeMoves.slice(f2lPlaybackStartIndex)];
   const activeF2lMoveIndex =
-    f2lPlaybackStartIndex === null ? -1 : currentIndex - f2lPlaybackStartIndex;
+    f2lPlaybackStartIndex === null
+      ? playbackBaseF2lMoves.length > 0
+        ? playbackBaseF2lMoves.length + currentIndex
+        : -1
+      : playbackBaseF2lMoves.length + currentIndex - f2lPlaybackStartIndex;
+  const hasActiveF2lPlayback =
+    f2lPlaybackStartIndex !== null || playbackBaseF2lMoves.length > 0;
   const activeF2lMovesMatchHighlightSteps =
     basicF2lPlanMoves.length > 0 &&
     activeF2lMoves.length > 0 &&
@@ -2772,7 +2836,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     basicF2lStepRanges,
   ]);
   const currentF2lHighlightPair = useMemo(() => {
-    if (!selectedCrossSolution || f2lPlaybackStartIndex === null || activeF2lMoveIndex < 0) {
+    if (!selectedCrossSolution || !hasActiveF2lPlayback || activeF2lMoveIndex < 0) {
       return null;
     }
 
@@ -2798,7 +2862,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     activeF2lMovesMatchHighlightSteps,
     basicF2lPlanMoves.length,
     f2lCandidates,
-    f2lPlaybackStartIndex,
+    hasActiveF2lPlayback,
     selectedCrossSolution,
     selectedF2lPair,
     selectedF2lPairId,
@@ -2987,6 +3051,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setPlaybackMode("scramble-solve");
       setManualMoveHistory([]);
       setHighlightF2lSteps([]);
+      setCurrentPracticeStep(null);
       setIsPlaying(false);
 
       window.setTimeout(() => {
@@ -3022,6 +3087,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setPlaybackMode("scramble-solve");
       setManualMoveHistory([]);
       setHighlightF2lSteps([]);
+      setCurrentPracticeStep(null);
       setIsPlaying(false);
 
       window.setTimeout(() => {
@@ -3110,6 +3176,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setIsLoadingBasicF2lOrderDetails(false);
     setBasicF2lError(null);
     setHighlightF2lSteps([]);
+    setCurrentPracticeStep(null);
 
     if (inputMode === "scramble" && !scrambleInput.trim()) {
       setCrossError("スクランブルを入力してください。");
@@ -3274,6 +3341,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     setAiNotice(null);
     setManualMoveHistory([]);
     setHighlightF2lSteps([]);
+    setCurrentPracticeStep(null);
 
     window.setTimeout(() => {
       applyScrambleInstant();
@@ -3405,19 +3473,125 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         { play: Boolean(options.play), scroll: false },
       );
       setHighlightF2lSteps(plan.steps);
+      setCurrentPracticeStep({ phase: "f2l" });
       return true;
     },
     [selectAnalyzerCandidateFromPlaybackBase, selectedCrossSolution],
+  );
+
+  const getCompletedBasicF2lStepCount = useCallback(
+    (plan: BasicF2lAnalysisPlan) => {
+      if (!selectedCrossSolution || !hasActiveF2lPlayback || activeF2lMoveIndex < 0) {
+        return 0;
+      }
+
+      const ranges = buildBasicF2lStepRanges(plan.steps);
+      const planMoves = ranges.flatMap((range) => range.moves);
+
+      if (
+        activeF2lMoves.length > 0 &&
+        !movesStartWith(activeF2lMoves, planMoves) &&
+        !movesStartWith(planMoves, activeF2lMoves)
+      ) {
+        return 0;
+      }
+
+      return Math.min(
+        plan.steps.length,
+        ranges.filter((range) => activeF2lMoveIndex >= range.end).length,
+      );
+    },
+    [
+      activeF2lMoveIndex,
+      activeF2lMoves,
+      hasActiveF2lPlayback,
+      selectedCrossSolution,
+    ],
+  );
+
+  const getNextBasicF2lStepIndex = useCallback(
+    (plan: BasicF2lAnalysisPlan) => getCompletedBasicF2lStepCount(plan),
+    [getCompletedBasicF2lStepCount],
+  );
+
+  const prepareBasicF2lStepPlayback = useCallback(
+    (
+      plan: BasicF2lAnalysisPlan,
+      stepIndex: number,
+      options: { play?: boolean } = {},
+    ) => {
+      if (!selectedCrossSolution) {
+        return { ok: false, message: "先にCross bestを選択してください。" };
+      }
+
+      const targetStep = plan.steps[stepIndex];
+
+      if (!targetStep) {
+        return { ok: false, message: "F2Lステップを選択できませんでした。" };
+      }
+
+      const previousF2lAlgorithm = plan.steps
+        .slice(0, stepIndex)
+        .map((step) => step.fullAlgorithm)
+        .filter(Boolean)
+        .join(" ");
+      const playbackBaseAlgorithm = [selectedCrossSolution.algorithm, previousF2lAlgorithm]
+        .map((algorithm) => algorithm.trim())
+        .filter(Boolean)
+        .join(" ");
+      const focusPair = getF2lCandidateBySlot(f2lCandidates, targetStep.targetSlot);
+
+      setHelperCaseId(null);
+      setSelectedF2lPairId(focusPair?.id ?? null);
+      selectAnalyzerCandidateFromPlaybackBase(
+        {
+          baseAlgorithm: playbackBaseAlgorithm,
+          algorithm: targetStep.fullAlgorithm.trim(),
+        },
+        { play: options.play ?? true, scroll: false },
+      );
+      setHighlightF2lSteps(plan.steps);
+      setCurrentPracticeStep({ phase: "f2l-step", stepIndex });
+
+      return {
+        ok: true,
+        message: `F2L ${stepIndex + 1}/${plan.steps.length}: ${targetStep.pairTitle}を入れます。`,
+        step: targetStep,
+        stepIndex,
+      };
+    },
+    [
+      f2lCandidates,
+      selectAnalyzerCandidateFromPlaybackBase,
+      selectedCrossSolution,
+    ],
+  );
+
+  const prepareNextBasicF2lStepPlayback = useCallback(
+    (plan: BasicF2lAnalysisPlan, options: { play?: boolean } = {}) => {
+      const stepIndex = getNextBasicF2lStepIndex(plan);
+      if (!plan.steps[stepIndex]) {
+        return { ok: false, message: "F2Lは最後まで入っています。" };
+      }
+
+      return prepareBasicF2lStepPlayback(plan, stepIndex, options);
+    },
+    [
+      getNextBasicF2lStepIndex,
+      prepareBasicF2lStepPlayback,
+    ],
   );
 
   const runBasicF2lAnalysis = useCallback((options: {
     useLocalSearch?: boolean;
     includeAllPlans?: boolean;
     preparePlayback?: boolean;
+    prepareNextStep?: boolean;
   } = {}) => {
     const useLocalSearch = Boolean(options.useLocalSearch);
     const includeAllPlans = Boolean(options.includeAllPlans);
     const preparePlayback = Boolean(options.preparePlayback);
+    const prepareNextStep = Boolean(options.prepareNextStep);
 
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
@@ -3432,6 +3606,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setShowBasicF2lOrderDetails(false);
       setIsLoadingBasicF2lOrderDetails(false);
       setHighlightF2lSteps([]);
+      setCurrentPracticeStep(null);
     }
     setIsLoadingBasicF2lOrderDetails(includeAllPlans);
     setBasicF2lError(null);
@@ -3440,7 +3615,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       setIsAnalyzingBasicF2l(false);
       setIsLoadingBasicF2lOrderDetails(false);
       setBasicF2lError("先にCross候補を選択してください。");
-      if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+      if (
+        preparePlayback ||
+        prepareNextStep ||
+        pendingQuickPhaseRef.current === "f2l" ||
+        pendingQuickPhaseRef.current === "nextF2l"
+      ) {
         pendingQuickPhaseRef.current = null;
         setQuickPlaybackStatus("先にCross bestを選択してください。");
       }
@@ -3473,10 +3653,22 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         if (isDone) {
           finishWorker();
         }
+        const wasPreparingNextF2l =
+          prepareNextStep || pendingQuickPhaseRef.current === "nextF2l";
+
         setBasicF2lError(event.data.error ?? "F2L解析中にエラーが発生しました。");
-        if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+        if (
+          preparePlayback ||
+          prepareNextStep ||
+          pendingQuickPhaseRef.current === "f2l" ||
+          pendingQuickPhaseRef.current === "nextF2l"
+        ) {
           pendingQuickPhaseRef.current = null;
-          setQuickPlaybackStatus("F2L bestを作成できませんでした。");
+          setQuickPlaybackStatus(
+            wasPreparingNextF2l
+              ? "次のF2Lを作成できませんでした。"
+              : "F2L bestを作成できませんでした。",
+          );
         }
         if (!useLocalSearch && !includeAllPlans) {
           setBasicF2lOrderPlans([]);
@@ -3497,7 +3689,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       }
 
       if (isDone) {
-        if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+        if (prepareNextStep || pendingQuickPhaseRef.current === "nextF2l") {
+          const result = prepareNextBasicF2lStepPlayback(event.data.plan);
+
+          pendingQuickPhaseRef.current = null;
+          setQuickPlaybackStatus(result.message);
+        } else if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
           const prepared = prepareBasicF2lPlanPlayback(event.data.plan);
 
           pendingQuickPhaseRef.current = null;
@@ -3529,7 +3726,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         setIsLoadingBasicF2lOrderDetails(false);
       }
       setBasicF2lError("F2L解析Workerでエラーが発生しました。");
-      if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
+      if (
+        preparePlayback ||
+        prepareNextStep ||
+        pendingQuickPhaseRef.current === "f2l" ||
+        pendingQuickPhaseRef.current === "nextF2l"
+      ) {
         pendingQuickPhaseRef.current = null;
         setQuickPlaybackStatus("F2L解析に失敗しました。");
       }
@@ -3542,13 +3744,16 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       useLocalSearch,
       includeAllPlans,
     });
-  }, [prepareBasicF2lPlanPlayback, selectedCrossSolution]);
+  }, [prepareBasicF2lPlanPlayback, prepareNextBasicF2lStepPlayback, selectedCrossSolution]);
 
   const playBasicF2lSteps = (steps: BasicF2lAnalysisStep[]) => {
     if (!selectedCrossSolution || steps.length === 0) {
       return;
     }
 
+    const lastStep = steps[steps.length - 1];
+    const lastStepIndex =
+      basicF2lPlan?.steps.findIndex((step) => step.id === lastStep.id) ?? -1;
     const f2lAlgorithm = steps
       .map((step) => step.fullAlgorithm)
       .filter(Boolean)
@@ -3560,6 +3765,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
     selectAnalyzerCandidate({ algorithm: combinedSolve }, { play: true });
     setHighlightF2lSteps(steps);
+    setCurrentPracticeStep(
+      lastStepIndex >= 0
+        ? { phase: "f2l-step", stepIndex: lastStepIndex }
+        : { phase: "f2l" },
+    );
   };
 
   const playBasicF2lStep = (step: BasicF2lAnalysisStep) => {
@@ -3577,6 +3787,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     if (bestCrossSolution) {
       pendingQuickPhaseRef.current = null;
       selectCrossSolution(bestCrossSolution, { scroll: false });
+      setCurrentPracticeStep({ phase: "cross" });
       setQuickPlaybackStatus(
         `Cross bestを再生待ちにしました。${bestCrossSolution.moveCount} moves`,
       );
@@ -3603,6 +3814,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           ? `Cross完了状態からF2L bestを再生待ちにしました。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
           : "F2L bestを再生待ちにできませんでした。",
       );
+      if (prepared) {
+        setCurrentPracticeStep({ phase: "f2l" });
+      }
       return;
     }
 
@@ -3613,6 +3827,31 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     basicF2lPlan,
     isAnalyzingBasicF2l,
     prepareBasicF2lPlanPlayback,
+    runBasicF2lAnalysis,
+    selectedCrossSolution,
+  ]);
+
+  const prepareNextF2lPlayback = useCallback(() => {
+    if (!selectedCrossSolution) {
+      pendingQuickPhaseRef.current = null;
+      setQuickPlaybackStatus("先にCross bestを選択してください。");
+      return;
+    }
+
+    if (basicF2lPlan && !isAnalyzingBasicF2l) {
+      const result = prepareNextBasicF2lStepPlayback(basicF2lPlan);
+
+      setQuickPlaybackStatus(result.message);
+      return;
+    }
+
+    pendingQuickPhaseRef.current = "nextF2l";
+    setQuickPlaybackStatus("次のF2Lを解析中...");
+    runBasicF2lAnalysis({ prepareNextStep: true });
+  }, [
+    basicF2lPlan,
+    isAnalyzingBasicF2l,
+    prepareNextBasicF2lStepPlayback,
     runBasicF2lAnalysis,
     selectedCrossSolution,
   ]);
@@ -3649,6 +3888,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         ? "F2L完成状態からOLL Skipを再生待ちにしました。"
         : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
     );
+    setCurrentPracticeStep({ phase: "oll" });
   }, [
     basicF2lAlgorithm,
     basicF2lPlan,
@@ -3698,12 +3938,133 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         ? "OLL完成状態からPLL Skipを再生待ちにしました。"
         : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
     );
+    setCurrentPracticeStep({ phase: "pll" });
   }, [
     basicF2lAlgorithm,
     basicF2lPlan,
     ollRecognition,
     pllRecognition,
     selectAnalyzerCandidateFromPlaybackBase,
+    selectedCrossSolution,
+  ]);
+
+  const previousPracticeTarget = useMemo<AnalyzerPracticeStep | null>(() => {
+    if (!currentPracticeStep) {
+      return null;
+    }
+
+    if (currentPracticeStep.phase === "pll") {
+      return { phase: "oll" };
+    }
+
+    if (currentPracticeStep.phase === "oll") {
+      const lastF2lStepIndex = (basicF2lPlan?.steps.length ?? 0) - 1;
+
+      return lastF2lStepIndex >= 0
+        ? { phase: "f2l-step", stepIndex: lastF2lStepIndex }
+        : { phase: "f2l" };
+    }
+
+    if (currentPracticeStep.phase === "f2l") {
+      return { phase: "cross" };
+    }
+
+    if (currentPracticeStep.phase === "f2l-step") {
+      return currentPracticeStep.stepIndex > 0
+        ? { phase: "f2l-step", stepIndex: currentPracticeStep.stepIndex - 1 }
+        : { phase: "cross" };
+    }
+
+    return null;
+  }, [basicF2lPlan?.steps.length, currentPracticeStep]);
+
+  const canPlayPreviousPracticeStep = Boolean(
+    previousPracticeTarget &&
+      !isSearchingCross &&
+      !isAnalyzingBasicF2l &&
+      (previousPracticeTarget.phase === "cross"
+        ? selectedCrossSolution || bestCrossSolution
+        : previousPracticeTarget.phase === "f2l"
+          ? selectedCrossSolution && basicF2lPlan
+          : previousPracticeTarget.phase === "f2l-step"
+            ? selectedCrossSolution &&
+              basicF2lPlan?.steps[previousPracticeTarget.stepIndex]
+            : previousPracticeTarget.phase === "oll"
+              ? selectedCrossSolution && basicF2lPlan && ollRecognition?.ok
+              : false),
+  );
+  const previousPracticeButtonLabel = previousPracticeTarget
+    ? `← 前ステップ: ${getPracticeStepLabel(previousPracticeTarget)}`
+    : "← 前ステップ";
+
+  const preparePreviousPracticeStep = useCallback(() => {
+    const target = previousPracticeTarget;
+
+    if (!target) {
+      setQuickPlaybackStatus("戻れる前ステップがありません。");
+      return;
+    }
+
+    if (target.phase === "cross") {
+      const crossSolution = selectedCrossSolution ?? bestCrossSolution;
+
+      if (!crossSolution) {
+        setQuickPlaybackStatus("前ステップのCrossを準備できませんでした。");
+        return;
+      }
+
+      pendingQuickPhaseRef.current = null;
+      selectCrossSolution(crossSolution, { play: true, scroll: false });
+      setCurrentPracticeStep({ phase: "cross" });
+      setQuickPlaybackStatus(
+        `前ステップ: Crossを再生します。${crossSolution.moveCount} moves`,
+      );
+      return;
+    }
+
+    if (target.phase === "f2l") {
+      if (!basicF2lPlan) {
+        setQuickPlaybackStatus("前ステップのF2Lを準備できませんでした。");
+        return;
+      }
+
+      const prepared = prepareBasicF2lPlanPlayback(basicF2lPlan, { play: true });
+
+      setQuickPlaybackStatus(
+        prepared
+          ? `前ステップ: F2L bestを再生します。${basicF2lPlan.totalMoveCount} moves`
+          : "前ステップのF2Lを準備できませんでした。",
+      );
+      return;
+    }
+
+    if (target.phase === "f2l-step") {
+      if (!basicF2lPlan) {
+        setQuickPlaybackStatus("前ステップのF2Lを準備できませんでした。");
+        return;
+      }
+
+      const result = prepareBasicF2lStepPlayback(basicF2lPlan, target.stepIndex, {
+        play: true,
+      });
+
+      setQuickPlaybackStatus(
+        result.ok ? `前ステップ: ${result.message}` : result.message,
+      );
+      return;
+    }
+
+    if (target.phase === "oll") {
+      prepareBestOllPlayback();
+    }
+  }, [
+    basicF2lPlan,
+    bestCrossSolution,
+    prepareBasicF2lPlanPlayback,
+    prepareBasicF2lStepPlayback,
+    prepareBestOllPlayback,
+    previousPracticeTarget,
+    selectCrossSolution,
     selectedCrossSolution,
   ]);
 
@@ -3719,6 +4080,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       ? `ソルブ手順に未対応の記号があります: ${parsedSolve.invalidTokens.join(", ")}`
       : "",
   ].filter(Boolean);
+  const nextBasicF2lStepIndex = basicF2lPlan ? getNextBasicF2lStepIndex(basicF2lPlan) : 0;
+  const nextBasicF2lStep = basicF2lPlan?.steps[nextBasicF2lStepIndex] ?? null;
+  const canPlayNextF2l =
+    Boolean(selectedCrossSolution) &&
+    !isAnalyzingBasicF2l &&
+    (activeMoves.length === 0 || currentIndex >= activeMoves.length) &&
+    (!basicF2lPlan || Boolean(nextBasicF2lStep));
+  const nextF2lButtonLabel = isAnalyzingBasicF2l
+    ? "F2L..."
+    : nextBasicF2lStep
+      ? `次のF2L ${nextBasicF2lStepIndex + 1}`
+      : basicF2lPlan
+        ? "F2L完了"
+        : "次のF2L";
 
   return (
     <main className="app-shell analyzer-page">
@@ -4364,14 +4739,34 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                     Crossを3Dで再確認
                   </button>
                 </div>
-                <button
-                  className="analyzer-primary-action"
-                  type="button"
-                  onClick={() => runBasicF2lAnalysis()}
-                  disabled={isAnalyzingBasicF2l}
-                >
-                  {isAnalyzingBasicF2l ? "F2L解析中..." : "既存手順DBでF2L解析"}
-                </button>
+                <div className="analyzer-f2l-run-actions">
+                  <button
+                    className="analyzer-primary-action"
+                    type="button"
+                    onClick={() => runBasicF2lAnalysis()}
+                    disabled={isAnalyzingBasicF2l}
+                  >
+                    {isAnalyzingBasicF2l ? "F2L解析中..." : "既存手順DBでF2L解析"}
+                  </button>
+                  <button
+                    className="analyzer-primary-action analyzer-next-f2l-action"
+                    type="button"
+                    onClick={prepareNextF2lPlayback}
+                    disabled={!canPlayNextF2l}
+                  >
+                    {nextF2lButtonLabel}
+                  </button>
+                </div>
+                <div className="analyzer-previous-step-row" aria-label="Practice previous step">
+                  <button
+                    className="analyzer-primary-action analyzer-previous-step-action"
+                    type="button"
+                    onClick={preparePreviousPracticeStep}
+                    disabled={!canPlayPreviousPracticeStep}
+                  >
+                    {previousPracticeButtonLabel}
+                  </button>
+                </div>
                 {isAnalyzingBasicF2l && (
                   <article className="analyzer-basic-f2l-plan">
                     <p className="eyebrow">Basic F2L 41</p>
@@ -5035,11 +5430,29 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   >
                     {isAnalyzingBasicF2l ? "F2L..." : "F2L"}
                   </button>
+                  <button
+                    className="analyzer-next-f2l-action"
+                    type="button"
+                    onClick={prepareNextF2lPlayback}
+                    disabled={!canPlayNextF2l}
+                  >
+                    {nextF2lButtonLabel}
+                  </button>
                   <button type="button" onClick={prepareBestOllPlayback}>
                     OLL
                   </button>
                   <button type="button" onClick={prepareBestPllPlayback}>
                     PLL
+                  </button>
+                </div>
+                <div className="analyzer-previous-step-row" aria-label="Practice previous step">
+                  <button
+                    className="analyzer-previous-step-action"
+                    type="button"
+                    onClick={preparePreviousPracticeStep}
+                    disabled={!canPlayPreviousPracticeStep}
+                  >
+                    {previousPracticeButtonLabel}
                   </button>
                 </div>
                 <div className="analyzer-phase-learn-actions" aria-label="Last layer learn links">

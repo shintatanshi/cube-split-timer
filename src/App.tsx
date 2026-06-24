@@ -341,7 +341,13 @@ function markTutorialSeen(): void {
 
 function loadMobileNavCollapsed(): boolean {
   try {
-    return localStorage.getItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY) === "true";
+    const saved = localStorage.getItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY);
+
+    if (saved === "true" || saved === "false") {
+      return saved === "true";
+    }
+
+    return window.matchMedia("(max-width: 520px)").matches;
   } catch {
     return false;
   }
@@ -2433,13 +2439,13 @@ const handleTimerPointerCancel = useCallback(
   return (
     <>
       {globalNav}
-      <main className="app-shell">
+      <main className="app-shell timer-page-shell">
         <header className="app-header app-home-header">
           <div>
-            <p className="eyebrow">3x3 speedcubing timer</p>
-            <h1>Cube Split Timer</h1>
+            <p className="eyebrow">Timer</p>
+            <h1>計測</h1>
             <p className="app-header-copy">
-              スクランブルを確認して、モードを選んだらすぐ計測できます。
+              モードを選んで、スクランブルを確認したらすぐスタートできます。
             </p>
           </div>
           <div className="header-actions">
@@ -2477,8 +2483,16 @@ const handleTimerPointerCancel = useCallback(
         </div>
       )}
 
-      <section className="timer-panel" id="timer" aria-label="Timer">
-        <div className="timer-toolbar">
+      <section className="home-workspace" aria-label="Timer workspace">
+        <section className="timer-panel timer-focus-panel" id="timer" aria-label="Timer">
+          <div className="timer-panel-header">
+            <div>
+              <p className="eyebrow">Current mode</p>
+              <h2>{getModeLabel(timerMode)}</h2>
+            </div>
+            <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
+          </div>
+
           <div className="mode-toggle" aria-label="Timer mode">
             {TIMER_MODES.map((modeOption) => (
               <button
@@ -2491,47 +2505,93 @@ const handleTimerPointerCancel = useCallback(
               </button>
             ))}
           </div>
-          <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
-        </div>
 
-        <div className="scramble-row">
-          <p className="scramble-label">Scramble</p>
-          <div className="scramble-actions">
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => void copyCurrentScramble()}
-            >
-              コピー
-            </button>
-            <button className="ghost-button" type="button" onClick={openCurrentScrambleInAnalyzer}>
+          <div className="scramble-card">
+            <div className="scramble-row">
+              <p className="scramble-label">Scramble</p>
+              <div className="scramble-actions">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void copyCurrentScramble()}
+                >
+                  コピー
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={openCurrentScramblePreview}
+                >
+                  確認
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => setScramble(generateScramble())}
+                >
+                  New
+                </button>
+              </div>
+            </div>
+            <p className="scramble-text">{scramble}</p>
+          </div>
+
+          <button
+            className={timerButtonClassName}
+            type="button"
+            onPointerDown={handleTimerPointerDown}
+            onPointerMove={handleTimerPointerMove}
+            onPointerUp={handleTimerPointerUp}
+            onPointerCancel={handleTimerPointerCancel}
+          >
+            <span className="timer-time">{timerDisplayText}</span>
+            <span className="timer-hint">{timerButtonHint}</span>
+          </button>
+        </section>
+
+        <aside className="home-side-panel" aria-label="Quick actions">
+          <section className="home-side-card home-side-card-primary">
+            <span>Analyze</span>
+            <strong>このスクランブルを解析</strong>
+            <p>Cross / F2L / OLL / PLL の流れをそのまま確認できます。</p>
+            <button type="button" onClick={openCurrentScrambleInAnalyzer}>
               Analyzerで見る
             </button>
-            <button className="ghost-button" type="button" onClick={openCurrentScramblePreview}>
-              確認する
-            </button>
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => setScramble(generateScramble())}
-            >
-              New
-            </button>
-          </div>
-        </div>
-        <p className="scramble-text">{scramble}</p>
+          </section>
 
-        <button
-          className={timerButtonClassName}
-          type="button"
-          onPointerDown={handleTimerPointerDown}
-          onPointerMove={handleTimerPointerMove}
-          onPointerUp={handleTimerPointerUp}
-          onPointerCancel={handleTimerPointerCancel}
-        >
-          <span className="timer-time">{timerDisplayText}</span>
-          <span className="timer-hint">{timerButtonHint}</span>
-        </button>
+          <section className="home-stats-mini" aria-label="Today stats">
+            <div>
+              <span>Today</span>
+              <strong>{todaySolves.length}</strong>
+            </div>
+            <div>
+              <span>ao5</span>
+              <strong>{formatAverage(stats.ao5)}</strong>
+            </div>
+            <div>
+              <span>Best</span>
+              <strong>{formatAverage(stats.best)}</strong>
+            </div>
+          </section>
+
+          <section className="home-side-card">
+            <span>Learn</span>
+            <strong>OLL / PLL / F2Lを確認</strong>
+            <p>解析から見つけたケースも、Learnへ戻って復習できます。</p>
+            <button type="button" onClick={() => navigateTo("/learn")}>
+              Learnへ
+            </button>
+          </section>
+
+          <section className="home-side-card home-side-card-compact">
+            <button type="button" onClick={() => navigateTo("/history")}>
+              履歴を見る
+            </button>
+            <button type="button" onClick={() => navigateTo("/analysis")}>
+              分析を見る
+            </button>
+          </section>
+        </aside>
       </section>
 
       {lastSavedSolve && (

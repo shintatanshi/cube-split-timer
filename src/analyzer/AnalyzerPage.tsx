@@ -2824,16 +2824,29 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return null;
     }
 
+    if (currentIndex >= activeMoves.length && activeMoves.length > 0) {
+      return (
+        basicF2lStepRanges
+          .slice()
+          .reverse()
+          .find(
+            (range) => activeF2lMoveIndex > range.start && activeF2lMoveIndex <= range.end,
+          )?.step ?? null
+      );
+    }
+
     return (
       basicF2lStepRanges.find(
         (range) => activeF2lMoveIndex >= range.start && activeF2lMoveIndex < range.end,
       )?.step ?? null
     );
   }, [
+    activeMoves.length,
     activeF2lMoveIndex,
     activeF2lMovesMatchHighlightSteps,
     basicF2lPlanMoves.length,
     basicF2lStepRanges,
+    currentIndex,
   ]);
   const currentF2lHighlightPair = useMemo(() => {
     if (!selectedCrossSolution || !hasActiveF2lPlayback || activeF2lMoveIndex < 0) {
@@ -2915,6 +2928,22 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       return "cross";
     }
 
+    if (currentPracticeStep?.phase === "cross") {
+      return "cross";
+    }
+
+    if (currentPracticeStep?.phase === "f2l-step") {
+      return `f2l${Math.min(4, currentPracticeStep.stepIndex + 1)}` as AnalyzerStepKey;
+    }
+
+    if (currentPracticeStep?.phase === "oll") {
+      return "oll";
+    }
+
+    if (currentPracticeStep?.phase === "pll") {
+      return "pll";
+    }
+
     const completedF2lSteps = basicF2lPlan?.steps.length ?? 0;
 
     if (completedF2lSteps <= 0) {
@@ -2926,7 +2955,14 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     }
 
     return `f2l${Math.min(4, completedF2lSteps + 1)}` as AnalyzerStepKey;
-  }, [activeStartState, basicF2lPlan, helperCase?.category, isComplete, selectedCrossSolution]);
+  }, [
+    activeStartState,
+    basicF2lPlan,
+    currentPracticeStep,
+    helperCase?.category,
+    isComplete,
+    selectedCrossSolution,
+  ]);
   const analyzerStepItems: Array<{ key: AnalyzerStepKey; label: string }> = [
     { key: "scramble", label: "Scramble" },
     { key: "cross", label: "Cross" },

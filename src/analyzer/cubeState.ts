@@ -1,4 +1,10 @@
-import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
+import {
+  getMoveDescriptor,
+  invertAlgorithm,
+  parseAlgorithm,
+  parseMoveToken,
+  type ParsedMove,
+} from "../learn/moveNotation";
 import { BASIC_F2L_41_CASES, type BasicF2lCase } from "./f2lBasic41";
 
 export type CubeColorName = "white" | "yellow" | "blue" | "green" | "red" | "orange";
@@ -1939,6 +1945,71 @@ function joinAlgorithms(...algorithms: string[]): string {
     .join(" ");
 }
 
+function getMoveQuarterTurns(move: ParsedMove): number {
+  if (move.amount === 2) {
+    return 2;
+  }
+
+  return move.isPrime ? 3 : 1;
+}
+
+function normalizeQuarterTurns(turns: number): 0 | 1 | 2 | 3 {
+  return (((turns % 4) + 4) % 4) as 0 | 1 | 2 | 3;
+}
+
+function formatMoveWithTurns(base: string, turns: 1 | 2 | 3): string {
+  if (turns === 1) {
+    return base;
+  }
+
+  if (turns === 2) {
+    return `${base}2`;
+  }
+
+  return `${base}'`;
+}
+
+export function optimizeAlgorithmMoves(moves: string[]): string[] {
+  const stack: Array<{ base: string; family: ParsedMove["family"]; turns: 1 | 2 | 3 }> = [];
+
+  for (const move of moves) {
+    const parsedMove = parseMoveToken(move);
+
+    if (!parsedMove) {
+      return moves;
+    }
+
+    const current = {
+      base: parsedMove.base,
+      family: parsedMove.family,
+      turns: getMoveQuarterTurns(parsedMove) as 1 | 2 | 3,
+    };
+    const previous = stack[stack.length - 1];
+
+    if (previous && previous.base === current.base && previous.family === current.family) {
+      const mergedTurns = normalizeQuarterTurns(previous.turns + current.turns);
+      stack.pop();
+
+      if (mergedTurns !== 0) {
+        stack.push({
+          base: previous.base,
+          family: previous.family,
+          turns: mergedTurns,
+        });
+      }
+      continue;
+    }
+
+    stack.push(current);
+  }
+
+  return stack.map((move) => formatMoveWithTurns(move.base, move.turns));
+}
+
+function optimizeAlgorithmString(algorithm: string): string {
+  return optimizeAlgorithmMoves(parseMoves(algorithm)).join(" ");
+}
+
 function invertSuffix(move: string): string {
   if (move.endsWith("2")) {
     return move;
@@ -1995,12 +2066,12 @@ function getBasicF2lAlgorithmVariants(caseItem: BasicF2lCase, slotName: F2lSlotN
   const variants = new Set<string>();
 
   baseAlgorithms.forEach((algorithm) => {
-    F2L_U_SETUPS.forEach((setup) => variants.add(joinAlgorithms(setup, algorithm)));
+    F2L_U_SETUPS.forEach((setup) => variants.add(optimizeAlgorithmString(joinAlgorithms(setup, algorithm))));
   });
 
   F2L_SLOT_ROTATION_WRAPPERS[slotName].forEach(([prefix, suffix]) => {
     F2L_U_SETUPS.forEach((setup) => {
-      variants.add(joinAlgorithms(prefix, setup, caseItem.alg, suffix));
+      variants.add(optimizeAlgorithmString(joinAlgorithms(prefix, setup, caseItem.alg, suffix)));
     });
   });
 
@@ -2046,7 +2117,7 @@ function getF2lExtractionEntries(slotName: F2lSlotName): F2lExtractionEntry[] {
     .flatMap((extraction) =>
       F2L_U_SETUPS.flatMap((beforeU) =>
         F2L_U_SETUPS.map((afterU) => {
-          const algorithm = joinAlgorithms(beforeU, extraction, afterU);
+          const algorithm = optimizeAlgorithmString(joinAlgorithms(beforeU, extraction, afterU));
           const moves = parseMoves(algorithm);
 
           return {
@@ -2610,9 +2681,10 @@ function buildBasicF2lStepCandidate(
     );
 
     if (basicMatch) {
-      const fullAlgorithm = joinAlgorithms(extraction.algorithm, basicMatch.algorithm);
-      const moveCount = extraction.moveCount + basicMatch.moveCount;
-      const score = extraction.score + basicMatch.score;
+      const fullAlgorithmMoves = optimizeAlgorithmMoves([...extraction.moves, ...basicMatch.moves]);
+      const fullAlgorithm = fullAlgorithmMoves.join(" ");
+      const moveCount = fullAlgorithmMoves.length;
+      const score = getF2lMoveScore(fullAlgorithmMoves);
 
       addStepCandidate({
         id: `f2l-step-${stepIndex}-${candidate.id}-${matchIndex}`,
@@ -2654,9 +2726,10 @@ function buildBasicF2lStepCandidate(
 
     if (localSearchMatch) {
       const fastStateAfterStep = toFastCubeState(localSearchMatch.stateAfterAlgorithm);
-      const fullAlgorithm = joinAlgorithms(extraction.algorithm, localSearchMatch.algorithm);
-      const moveCount = extraction.moveCount + localSearchMatch.moveCount;
-      const score = extraction.score + localSearchMatch.score + 6;
+      const fullAlgorithmMoves = optimizeAlgorithmMoves([...extraction.moves, ...localSearchMatch.moves]);
+      const fullAlgorithm = fullAlgorithmMoves.join(" ");
+      const moveCount = fullAlgorithmMoves.length;
+      const score = getF2lMoveScore(fullAlgorithmMoves) + 6;
 
       addStepCandidate({
         id: `f2l-step-${stepIndex}-${candidate.id}-local-${matchIndex}`,

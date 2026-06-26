@@ -6755,3 +6755,579 @@ button:active {
     font-size: 1rem;
   }
 }
+
+/* Figma reference theme draft */
+:root {
+  --background: #060b18;
+  --background-soft: #0a1325;
+  --panel: rgba(11, 18, 37, 0.94);
+  --panel-muted: rgba(221, 240, 255, 0.055);
+  --panel-strong: #0f1e3d;
+  --text: #ddf0ff;
+  --text-strong: #f7fbff;
+  --muted: #4d7a9b;
+  --border: rgba(0, 180, 255, 0.11);
+  --accent: #00d4ff;
+  --accent-contrast: #00101f;
+  --warning: #fbbf24;
+  --info: #8b5cf6;
+  --danger: #ff3030;
+  --shadow: rgba(0, 0, 0, 0.52);
+}
+
+:root[data-theme="light"] {
+  --background: #eef7ff;
+  --background-soft: #dcecff;
+  --panel: rgba(255, 255, 255, 0.92);
+  --panel-muted: rgba(0, 83, 139, 0.07);
+  --panel-strong: #f5fbff;
+  --text: #173047;
+  --text-strong: #071523;
+  --muted: #54738e;
+  --border: rgba(0, 96, 160, 0.16);
+  --accent: #007fbd;
+  --accent-contrast: #ffffff;
+  --warning: #b47800;
+  --info: #6846c6;
+  --danger: #c52235;
+  --shadow: rgba(34, 72, 102, 0.16);
+}
+
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+    --background: #eef7ff;
+    --background-soft: #dcecff;
+    --panel: rgba(255, 255, 255, 0.92);
+    --panel-muted: rgba(0, 83, 139, 0.07);
+    --panel-strong: #f5fbff;
+    --text: #173047;
+    --text-strong: #071523;
+    --muted: #54738e;
+    --border: rgba(0, 96, 160, 0.16);
+    --accent: #007fbd;
+    --accent-contrast: #ffffff;
+    --warning: #b47800;
+    --info: #6846c6;
+    --danger: #c52235;
+    --shadow: rgba(34, 72, 102, 0.16);
+  }
+}
+
+body {
+  background:
+    linear-gradient(rgba(0, 212, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.026) 1px, transparent 1px),
+    linear-gradient(180deg, #040813 0%, var(--background) 42%, var(--background-soft) 100%);
+  background-size: 46px 46px, 46px 46px, auto;
+}
+
+:root[data-theme="light"] body {
+  background:
+    linear-gradient(rgba(0, 96, 160, 0.052) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 96, 160, 0.052) 1px, transparent 1px),
+    linear-gradient(180deg, #f7fcff 0%, var(--background) 48%, var(--background-soft) 100%);
+  background-size: 46px 46px, 46px 46px, auto;
+}
+
+.global-app-nav,
+.timer-panel,
+.home-side-card,
+.home-stats-mini,
+.post-solve-actions,
+.notice,
+.undo-toast,
+.stat-card,
+.phase-card,
+.practice-card,
+.practice-history-card,
+.history-item,
+.weak-phase-card,
+.recent-chart-card,
+.analyzer-hero,
+.analyzer-panel,
+.scramble-preview-hero,
+.scramble-preview-panel,
+.learn-hero,
+.learn-section-heading,
+.learn-practice-entry,
+.learn-category-card,
+.practice-question-card,
+.learn-detail-card,
+.learn-tabs,
+.auth-card,
+.feedback-card,
+.admin-card,
+.algorithm-player,
+.algorithm-control-panel,
+.move-button-panel {
+  border-color: var(--border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), var(--panel)),
+    var(--panel);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 18px 50px color-mix(in srgb, var(--shadow) 72%, transparent);
+}
+
+.global-app-nav {
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+}
+
+.global-brand {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, transparent), color-mix(in srgb, var(--info) 10%, transparent)),
+    rgba(255, 255, 255, 0.035);
+}
+
+.global-brand span,
+.app-header h1,
+.learn-hero h2,
+.learn-section-heading h2,
+.learn-practice-entry h2,
+.practice-question-card h2,
+.learn-category-card h2,
+.learn-detail-card h2,
+.analyzer-subheading h2,
+.analyzer-subheading h3,
+.timer-panel-header h2 {
+  color: var(--text-strong);
+}
+
+.global-brand small,
+.eyebrow,
+.scramble-label,
+.section-heading p,
+.analysis-subheading .eyebrow,
+.analyzer-subheading .eyebrow,
+.learn-tabs button,
+.analyzer-step-chip,
+.home-side-card span,
+.home-stats-mini span,
+.stat-card p,
+.phase-card dt,
+.practice-card dt {
+  color: color-mix(in srgb, var(--muted) 78%, var(--accent));
+}
+
+.global-nav-links button,
+.global-account-button,
+.global-nav-collapse-button,
+.ghost-button,
+.primary-button,
+.history-actions button,
+.home-side-card button,
+.home-side-card-compact button,
+.analyzer-action-grid button,
+.analyzer-controls button,
+.analyzer-mode-toggle button,
+.analyzer-command-actions button,
+.analyzer-primary-action,
+.analyzer-cross-footer button,
+.analyzer-f2l-actions button,
+.analyzer-phase-replay-actions button,
+.analyzer-phase-learn-actions button,
+.learn-filter-row button,
+.status-button-row button,
+.practice-actions button,
+.algorithm-controls button,
+.algorithm-player-heading button,
+.move-button-group button,
+.move-history-actions button,
+.auth-data-actions button,
+.auth-provider-button,
+.feedback-form button,
+.auth-mode-toggle button {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--panel-muted) 80%, transparent);
+  color: var(--text-strong);
+}
+
+.global-nav-links button:hover,
+.global-account-button:hover,
+.ghost-button:hover,
+.home-side-card button:hover,
+.home-side-card-compact button:hover,
+.analyzer-action-grid button:not(:disabled):hover,
+.analyzer-controls button:not(:disabled):hover,
+.analyzer-mode-toggle button:hover,
+.analyzer-command-actions button:not(:disabled):hover,
+.analyzer-cross-footer button:not(:disabled):hover,
+.analyzer-f2l-actions button:not(:disabled):hover,
+.analyzer-phase-replay-actions button:not(:disabled):hover,
+.analyzer-phase-learn-actions button:not(:disabled):hover,
+.learn-filter-row button:hover,
+.status-button-row button:hover,
+.practice-actions button:hover,
+.algorithm-controls button:hover,
+.algorithm-player-heading button:hover,
+.move-button-group button:hover,
+.move-history-actions button:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-muted));
+  color: var(--text-strong);
+}
+
+.global-nav-links button[aria-current="page"],
+.mode-toggle button[aria-pressed="true"],
+.learn-tabs button[aria-pressed="true"],
+.learn-filter-row button[aria-pressed="true"],
+.status-button-row button[aria-pressed="true"],
+.analyzer-mode-toggle button[aria-pressed="true"],
+.auth-mode-toggle button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 12px 30px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.timer-focus-panel {
+  gap: 16px;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.mode-toggle {
+  background: color-mix(in srgb, #08152b 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.mode-toggle button {
+  color: color-mix(in srgb, var(--muted) 86%, var(--text));
+}
+
+.scramble-card {
+  border-top-color: color-mix(in srgb, var(--accent) 16%, var(--border));
+}
+
+.scramble-text,
+.analyzer-cross-algorithm,
+.analyzer-basic-f2l-steps code,
+.analyzer-candidate-card code,
+.algorithm-box code,
+.history-scramble {
+  font-family:
+    "JetBrains Mono", "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.scramble-text {
+  color: var(--text-strong);
+  letter-spacing: 0.035em;
+}
+
+.timer-button {
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background:
+    linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(180deg, #071126 0%, color-mix(in srgb, var(--panel-strong) 92%, #02050c) 100%);
+  background-size: 34px 34px, 34px 34px, auto;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 0 52px rgba(0, 212, 255, 0.035),
+    0 26px 80px color-mix(in srgb, var(--shadow) 82%, transparent);
+}
+
+.timer-time {
+  color: var(--accent);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.86;
+  text-shadow:
+    0 0 34px color-mix(in srgb, var(--accent) 44%, transparent),
+    0 0 92px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.timer-hint {
+  color: color-mix(in srgb, var(--muted) 78%, var(--accent));
+  font-size: 0.76rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.timer-button-holding .timer-time {
+  color: #00e676;
+  text-shadow:
+    0 0 36px rgba(0, 230, 118, 0.5),
+    0 0 92px rgba(0, 230, 118, 0.22);
+}
+
+.timer-button-ready .timer-time {
+  color: var(--warning);
+  text-shadow:
+    0 0 36px color-mix(in srgb, var(--warning) 56%, transparent),
+    0 0 92px color-mix(in srgb, var(--warning) 22%, transparent);
+}
+
+.home-side-card-primary {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+  background:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.12), rgba(139, 92, 246, 0.09) 58%, transparent),
+    var(--panel);
+}
+
+.home-stats-mini {
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+
+.home-stats-mini strong,
+.stat-card strong,
+.phase-card dd,
+.practice-card dd,
+.history-time,
+.practice-history-card strong,
+.weak-phase-result strong {
+  color: var(--text-strong);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.stat-card strong {
+  color: var(--accent);
+}
+
+.history-item {
+  background:
+    linear-gradient(90deg, rgba(0, 212, 255, 0.07), transparent 36%),
+    var(--panel);
+}
+
+.mode-badge,
+.history-splits span,
+.analyzer-cross-edge-row span,
+.analyzer-f2l-tags span,
+.learn-tags span,
+.status-pill,
+.status-pill-learned,
+.analyzer-solution-badge,
+.analyzer-basic-f2l-summary span,
+.analyzer-color-counts span,
+.analyzer-orientation-preview span,
+.analyzer-cross-footer span {
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-muted));
+  color: color-mix(in srgb, var(--text) 82%, var(--accent));
+}
+
+.learn-tabs,
+.analyzer-command-bar {
+  backdrop-filter: blur(18px);
+}
+
+.learn-case-button,
+.notation-move-card,
+.f2l-candidate-button,
+.analyzer-f2l-item,
+.analyzer-cross-item,
+.analyzer-cross-summary,
+.analyzer-cross-solution,
+.analyzer-basic-f2l-plan,
+.analyzer-f2l-detail,
+.analyzer-candidate-card,
+.analyzer-color-editor,
+.move-button-panel,
+.algorithm-control-panel,
+.auth-account-panel,
+.auth-link-panel,
+.auth-data-card {
+  border-color: color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--panel-muted) 76%, transparent);
+}
+
+.learn-case-button[aria-pressed="true"],
+.f2l-candidate-button[aria-pressed="true"],
+.notation-move-card[aria-pressed="true"],
+.analyzer-f2l-item[aria-pressed="true"],
+.analyzer-cross-summary.is-best,
+.analyzer-cross-solution.is-best,
+.analyzer-cross-solution.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--panel));
+}
+
+.analyzer-canvas-frame,
+.three-cube-frame,
+.case-preview-card,
+.case-preview-practice,
+.analyzer-learn-preview-shape,
+.analyzer-learn-preview-skip {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+  background:
+    linear-gradient(rgba(0, 212, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel-strong) 90%, transparent), var(--background));
+  background-size: 30px 30px, 30px 30px, auto;
+}
+
+.analyzer-now,
+.analyzer-playback-note,
+.analyzer-phase-replay-panel,
+.algorithm-now,
+.algorithm-move-list-inline,
+.practice-answer-placeholder {
+  border-color: color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--panel-muted) 72%, transparent);
+}
+
+.analyzer-next-f2l-action {
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--border));
+  background: color-mix(in srgb, var(--warning) 14%, var(--panel-muted));
+  color: var(--text-strong);
+}
+
+.analyzer-previous-step-action {
+  border-color: color-mix(in srgb, #72a7ff 40%, var(--border));
+  background:
+    linear-gradient(135deg, rgba(114, 167, 255, 0.2), rgba(114, 167, 255, 0.08)),
+    var(--panel-muted);
+}
+
+select,
+input,
+textarea,
+.feedback-form select,
+.feedback-form input,
+.feedback-form textarea,
+.auth-import-field textarea,
+.analyzer-field textarea,
+.analyzer-select-field select,
+.speed-control select,
+.analyzer-speed-control select,
+.theme-control select {
+  border-color: color-mix(in srgb, var(--accent) 14%, var(--border));
+  background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+  color: var(--text-strong);
+}
+
+select:focus,
+input:focus,
+textarea:focus,
+.feedback-form select:focus,
+.feedback-form input:focus,
+.feedback-form textarea:focus,
+.auth-import-field textarea:focus,
+.analyzer-field textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.analyzer-error,
+.admin-warning-card {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  background: color-mix(in srgb, var(--danger) 10%, var(--panel));
+}
+
+.analyzer-ai-notice,
+.learn-landscape-hint,
+.notice {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.timer-screen {
+  background:
+    linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+    #040813;
+  background-size: 48px 48px, 48px 48px, auto;
+}
+
+.timer-screen-time {
+  color: var(--accent);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  text-shadow:
+    0 0 40px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 100px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+@media (min-width: 861px) {
+  .global-app-nav {
+    width: 220px;
+  }
+
+  .app-shell,
+  .timer-page-shell,
+  .analyzer-page,
+  .scramble-preview-page {
+    width: min(calc(100vw - 282px), 1300px);
+    margin-left: 258px;
+  }
+
+  .timer-page-shell {
+    padding-top: 22px;
+  }
+}
+
+@media (max-width: 860px) {
+  body {
+    background-size: 36px 36px, 36px 36px, auto;
+  }
+
+  .global-app-nav {
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  }
+
+  .timer-panel,
+  .home-side-card,
+  .home-stats-mini,
+  .post-solve-actions,
+  .notice,
+  .stat-card,
+  .phase-card,
+  .practice-card,
+  .practice-history-card,
+  .history-item,
+  .weak-phase-card,
+  .recent-chart-card,
+  .analyzer-hero,
+  .analyzer-panel,
+  .scramble-preview-hero,
+  .scramble-preview-panel,
+  .learn-hero,
+  .learn-section-heading,
+  .learn-practice-entry,
+  .learn-category-card,
+  .practice-question-card,
+  .learn-detail-card,
+  .auth-card,
+  .feedback-card,
+  .admin-card {
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--shadow) 58%, transparent);
+  }
+
+  .timer-button {
+    background-size: 28px 28px, 28px 28px, auto;
+  }
+}
+
+@media (max-width: 520px) {
+  .global-app-nav {
+    background: color-mix(in srgb, var(--panel) 96%, transparent);
+  }
+
+  .timer-focus-panel {
+    padding: 10px;
+  }
+
+  .mode-toggle button {
+    font-size: 0.75rem;
+  }
+
+  .scramble-text {
+    letter-spacing: 0.02em;
+  }
+
+  .timer-button {
+    min-height: min(39dvh, 280px);
+  }
+}

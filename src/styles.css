@@ -7988,6 +7988,17 @@ textarea:focus,
     padding: 10px;
   }
 
+  .analyzer-player-panel,
+  .analyzer-command-bar,
+  .analyzer-step-timeline,
+  .analyzer-input-controls,
+  .analyzer-analysis-flow {
+    align-self: stretch;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
   .analyzer-command-bar {
     order: 3;
     position: static;

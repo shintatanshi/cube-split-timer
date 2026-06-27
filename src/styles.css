@@ -6704,14 +6704,15 @@ button:active {
 
   .scramble-actions {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
   }
 
   .scramble-actions .ghost-button {
     width: 100%;
     min-height: 38px;
-    padding: 0 8px;
+    padding: 0 6px;
+    font-size: 0.9rem;
   }
 
   .scramble-text {

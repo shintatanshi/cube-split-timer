@@ -682,7 +682,7 @@ function GlobalAppNav({
 
       <header className="mobile-app-topbar">
         <button className="mobile-brand" type="button" onClick={() => handleNavigate("/")}>
-          <img src="/brand/cube-split-timer-logo.png" alt="" aria-hidden="true" />
+          <img src="/brand/cube-split-timer-logo-round.png" alt="" aria-hidden="true" />
           <span>
             <strong>Cube Split</strong>
             <small>Timer</small>
@@ -2625,6 +2625,13 @@ const handleTimerPointerCancel = useCallback(
                   onClick={openCurrentScramblePreview}
                 >
                   確認
+                </button>
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={openCurrentScrambleInAnalyzer}
+                >
+                  解析
                 </button>
                 <button
                   className="ghost-button"

@@ -335,7 +335,7 @@ function getLocationInfo(): LocationInfo {
     page = "help";
   } else if (pathname.startsWith("/learn")) {
     page = "learn";
-  } else if (pathname === "/analyzer") {
+  } else if (pathname === "/analyzer" || pathname.startsWith("/analyzer/")) {
     page = "analyzer";
   } else if (pathname === "/scramble") {
     page = "scramble";
@@ -2249,7 +2249,7 @@ const handleTimerPointerCancel = useCallback(
             </main>
           }
         >
-          <AnalyzerPage onNavigate={navigateTo} onOpenTimer={openTimer} />
+          <AnalyzerPage path={locationInfo.path} onNavigate={navigateTo} onOpenTimer={openTimer} />
         </Suspense>
       </>
     );

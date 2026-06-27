@@ -59,6 +59,7 @@ import type {
 
 type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerInputMode = "scramble" | "color";
+type AnalyzerWorkspacePage = "input" | "cross" | "f2l" | "oll" | "pll";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
 type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
 type AnalyzerQuickPhase = "cross" | "f2l" | "nextF2l" | "oll" | "pll";
@@ -124,6 +125,7 @@ interface F2lRecommendation {
 }
 
 interface AnalyzerPageProps {
+  path: string;
   onNavigate: (path: string, hash?: string) => void;
   onOpenTimer: () => void;
 }
@@ -237,6 +239,7 @@ const COLOR_OPTIONS: Array<{ value: CubeColorName; label: string; shortLabel: st
   { value: "red", label: "Red", shortLabel: "R" },
   { value: "orange", label: "Orange", shortLabel: "O" },
 ];
+const ANALYZER_WORKSPACE_PAGES: AnalyzerWorkspacePage[] = ["input", "cross", "f2l", "oll", "pll"];
 const COLOR_FACE_ORDER: FaceName[] = ["U", "L", "F", "R", "B", "D"];
 const STICKER_CENTER_INDEX = 4;
 const COLOR_HEX: Record<CubeColorName, number> = {
@@ -488,6 +491,14 @@ function saveAnalyzerSpeed(speed: AnimationSpeed): void {
 
 function isAnalyzerCubeScale(value: number): value is AnalyzerCubeScale {
   return ANALYZER_CUBE_SCALE_OPTIONS.some((option) => option.value === value);
+}
+
+function getAnalyzerWorkspacePage(path: string): AnalyzerWorkspacePage {
+  const segment = path.replace(/^\/analyzer\/?/, "").split("/")[0];
+
+  return ANALYZER_WORKSPACE_PAGES.includes(segment as AnalyzerWorkspacePage)
+    ? (segment as AnalyzerWorkspacePage)
+    : "input";
 }
 
 function loadAnalyzerCubeScale(): AnalyzerCubeScale {
@@ -1536,7 +1547,8 @@ function buildCrossCandidates(
   }));
 }
 
-export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPageProps) {
+export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: AnalyzerPageProps) {
+  const activeWorkspacePage = getAnalyzerWorkspacePage(path);
   const [initialAnalyzerState] = useState(() => {
     const savedState = loadAnalyzerState();
     const incomingScramble = getIncomingScrambleFromUrl();
@@ -2606,7 +2618,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
     skipNextAnalyzerStateSaveCountRef.current = 2;
     clearAnalyzerState();
     window.setTimeout(clearAnalyzerState, 250);
-    window.history.replaceState(null, "", "/analyzer");
+    onNavigate("/analyzer/input");
     setSettings(DEFAULT_ANALYZER_SETTINGS);
     setInputMode("scramble");
     setScrambleInput("");
@@ -4131,18 +4143,18 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         ? "F2L完了"
         : "次のF2L";
   const analyzerWorkspaceTabs: Array<{
-    key: string;
+    key: AnalyzerWorkspacePage;
     label: string;
     description: string;
     status: string;
-    targetId: string;
+    path: string;
   }> = [
     {
       key: "input",
       label: "入力",
       description: "スクランブル / 色配置",
       status: `${startInputLabel} ${startInputCount}`,
-      targetId: "analyzer-input-section",
+      path: "/analyzer/input",
     },
     {
       key: "cross",
@@ -4153,7 +4165,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         : selectedCrossSolution
           ? `${selectedCrossSolution.moveCount}手`
           : "未選択",
-      targetId: "analyzer-cross-section",
+      path: "/analyzer/cross",
     },
     {
       key: "f2l",
@@ -4164,21 +4176,21 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
         : basicF2lPlan
           ? `${basicF2lPlan.steps.length}/4`
           : "未解析",
-      targetId: "analyzer-f2l-section",
+      path: "/analyzer/f2l",
     },
     {
       key: "oll",
       label: "OLL",
       description: "OLL判定 / Learn",
       status: ollRecognition?.ok ? ollRecognition.recognition.caseTitle : "待機",
-      targetId: "analyzer-oll-section",
+      path: "/analyzer/oll",
     },
     {
       key: "pll",
       label: "PLL",
       description: "PLL判定 / Learn",
       status: pllRecognition?.ok ? pllRecognition.recognition.caseTitle : "待機",
-      targetId: "analyzer-pll-section",
+      path: "/analyzer/pll",
     },
   ];
 
@@ -4269,8 +4281,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           <nav className="analyzer-workspace-tabs" aria-label="Analyzer tools">
             {analyzerWorkspaceTabs.map((tab) => (
               <a
-                href={`#${tab.targetId}`}
+                href={tab.path}
                 key={tab.key}
+                aria-current={activeWorkspacePage === tab.key ? "page" : undefined}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(tab.path);
+                }}
               >
                 <span>{tab.label}</span>
                 <small>{tab.description}</small>
@@ -4280,8 +4297,9 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </nav>
 
           <div
-            className="analyzer-input-controls analyzer-anchor-section"
+            className="analyzer-input-controls analyzer-route-panel"
             id="analyzer-input-section"
+            hidden={activeWorkspacePage !== "input"}
           >
           <section className="analyzer-settings-card" aria-label="Analyzer settings">
             <div className="analyzer-subheading">
@@ -4609,11 +4627,13 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
           <div
             className="analyzer-analysis-flow"
+            hidden={activeWorkspacePage === "input"}
           >
           <section
-            className="analyzer-cross-card analyzer-anchor-section"
+            className="analyzer-cross-card analyzer-route-section"
             id="analyzer-cross-section"
             aria-label="Cross candidates"
+            hidden={activeWorkspacePage !== "cross"}
           >
             <div className="analyzer-subheading">
               <div>
@@ -4825,9 +4845,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </section>
 
           <section
-            className="analyzer-f2l-card analyzer-anchor-section"
+            className="analyzer-f2l-card analyzer-route-section"
             id="analyzer-f2l-section"
             aria-label="F2L Analyzer"
+            hidden={activeWorkspacePage !== "f2l"}
           >
             <div className="analyzer-subheading">
               <div>
@@ -5200,9 +5221,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </section>
 
           <section
-            className="analyzer-candidate-section analyzer-anchor-section"
+            className="analyzer-candidate-section analyzer-route-section"
             id="analyzer-oll-section"
             aria-label="OLL candidate preview"
+            hidden={activeWorkspacePage !== "oll"}
           >
             <div className="analyzer-subheading">
               <div>
@@ -5286,9 +5308,10 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </section>
 
           <section
-            className="analyzer-candidate-section analyzer-anchor-section"
+            className="analyzer-candidate-section analyzer-route-section"
             id="analyzer-pll-section"
             aria-label="PLL candidate preview"
+            hidden={activeWorkspacePage !== "pll"}
           >
             <div className="analyzer-subheading">
               <div>

@@ -9,25 +9,30 @@ const TURN_SOUND_SOURCES = Object.values(turnSoundModules).filter(
 );
 const TURN_SOUND_VOLUME = 0.34;
 
-let audioPool: HTMLAudioElement[] | null = null;
+type AudioContextConstructor = new () => AudioContext;
+
+let audioContext: AudioContext | null = null;
+let audioBuffers: AudioBuffer[] = [];
+let audioBuffersPromise: Promise<AudioBuffer[]> | null = null;
+let isUnlockListenerRegistered = false;
+let isAudioUnlocked = false;
 let lastSoundIndex = -1;
 
-function getAudioPool(): HTMLAudioElement[] {
-  if (typeof Audio === "undefined" || TURN_SOUND_SOURCES.length === 0) {
-    return [];
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") {
+    return null;
   }
 
-  if (!audioPool) {
-    audioPool = TURN_SOUND_SOURCES.map((source) => {
-      const audio = new Audio(source);
-      audio.preload = "auto";
-      audio.volume = TURN_SOUND_VOLUME;
+  const AudioContextClass =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: AudioContextConstructor }).webkitAudioContext;
 
-      return audio;
-    });
+  if (!AudioContextClass) {
+    return null;
   }
 
-  return audioPool;
+  audioContext ??= new AudioContextClass();
+  return audioContext;
 }
 
 function getRandomSoundIndex(poolSize: number): number {
@@ -45,18 +50,118 @@ function getRandomSoundIndex(poolSize: number): number {
   return nextIndex;
 }
 
-export function playRandomCubeTurnSound(): void {
-  const pool = getAudioPool();
+function loadTurnSoundBuffers(): Promise<AudioBuffer[]> {
+  if (audioBuffers.length > 0) {
+    return Promise.resolve(audioBuffers);
+  }
 
-  if (pool.length === 0) {
+  if (audioBuffersPromise) {
+    return audioBuffersPromise;
+  }
+
+  const context = getAudioContext();
+
+  if (!context || TURN_SOUND_SOURCES.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  audioBuffersPromise = Promise.all(
+    TURN_SOUND_SOURCES.map(async (source) => {
+      const response = await fetch(source);
+      const data = await response.arrayBuffer();
+
+      return context.decodeAudioData(data);
+    }),
+  )
+    .then((buffers) => {
+      audioBuffers = buffers;
+      return buffers;
+    })
+    .catch((error: unknown) => {
+      audioBuffersPromise = null;
+
+      if (import.meta.env.DEV) {
+        console.warn("Cube turn sounds could not be loaded.", error);
+      }
+
+      return [];
+    });
+
+  return audioBuffersPromise;
+}
+
+async function unlockCubeTurnSounds(): Promise<void> {
+  const context = getAudioContext();
+
+  if (!context) {
     return;
   }
 
-  const sourceAudio = pool[getRandomSoundIndex(pool.length)];
-  const audio = sourceAudio.cloneNode(true) as HTMLAudioElement;
+  if (isAudioUnlocked && context.state === "running") {
+    return;
+  }
 
-  audio.volume = TURN_SOUND_VOLUME;
-  void audio.play().catch(() => {
-    // Browsers may block audio before a user gesture; animation should still continue.
-  });
+  try {
+    if (context.state === "suspended") {
+      await context.resume();
+    }
+
+    const silentBuffer = context.createBuffer(1, 1, context.sampleRate);
+    const source = context.createBufferSource();
+    source.buffer = silentBuffer;
+    source.connect(context.destination);
+    source.start();
+    isAudioUnlocked = context.state === "running";
+    void loadTurnSoundBuffers();
+  } catch (error) {
+    isAudioUnlocked = false;
+
+    if (import.meta.env.DEV) {
+      console.warn("Cube turn sounds could not be unlocked.", error);
+    }
+  }
 }
+
+function registerCubeTurnSoundUnlock(): void {
+  if (isUnlockListenerRegistered || typeof window === "undefined") {
+    return;
+  }
+
+  isUnlockListenerRegistered = true;
+  const unlock = () => {
+    void unlockCubeTurnSounds();
+  };
+
+  window.addEventListener("pointerdown", unlock, { capture: true, passive: true });
+  window.addEventListener("keydown", unlock, { capture: true, passive: true });
+  window.addEventListener("touchstart", unlock, { capture: true, passive: true });
+}
+
+export function playRandomCubeTurnSound(): void {
+  registerCubeTurnSoundUnlock();
+  void loadTurnSoundBuffers();
+
+  const context = getAudioContext();
+
+  if (!context || audioBuffers.length === 0) {
+    return;
+  }
+
+  if (context.state !== "running") {
+    void unlockCubeTurnSounds();
+    return;
+  }
+
+  const buffer = audioBuffers[getRandomSoundIndex(audioBuffers.length)];
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+
+  source.buffer = buffer;
+  gain.gain.value = TURN_SOUND_VOLUME;
+  source.connect(gain);
+  gain.connect(context.destination);
+  source.start();
+}
+
+registerCubeTurnSoundUnlock();
+void loadTurnSoundBuffers();

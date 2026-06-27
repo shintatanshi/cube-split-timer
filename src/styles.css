@@ -8221,12 +8221,10 @@ textarea:focus,
   display: none;
 }
 
-.analyzer-tab-panel[hidden],
-.analyzer-tab-content[hidden] {
-  display: none !important;
-}
-
 .analyzer-workspace-tabs {
+  position: sticky;
+  top: 18px;
+  z-index: 22;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
@@ -8235,9 +8233,10 @@ textarea:focus,
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
   border-radius: 8px;
   background: color-mix(in srgb, var(--background-soft) 72%, transparent);
+  backdrop-filter: blur(18px);
 }
 
-.analyzer-workspace-tabs button {
+.analyzer-workspace-tabs a {
   min-width: 0;
   min-height: 74px;
   display: grid;
@@ -8249,23 +8248,15 @@ textarea:focus,
   background: color-mix(in srgb, var(--panel-muted) 78%, transparent);
   color: var(--text);
   cursor: pointer;
+  text-decoration: none;
   text-align: left;
 }
 
-.analyzer-workspace-tabs button:hover {
+.analyzer-workspace-tabs a:hover,
+.analyzer-workspace-tabs a:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--panel-muted));
-}
-
-.analyzer-workspace-tabs button[aria-pressed="true"] {
-  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
-    color-mix(in srgb, var(--panel-strong) 88%, transparent);
-  color: var(--text-strong);
-  box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, white 14%, transparent),
-    0 14px 34px color-mix(in srgb, var(--accent) 14%, transparent);
+  outline: 0;
 }
 
 .analyzer-workspace-tabs span,
@@ -8296,6 +8287,15 @@ textarea:focus,
   color: var(--accent);
   font-size: 0.72rem;
   font-weight: 950;
+}
+
+.analyzer-anchor-section {
+  scroll-margin-top: 112px;
+}
+
+.analyzer-anchor-section:target {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 4px;
 }
 
 @media (min-width: 861px) {
@@ -8391,13 +8391,14 @@ textarea:focus,
   }
 
   .analyzer-workspace-tabs {
+    top: max(78px, calc(env(safe-area-inset-top) + 78px));
     grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 6px;
     overflow: visible;
     padding: 5px;
   }
 
-  .analyzer-workspace-tabs button {
+  .analyzer-workspace-tabs a {
     min-height: 58px;
     padding: 7px 5px;
   }
@@ -8409,6 +8410,10 @@ textarea:focus,
   .analyzer-page .analyzer-input-controls,
   .analyzer-page .analyzer-analysis-flow {
     padding: 0;
+  }
+
+  .analyzer-anchor-section {
+    scroll-margin-top: 156px;
   }
 }
 
@@ -8427,7 +8432,7 @@ textarea:focus,
 }
 
 @media (max-width: 360px) {
-  .analyzer-workspace-tabs button {
+  .analyzer-workspace-tabs a {
     padding-right: 3px;
     padding-left: 3px;
   }

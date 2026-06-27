@@ -8177,3 +8177,296 @@ textarea:focus,
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Analyzer workspace tabs */
+.analyzer-page .analyzer-step-timeline,
+.analyzer-page .analyzer-command-bar {
+  display: none;
+}
+
+.analyzer-page .analyzer-hero {
+  display: none;
+}
+
+.analyzer-page .analyzer-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.analyzer-page .analyzer-player-panel {
+  order: 1;
+  position: static;
+  align-self: stretch;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+.analyzer-page .analyzer-input-panel {
+  order: 2;
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+
+.analyzer-page .analyzer-input-controls,
+.analyzer-page .analyzer-analysis-flow {
+  display: grid;
+  gap: 14px;
+}
+
+.analyzer-page .analyzer-player-panel:not(.is-fullscreen) .analyzer-phase-replay-panel {
+  display: none;
+}
+
+.analyzer-tab-panel[hidden],
+.analyzer-tab-content[hidden] {
+  display: none !important;
+}
+
+.analyzer-workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-soft) 72%, transparent);
+}
+
+.analyzer-workspace-tabs button {
+  min-width: 0;
+  min-height: 74px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 78%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.analyzer-workspace-tabs button:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-muted));
+}
+
+.analyzer-workspace-tabs button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent),
+    color-mix(in srgb, var(--panel-strong) 88%, transparent);
+  color: var(--text-strong);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, white 14%, transparent),
+    0 14px 34px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.analyzer-workspace-tabs span,
+.analyzer-workspace-tabs b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyzer-workspace-tabs span {
+  color: var(--text-strong);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.analyzer-workspace-tabs small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analyzer-workspace-tabs b {
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+@media (min-width: 861px) {
+  .analyzer-page .analyzer-player-body {
+    grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.82fr);
+  }
+
+  .analyzer-page .analyzer-canvas-frame {
+    height: clamp(320px, 32vw, 520px);
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 860px) {
+  .analyzer-page > .app-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .analyzer-page .app-header .eyebrow {
+    display: none;
+  }
+
+  .analyzer-page .app-header h1 {
+    font-size: 1.65rem;
+    line-height: 1;
+  }
+
+  .analyzer-page .header-actions {
+    display: flex;
+    grid-template-columns: none;
+  }
+
+  .analyzer-page .header-actions button {
+    min-height: 40px;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .analyzer-page .analyzer-layout {
+    order: 2;
+    gap: 10px;
+  }
+
+  .analyzer-page .analyzer-player-header {
+    gap: 8px;
+  }
+
+  .analyzer-page .analyzer-player-header h2 {
+    font-size: 1.35rem;
+  }
+
+  .analyzer-page .analyzer-player-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analyzer-page .analyzer-speed-control,
+  .analyzer-page .analyzer-f2l-highlight-toggle-compact,
+  .analyzer-page .analyzer-step,
+  .analyzer-page .analyzer-fullscreen-button {
+    min-height: 34px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .analyzer-page .analyzer-canvas-frame {
+    height: min(38vw, 178px);
+    min-height: 145px;
+  }
+
+  .analyzer-page .analyzer-control-panel {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .analyzer-page .analyzer-control-panel .analyzer-controls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analyzer-page .analyzer-control-panel .analyzer-controls button {
+    min-height: 36px;
+    font-size: 0.82rem;
+  }
+
+  .analyzer-page .analyzer-now {
+    padding: 10px;
+  }
+
+  .analyzer-page .analyzer-player-panel:not(.is-fullscreen) .analyzer-move-list,
+  .analyzer-page .analyzer-player-panel:not(.is-fullscreen) .analyzer-phase-replay-panel {
+    display: none;
+  }
+
+  .analyzer-workspace-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+    padding: 5px;
+  }
+
+  .analyzer-workspace-tabs button {
+    min-height: 58px;
+    padding: 7px 5px;
+  }
+
+  .analyzer-workspace-tabs small {
+    display: none;
+  }
+
+  .analyzer-page .analyzer-input-controls,
+  .analyzer-page .analyzer-analysis-flow {
+    padding: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .analyzer-workspace-tabs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .analyzer-workspace-tabs span {
+    font-size: 0.8rem;
+  }
+
+  .analyzer-workspace-tabs b {
+    font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .analyzer-workspace-tabs button {
+    padding-right: 3px;
+    padding-left: 3px;
+  }
+
+  .analyzer-workspace-tabs span {
+    font-size: 0.72rem;
+  }
+
+  .analyzer-page .analyzer-player-header h2 {
+    font-size: 1.18rem;
+  }
+
+  .analyzer-page .analyzer-speed-control {
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .analyzer-page .analyzer-speed-control span {
+    display: none;
+  }
+
+  .analyzer-page .analyzer-speed-control select {
+    min-width: 0;
+  }
+
+  .analyzer-page .analyzer-step {
+    font-size: 0.82rem;
+  }
+
+  .analyzer-page .analyzer-canvas-frame {
+    height: min(34vw, 150px);
+    min-height: 122px;
+  }
+
+  .analyzer-page .analyzer-player-panel:not(.is-fullscreen) .analyzer-control-panel .analyzer-controls {
+    display: none;
+  }
+
+  .analyzer-page .analyzer-player-panel:not(.is-fullscreen) .analyzer-now {
+    padding: 8px;
+  }
+}

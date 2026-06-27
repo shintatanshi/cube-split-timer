@@ -59,6 +59,7 @@ import type {
 
 type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerInputMode = "scramble" | "color";
+type AnalyzerWorkspaceTab = "input" | "cross" | "f2l" | "oll" | "pll";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
 type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
 type AnalyzerQuickPhase = "cross" | "f2l" | "nextF2l" | "oll" | "pll";
@@ -1592,6 +1593,8 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
   const [settings, setSettings] = useState<AnalyzerSettings>(
     () => initialAnalyzerState?.settings ?? loadAnalyzerSettings(),
   );
+  const [activeWorkspaceTab, setActiveWorkspaceTab] =
+    useState<AnalyzerWorkspaceTab>("input");
   const [inputMode, setInputMode] = useState<AnalyzerInputMode>(
     () => initialAnalyzerState?.inputMode ?? "scramble",
   );
@@ -3164,6 +3167,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
   const selectCrossSolutionForF2l = useCallback(
     (solution: CrossSolution) => {
+      setActiveWorkspaceTab("f2l");
       selectCrossSolution(solution, { scroll: false });
       setPlaybackScrambleInput("");
       setPlaybackSolveInput(solution.algorithm);
@@ -4130,6 +4134,51 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
       : basicF2lPlan
         ? "F2L完了"
         : "次のF2L";
+  const analyzerWorkspaceTabs: Array<{
+    key: AnalyzerWorkspaceTab;
+    label: string;
+    description: string;
+    status: string;
+  }> = [
+    {
+      key: "input",
+      label: "入力",
+      description: "スクランブル / 色配置",
+      status: `${startInputLabel} ${startInputCount}`,
+    },
+    {
+      key: "cross",
+      label: "Cross",
+      description: "最短クロス探索",
+      status: isSearchingCross
+        ? "探索中"
+        : selectedCrossSolution
+          ? `${selectedCrossSolution.moveCount}手`
+          : "未選択",
+    },
+    {
+      key: "f2l",
+      label: "F2L",
+      description: "ペア解析 / 次のF2L",
+      status: isAnalyzingBasicF2l
+        ? "解析中"
+        : basicF2lPlan
+          ? `${basicF2lPlan.steps.length}/4`
+          : "未解析",
+    },
+    {
+      key: "oll",
+      label: "OLL",
+      description: "OLL判定 / Learn",
+      status: ollRecognition?.ok ? ollRecognition.recognition.caseTitle : "待機",
+    },
+    {
+      key: "pll",
+      label: "PLL",
+      description: "PLL判定 / Learn",
+      status: pllRecognition?.ok ? pllRecognition.recognition.caseTitle : "待機",
+    },
+  ];
 
   return (
     <main className="app-shell analyzer-page">
@@ -4215,7 +4264,25 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
 
       <div className="analyzer-layout">
         <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
-          <div className="analyzer-input-controls">
+          <nav className="analyzer-workspace-tabs" aria-label="Analyzer tools">
+            {analyzerWorkspaceTabs.map((tab) => (
+              <button
+                type="button"
+                key={tab.key}
+                aria-pressed={activeWorkspaceTab === tab.key}
+                onClick={() => setActiveWorkspaceTab(tab.key)}
+              >
+                <span>{tab.label}</span>
+                <small>{tab.description}</small>
+                <b>{tab.status}</b>
+              </button>
+            ))}
+          </nav>
+
+          <div
+            className="analyzer-input-controls analyzer-tab-panel"
+            hidden={activeWorkspaceTab !== "input"}
+          >
           <section className="analyzer-settings-card" aria-label="Analyzer settings">
             <div className="analyzer-subheading">
               <div>
@@ -4540,8 +4607,15 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           </div>
           </div>
 
-          <div className="analyzer-analysis-flow">
-          <section className="analyzer-cross-card" aria-label="Cross candidates">
+          <div
+            className="analyzer-analysis-flow analyzer-tab-panel"
+            hidden={activeWorkspaceTab === "input"}
+          >
+          <section
+            className="analyzer-cross-card analyzer-tab-content"
+            aria-label="Cross candidates"
+            hidden={activeWorkspaceTab !== "cross"}
+          >
             <div className="analyzer-subheading">
               <div>
                 <p className="eyebrow">Cross Analyzer</p>
@@ -4751,7 +4825,12 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             </details>
           </section>
 
-          <section className="analyzer-f2l-card" id="analyzer-f2l-section" aria-label="F2L Analyzer">
+          <section
+            className="analyzer-f2l-card analyzer-tab-content"
+            id="analyzer-f2l-section"
+            aria-label="F2L Analyzer"
+            hidden={activeWorkspaceTab !== "f2l"}
+          >
             <div className="analyzer-subheading">
               <div>
                 <p className="eyebrow">F2L Analyzer</p>
@@ -5122,7 +5201,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             )}
           </section>
 
-          <section className="analyzer-candidate-section" aria-label="OLL candidate preview">
+          <section
+            className="analyzer-candidate-section analyzer-tab-content"
+            aria-label="OLL candidate preview"
+            hidden={activeWorkspaceTab !== "oll"}
+          >
             <div className="analyzer-subheading">
               <div>
                 <p className="eyebrow">OLL Preview</p>
@@ -5204,7 +5287,11 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
             </details>
           </section>
 
-          <section className="analyzer-candidate-section" aria-label="PLL candidate preview">
+          <section
+            className="analyzer-candidate-section analyzer-tab-content"
+            aria-label="PLL candidate preview"
+            hidden={activeWorkspaceTab !== "pll"}
+          >
             <div className="analyzer-subheading">
               <div>
                 <p className="eyebrow">PLL Preview</p>
@@ -5454,14 +5541,20 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                 <div className="analyzer-phase-replay-actions">
                   <button
                     type="button"
-                    onClick={prepareBestCrossPlayback}
+                    onClick={() => {
+                      setActiveWorkspaceTab("cross");
+                      prepareBestCrossPlayback();
+                    }}
                     disabled={isSearchingCross || !canUseStartState}
                   >
                     {isSearchingCross ? "Cross..." : "Cross"}
                   </button>
                   <button
                     type="button"
-                    onClick={prepareBestF2lPlayback}
+                    onClick={() => {
+                      setActiveWorkspaceTab("f2l");
+                      prepareBestF2lPlayback();
+                    }}
                     disabled={!selectedCrossSolution || isAnalyzingBasicF2l}
                   >
                     {isAnalyzingBasicF2l ? "F2L..." : "F2L"}
@@ -5469,15 +5562,30 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
                   <button
                     className="analyzer-next-f2l-action"
                     type="button"
-                    onClick={prepareNextF2lPlayback}
+                    onClick={() => {
+                      setActiveWorkspaceTab("f2l");
+                      prepareNextF2lPlayback();
+                    }}
                     disabled={!canPlayNextF2l}
                   >
                     {nextF2lButtonLabel}
                   </button>
-                  <button type="button" onClick={prepareBestOllPlayback}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveWorkspaceTab("oll");
+                      prepareBestOllPlayback();
+                    }}
+                  >
                     OLL
                   </button>
-                  <button type="button" onClick={prepareBestPllPlayback}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveWorkspaceTab("pll");
+                      prepareBestPllPlayback();
+                    }}
+                  >
                     PLL
                   </button>
                 </div>

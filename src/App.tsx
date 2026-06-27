@@ -74,6 +74,15 @@ const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
+const DEFAULT_BRAND_LOGO_SOURCE = "/brand/cube-split-timer-logo-round.png";
+const BRAND_LOGO_CANDIDATE_SOURCES = [
+  DEFAULT_BRAND_LOGO_SOURCE,
+  "/brand/cube-split-timer-logo.png",
+  "/brand/cube-split-timer-logo-peace.png",
+  "/brand/cube-split-timer-logo-jump.png",
+  "/brand/cube-split-timer-logo-think.png",
+  "/brand/cube-split-timer-logo-wave.png",
+] as const;
 const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
@@ -378,6 +387,20 @@ function markTutorialSeen(): void {
   }
 }
 
+function pickRandomItem<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function loadImageCandidate(source: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const image = new Image();
+
+    image.onload = () => resolve(source);
+    image.onerror = () => resolve(null);
+    image.src = source;
+  });
+}
+
 function loadCurrentScramble(): string | null {
   try {
     return sessionStorage.getItem(CURRENT_SCRAMBLE_STORAGE_KEY);
@@ -629,6 +652,7 @@ function GlobalAppNav({
   isSignedIn,
 }: GlobalAppNavProps) {
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
+  const [brandLogoSource, setBrandLogoSource] = useState(DEFAULT_BRAND_LOGO_SOURCE);
   const desktopItems = isAdmin
     ? [...APP_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
     : APP_NAV_ITEMS;
@@ -641,6 +665,26 @@ function GlobalAppNav({
   useEffect(() => {
     setIsMobileMoreOpen(false);
   }, [activePage]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all(BRAND_LOGO_CANDIDATE_SOURCES.map(loadImageCandidate)).then((sources) => {
+      if (!isMounted) {
+        return;
+      }
+
+      const availableSources = sources.filter((source): source is string => source !== null);
+
+      setBrandLogoSource(
+        availableSources.length > 0 ? pickRandomItem(availableSources) : DEFAULT_BRAND_LOGO_SOURCE,
+      );
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleNavigate = (path: string) => {
     setIsMobileMoreOpen(false);
@@ -656,6 +700,7 @@ function GlobalAppNav({
     <>
       <nav className="global-app-nav" aria-label="Primary navigation">
         <button className="global-brand" type="button" onClick={() => handleNavigate("/")}>
+          <img src={brandLogoSource} alt="" aria-hidden="true" />
           <span>Cube Split Timer</span>
           <small>計測・学習・解析</small>
         </button>
@@ -682,7 +727,7 @@ function GlobalAppNav({
 
       <header className="mobile-app-topbar">
         <button className="mobile-brand" type="button" onClick={() => handleNavigate("/")}>
-          <img src="/brand/cube-split-timer-logo-round.png" alt="" aria-hidden="true" />
+          <img src={brandLogoSource} alt="" aria-hidden="true" />
           <span>
             <strong>Cube Split</strong>
             <small>Timer</small>

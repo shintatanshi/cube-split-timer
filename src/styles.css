@@ -138,11 +138,30 @@ body.learn-player-fullscreen-open {
 
 .global-brand {
   display: grid;
-  gap: 2px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: center;
   min-width: 178px;
   padding: 7px 12px;
   background: var(--panel-muted);
   text-align: left;
+}
+
+.global-brand img {
+  grid-row: 1 / span 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #0b8dff;
+  clip-path: circle(50%);
+  object-fit: cover;
+}
+
+.global-brand span,
+.global-brand small {
+  grid-column: 2;
+  min-width: 0;
 }
 
 .global-brand span {
@@ -7436,7 +7455,9 @@ textarea:focus,
     width: 40px;
     height: 40px;
     flex: 0 0 auto;
-    border-radius: 8px;
+    border-radius: 50%;
+    background: #0b8dff;
+    clip-path: circle(50%);
     object-fit: cover;
   }
 

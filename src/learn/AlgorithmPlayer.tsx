@@ -9,6 +9,7 @@ import {
   saveAnimationSpeed,
   type AnimationSpeed,
 } from "../lib/cubeVisuals";
+import { playRandomCubeTurnSound } from "../lib/turnSounds";
 import type {
   CubeCoord,
   CubeFaceName,
@@ -836,6 +837,7 @@ export default function AlgorithmPlayer({
 
       const descriptor = reverse ? reverseMoveDescriptor(step.descriptor) : step.descriptor;
       isAnimatingRef.current = true;
+      playRandomCubeTurnSound();
       const animationRun = animationRunRef.current;
 
       const selectedCubies = state.cubies.filter((cubie) =>

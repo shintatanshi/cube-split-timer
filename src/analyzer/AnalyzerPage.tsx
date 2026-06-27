@@ -10,6 +10,7 @@ import {
   saveAnimationSpeed,
   type AnimationSpeed,
 } from "../lib/cubeVisuals";
+import { playRandomCubeTurnSound } from "../lib/turnSounds";
 import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
 import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
@@ -1944,6 +1945,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     }
 
     isAnimatingRef.current = true;
+    playRandomCubeTurnSound();
     const animationRun = animationRunRef.current;
     const selectedCubies = state.cubies.filter((cubie) =>
       descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis])),

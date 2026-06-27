@@ -9,6 +9,7 @@ import {
   saveAnimationSpeed,
   type AnimationSpeed,
 } from "../lib/cubeVisuals";
+import { playRandomCubeTurnSound } from "../lib/turnSounds";
 import { getMoveDescriptor, parseAlgorithm } from "../learn/moveNotation";
 import type { MoveAxis } from "../learn/moveNotation";
 
@@ -320,6 +321,7 @@ export default function ScramblePreviewPage({
     }
 
     isAnimatingRef.current = true;
+    playRandomCubeTurnSound();
     const animationRun = animationRunRef.current;
     const selectedCubies = state.cubies.filter((cubie) =>
       descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis])),

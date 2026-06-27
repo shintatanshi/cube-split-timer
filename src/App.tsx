@@ -74,7 +74,6 @@ const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
-const MOBILE_NAV_COLLAPSED_STORAGE_KEY = "cubeSplitTimer.mobileNavCollapsed.v1";
 const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
@@ -273,14 +272,54 @@ interface AppNavItem {
 
 const APP_NAV_ITEMS: AppNavItem[] = [
   { key: "timer", label: "計測", path: "/" },
-  { key: "learn", label: "学ぶ", path: "/learn" },
   { key: "analyzer", label: "解析", path: "/analyzer" },
+  { key: "learn", label: "学習", path: "/learn" },
   { key: "history", label: "履歴", path: "/history" },
   { key: "analysis", label: "分析", path: "/analysis" },
   { key: "practice", label: "練習", path: "/practice" },
   { key: "help", label: "ヘルプ", path: "/help" },
   { key: "feedback", label: "意見箱", path: "/feedback" },
 ];
+
+type MobilePrimaryNavKey = "timer" | "analyzer" | "learn" | "more";
+
+interface MobilePrimaryNavItem {
+  key: MobilePrimaryNavKey;
+  label: string;
+  path?: string;
+  icon: "timer" | "analyzer" | "learn" | "more";
+}
+
+const MOBILE_PRIMARY_NAV_ITEMS: MobilePrimaryNavItem[] = [
+  { key: "timer", label: "計測", path: "/", icon: "timer" },
+  { key: "analyzer", label: "解析", path: "/analyzer", icon: "analyzer" },
+  { key: "learn", label: "学習", path: "/learn", icon: "learn" },
+  { key: "more", label: "その他", icon: "more" },
+];
+
+const MOBILE_MORE_NAV_ITEMS: AppNavItem[] = [
+  { key: "history", label: "履歴", path: "/history" },
+  { key: "analysis", label: "分析", path: "/analysis" },
+  { key: "practice", label: "練習", path: "/practice" },
+  { key: "help", label: "ヘルプ", path: "/help" },
+  { key: "feedback", label: "意見箱", path: "/feedback" },
+];
+
+function getMobilePrimaryNavKey(activePage: AppPage): MobilePrimaryNavKey {
+  if (activePage === "timer") {
+    return "timer";
+  }
+
+  if (activePage === "analyzer" || activePage === "scramble") {
+    return "analyzer";
+  }
+
+  if (activePage === "learn") {
+    return "learn";
+  }
+
+  return "more";
+}
 
 function getLocationInfo(): LocationInfo {
   const { pathname, hash } = window.location;
@@ -336,28 +375,6 @@ function markTutorialSeen(): void {
     localStorage.setItem(TUTORIAL_STORAGE_KEY, "true");
   } catch {
     // localStorage may be unavailable in private modes; the timer should still work.
-  }
-}
-
-function loadMobileNavCollapsed(): boolean {
-  try {
-    const saved = localStorage.getItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY);
-
-    if (saved === "true" || saved === "false") {
-      return saved === "true";
-    }
-
-    return window.matchMedia("(max-width: 520px)").matches;
-  } catch {
-    return false;
-  }
-}
-
-function saveMobileNavCollapsed(isCollapsed: boolean): void {
-  try {
-    localStorage.setItem(MOBILE_NAV_COLLAPSED_STORAGE_KEY, String(isCollapsed));
-  } catch {
-    // localStorage may be unavailable in private modes; the in-memory state still works.
   }
 }
 
@@ -595,10 +612,8 @@ function copyTextWithFallback(text: string): Promise<void> {
 interface GlobalAppNavProps {
   activePage: AppPage;
   isAdmin: boolean;
-  isMobileCollapsed: boolean;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
-  onToggleMobileCollapse: () => void;
   authLabel: string;
   isAuthLoading: boolean;
   isSignedIn: boolean;
@@ -607,54 +622,153 @@ interface GlobalAppNavProps {
 function GlobalAppNav({
   activePage,
   isAdmin,
-  isMobileCollapsed,
   onNavigate,
   onOpenLogin,
-  onToggleMobileCollapse,
   authLabel,
   isAuthLoading,
   isSignedIn,
 }: GlobalAppNavProps) {
-  const visibleItems = isAdmin
+  const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
+  const desktopItems = isAdmin
     ? [...APP_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
     : APP_NAV_ITEMS;
+  const mobileMoreItems = isAdmin
+    ? [...MOBILE_MORE_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
+    : MOBILE_MORE_NAV_ITEMS;
+  const mobileActiveKey = getMobilePrimaryNavKey(activePage);
+  const accountLabel = isAuthLoading ? "Account" : isSignedIn ? authLabel : "ログイン";
+
+  useEffect(() => {
+    setIsMobileMoreOpen(false);
+  }, [activePage]);
+
+  const handleNavigate = (path: string) => {
+    setIsMobileMoreOpen(false);
+    onNavigate(path);
+  };
+
+  const handleOpenAccount = () => {
+    setIsMobileMoreOpen(false);
+    onOpenLogin();
+  };
 
   return (
-    <nav
-      className={`global-app-nav${isMobileCollapsed ? " is-mobile-collapsed" : ""}`}
-      aria-label="Primary navigation"
-    >
-      <button className="global-brand" type="button" onClick={() => onNavigate("/")}>
-        <span>Cube Split Timer</span>
-        <small>計測・学習・解析</small>
-      </button>
-      <div className="global-nav-links">
-        {visibleItems.map((item) => {
-          const isCurrent = activePage === item.key;
+    <>
+      <nav className="global-app-nav" aria-label="Primary navigation">
+        <button className="global-brand" type="button" onClick={() => handleNavigate("/")}>
+          <span>Cube Split Timer</span>
+          <small>計測・学習・解析</small>
+        </button>
+        <div className="global-nav-links">
+          {desktopItems.map((item) => {
+            const isCurrent = activePage === item.key;
+
+            return (
+              <button
+                type="button"
+                key={item.key}
+                aria-current={isCurrent ? "page" : undefined}
+                onClick={() => handleNavigate(item.path)}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+        <button className="global-account-button" type="button" onClick={handleOpenAccount}>
+          {accountLabel}
+        </button>
+      </nav>
+
+      <header className="mobile-app-topbar">
+        <button className="mobile-brand" type="button" onClick={() => handleNavigate("/")}>
+          <img src="/brand/cube-split-timer-logo.png" alt="" aria-hidden="true" />
+          <span>
+            <strong>Cube Split</strong>
+            <small>Timer</small>
+          </span>
+        </button>
+        <button className="mobile-account-button" type="button" onClick={handleOpenAccount}>
+          {accountLabel}
+        </button>
+      </header>
+
+      <nav className="mobile-tab-nav" aria-label="Mobile primary navigation">
+        {MOBILE_PRIMARY_NAV_ITEMS.map((item) => {
+          const isCurrent = mobileActiveKey === item.key;
+          const isMore = item.key === "more";
 
           return (
             <button
               type="button"
               key={item.key}
               aria-current={isCurrent ? "page" : undefined}
-              onClick={() => onNavigate(item.path)}
+              aria-expanded={isMore ? isMobileMoreOpen : undefined}
+              aria-haspopup={isMore ? "dialog" : undefined}
+              onClick={() => {
+                if (isMore) {
+                  setIsMobileMoreOpen((currentValue) => !currentValue);
+                  return;
+                }
+
+                handleNavigate(item.path ?? "/");
+              }}
             >
-              {item.label}
+              <span
+                className={`mobile-tab-icon mobile-tab-icon-${item.icon}`}
+                aria-hidden="true"
+              />
+              <span>{item.label}</span>
             </button>
           );
         })}
-      </div>
-      <button className="global-account-button" type="button" onClick={onOpenLogin}>
-        {isAuthLoading ? "アカウント" : isSignedIn ? authLabel : "ログイン"}
-      </button>
-      <button
-        className="global-nav-collapse-button"
-        type="button"
-        aria-expanded={!isMobileCollapsed}
-        aria-label={isMobileCollapsed ? "ナビを開く" : "ナビをたたむ"}
-        onClick={onToggleMobileCollapse}
-      />
-    </nav>
+      </nav>
+
+      {isMobileMoreOpen && (
+        <div className="mobile-more-layer">
+          <button
+            className="mobile-more-backdrop"
+            type="button"
+            aria-label="その他メニューを閉じる"
+            onClick={() => setIsMobileMoreOpen(false)}
+          />
+          <section className="mobile-more-sheet" aria-label="その他メニュー">
+            <div className="mobile-more-head">
+              <div>
+                <p className="eyebrow">Menu</p>
+                <h2>その他</h2>
+              </div>
+              <button
+                className="mobile-more-close"
+                type="button"
+                onClick={() => setIsMobileMoreOpen(false)}
+              >
+                閉じる
+              </button>
+            </div>
+            <div className="mobile-more-grid">
+              {mobileMoreItems.map((item) => {
+                const isCurrent = activePage === item.key;
+
+                return (
+                  <button
+                    type="button"
+                    key={item.key}
+                    aria-current={isCurrent ? "page" : undefined}
+                    onClick={() => handleNavigate(item.path)}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button className="mobile-more-account" type="button" onClick={handleOpenAccount}>
+              {accountLabel}
+            </button>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -673,7 +787,6 @@ export default function App() {
   const [authProfile, setAuthProfile] = useState<ProfileRow | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [isMobileNavCollapsed, setIsMobileNavCollapsed] = useState(loadMobileNavCollapsed);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
   const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
   const [timerState, setTimerState] = useState<TimerState>("idle");
@@ -1900,15 +2013,6 @@ const handleTimerPointerCancel = useCallback(
     void shareText(buildTodaySummaryShareText(todaySolves, todayStats), "今日のまとめ");
   }, [shareText, todaySolves, todayStats]);
 
-  const toggleMobileNavCollapse = useCallback(() => {
-    setIsMobileNavCollapsed((currentValue) => {
-      const nextValue = !currentValue;
-
-      saveMobileNavCollapsed(nextValue);
-      return nextValue;
-    });
-  }, []);
-
   const navigateTo = useCallback((path: string, hash = "") => {
     const [pathname, inlineHash = ""] = path.split("#");
     const nextHash = hash || (inlineHash ? `#${inlineHash}` : "");
@@ -2046,10 +2150,8 @@ const handleTimerPointerCancel = useCallback(
     <GlobalAppNav
       activePage={locationInfo.page}
       isAdmin={authProfile?.role === "admin"}
-      isMobileCollapsed={isMobileNavCollapsed}
       onNavigate={navigateTo}
       onOpenLogin={openLogin}
-      onToggleMobileCollapse={toggleMobileNavCollapse}
       authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
       isAuthLoading={isAuthLoading}
       isSignedIn={Boolean(authUser)}

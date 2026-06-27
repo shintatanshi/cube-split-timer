@@ -2633,16 +2633,20 @@ const handleTimerPointerCancel = useCallback(
                 >
                   解析
                 </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => setScramble(generateScramble())}
-                >
-                  New
-                </button>
               </div>
             </div>
-            <p className="scramble-text">{scramble}</p>
+            <div className="scramble-output-row">
+              <p className="scramble-text">{scramble}</p>
+              <button
+                className="scramble-refresh-button"
+                type="button"
+                aria-label="新しいスクランブル"
+                title="新しいスクランブル"
+                onClick={() => setScramble(generateScramble())}
+              >
+                <span aria-hidden="true">↻</span>
+              </button>
+            </div>
           </div>
 
           <button

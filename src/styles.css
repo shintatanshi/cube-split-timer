@@ -303,6 +303,34 @@ select option:checked {
   gap: 8px;
 }
 
+.scramble-output-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.scramble-refresh-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.05rem;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.scramble-refresh-button span {
+  display: block;
+  transform: translateY(-1px);
+}
+
 .eyebrow,
 .scramble-label {
   margin: 0 0 6px;
@@ -616,6 +644,7 @@ h2 {
 .scramble-text {
   min-height: 74px;
   margin: 0;
+  min-width: 0;
   color: var(--text-strong);
   font-size: clamp(1.15rem, 4.5vw, 1.75rem);
   font-weight: 700;
@@ -6224,6 +6253,7 @@ button:active {
 }
 
 .ghost-button,
+.scramble-refresh-button,
 .primary-button,
 .history-actions button,
 .home-side-card button,
@@ -6235,6 +6265,7 @@ button:active {
 }
 
 .ghost-button:hover,
+.scramble-refresh-button:hover,
 .home-side-card button:hover,
 .home-side-card-compact button:hover {
   border-color: color-mix(in srgb, var(--accent) 54%, var(--border));
@@ -6704,15 +6735,25 @@ button:active {
 
   .scramble-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
 
   .scramble-actions .ghost-button {
     width: 100%;
     min-height: 38px;
-    padding: 0 6px;
-    font-size: 0.9rem;
+    padding: 0 8px;
+    font-size: 0.92rem;
+  }
+
+  .scramble-output-row {
+    gap: 8px;
+  }
+
+  .scramble-refresh-button {
+    width: 38px;
+    height: 38px;
+    font-size: 1rem;
   }
 
   .scramble-text {
@@ -6914,6 +6955,7 @@ body {
 .global-account-button,
 .global-nav-collapse-button,
 .ghost-button,
+.scramble-refresh-button,
 .primary-button,
 .history-actions button,
 .home-side-card button,
@@ -6946,6 +6988,7 @@ body {
 .global-nav-links button:hover,
 .global-account-button:hover,
 .ghost-button:hover,
+.scramble-refresh-button:hover,
 .home-side-card button:hover,
 .home-side-card-compact button:hover,
 .analyzer-action-grid button:not(:disabled):hover,
@@ -7813,6 +7856,7 @@ textarea:focus,
 :root[data-theme="light"] .mobile-more-grid button,
 :root[data-theme="light"] .mobile-more-account,
 :root[data-theme="light"] .ghost-button,
+:root[data-theme="light"] .scramble-refresh-button,
 :root[data-theme="light"] .primary-button,
 :root[data-theme="light"] .home-side-card button,
 :root[data-theme="light"] .home-side-card-compact button,
@@ -7826,12 +7870,14 @@ textarea:focus,
 :root[data-theme="light"] .mobile-account-button,
 :root[data-theme="light"] .theme-control select,
 :root[data-theme="light"] .help-button,
-:root[data-theme="light"] .scramble-actions .ghost-button {
+:root[data-theme="light"] .scramble-actions .ghost-button,
+:root[data-theme="light"] .scramble-refresh-button {
   color: var(--text-strong);
   opacity: 1;
 }
 
-:root[data-theme="light"] .scramble-actions .ghost-button {
+:root[data-theme="light"] .scramble-actions .ghost-button,
+:root[data-theme="light"] .scramble-refresh-button {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
   background: #e8f6ff;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);

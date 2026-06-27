@@ -193,7 +193,7 @@ const INITIAL_VIEW_ROTATION = {
 const ANALYZER_SETTINGS_STORAGE_KEY = "cubeSplitTimer.analyzerSettings.v1";
 const ANALYZER_STATE_STORAGE_KEY = "cube-split-timer-analyzer-state";
 const ANALYZER_SPEED_STORAGE_KEY = "cubeSplitTimer.analyzerSpeed.v1";
-const ANALYZER_CUBE_SCALE_STORAGE_KEY = "cubeSplitTimer.analyzerCubeScale.v1";
+const ANALYZER_CUBE_SCALE_STORAGE_KEY = "cubeSplitTimer.analyzerCubeScale.v2";
 const ANALYZER_CUBE_SCALE_OPTIONS: Array<{ value: AnalyzerCubeScale; label: string }> = [
   { value: 0.7, label: "70%" },
   { value: 0.85, label: "85%" },

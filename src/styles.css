@@ -7952,3 +7952,217 @@ textarea:focus,
     letter-spacing: 0.012em;
   }
 }
+
+/* Analyzer mobile flow polish */
+@media (max-width: 860px) {
+  .analyzer-page {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .analyzer-page > .app-header {
+    order: 1;
+    margin-bottom: 0;
+  }
+
+  .analyzer-page .app-header h1 {
+    font-size: clamp(1.8rem, 9vw, 2.4rem);
+  }
+
+  .analyzer-page .header-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analyzer-hero {
+    display: none;
+  }
+
+  .analyzer-layout,
+  .analyzer-input-panel {
+    display: contents;
+  }
+
+  .analyzer-player-panel {
+    order: 2;
+    padding: 10px;
+  }
+
+  .analyzer-command-bar {
+    order: 3;
+    position: static;
+    margin-bottom: 0;
+  }
+
+  .analyzer-step-timeline {
+    order: 4;
+    margin-bottom: 0;
+  }
+
+  .analyzer-input-controls {
+    order: 5;
+  }
+
+  .analyzer-analysis-flow {
+    order: 6;
+  }
+
+  .analyzer-player-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .analyzer-player-header h2 {
+    font-size: 1.55rem;
+  }
+
+  .analyzer-player-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: 100%;
+  }
+
+  .analyzer-player-actions > *,
+  .analyzer-fullscreen-button {
+    width: 100%;
+  }
+
+  .analyzer-speed-control,
+  .analyzer-f2l-highlight-toggle-compact,
+  .analyzer-step,
+  .analyzer-fullscreen-button {
+    min-height: 38px;
+  }
+
+  .analyzer-step,
+  .analyzer-fullscreen-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .analyzer-player-body {
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analyzer-canvas-frame {
+    height: min(58vw, 280px);
+    min-height: 220px;
+  }
+
+  .analyzer-control-panel {
+    display: grid;
+    gap: 9px;
+    overflow: visible;
+  }
+
+  .analyzer-now {
+    display: grid;
+    gap: 4px;
+  }
+
+  .analyzer-playback-note {
+    display: none;
+  }
+
+  .analyzer-control-panel .analyzer-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-control-panel .analyzer-controls button {
+    min-height: 40px;
+  }
+
+  .analyzer-move-list {
+    max-height: 76px;
+    overflow: auto;
+  }
+
+  .analyzer-phase-replay-panel {
+    padding: 10px;
+  }
+
+  .analyzer-phase-replay-head {
+    display: grid;
+    gap: 6px;
+  }
+
+  .analyzer-phase-replay-actions,
+  .analyzer-phase-learn-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-command-status {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analyzer-command-status span {
+    justify-content: center;
+    min-width: 0;
+    text-align: center;
+  }
+
+  .analyzer-command-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-command-actions button {
+    width: 100%;
+    min-height: 42px;
+  }
+
+  .analyzer-step-timeline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .analyzer-input-controls,
+  .analyzer-analysis-flow {
+    padding: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .analyzer-page {
+    gap: 10px;
+  }
+
+  .analyzer-player-panel {
+    padding: 9px;
+  }
+
+  .analyzer-player-header {
+    gap: 8px;
+  }
+
+  .analyzer-player-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-speed-control span,
+  .analyzer-f2l-highlight-toggle-compact span {
+    font-size: 0.7rem;
+  }
+
+  .analyzer-canvas-frame {
+    height: min(52vw, 236px);
+    min-height: 188px;
+  }
+
+  .analyzer-control-panel .analyzer-controls,
+  .analyzer-command-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analyzer-command-status {
+    grid-template-columns: 1fr;
+  }
+
+  .analyzer-step-timeline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

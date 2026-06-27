@@ -5301,7 +5301,7 @@ export default function AnalyzerPage({ onNavigate, onOpenTimer }: AnalyzerPagePr
           <div className="analyzer-player-header">
             <div>
               <p className="eyebrow">3D Cube</p>
-              <h2>仮想キューブ</h2>
+              <h2>3D再生</h2>
             </div>
             <div className="analyzer-player-actions">
               <label className="analyzer-speed-control">

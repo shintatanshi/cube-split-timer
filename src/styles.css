@@ -5303,11 +5303,35 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
 }
 
 .auth-migration-panel p,
+.auth-migration-steps,
 .auth-migration-help {
   color: var(--muted);
   font-size: 0.88rem;
   font-weight: 760;
   line-height: 1.55;
+}
+
+.auth-migration-steps {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 64%, transparent);
+}
+
+.auth-migration-steps .eyebrow {
+  margin: 0;
+  color: var(--accent);
+}
+
+.auth-migration-steps ol {
+  margin: 0;
+  padding-left: 1.35rem;
+}
+
+.auth-migration-steps li + li {
+  margin-top: 4px;
 }
 
 .auth-migration-actions {

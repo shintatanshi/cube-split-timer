@@ -3680,6 +3680,16 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
               コピー後、この画面の貼り付け欄へ入れて読み込んでください。
             </p>
           </div>
+          <div className="auth-migration-steps">
+            <p className="eyebrow">やること</p>
+            <ol>
+              <li>この画面で「移行コードをコピー」を押します。</li>
+              <li>「旧Netlify版を開く」で昔のページを開きます。</li>
+              <li>Netlify版で移行コードを実行して、履歴データをコピーします。</li>
+              <li>この画面へ戻り、「別端末の履歴データを貼り付け」へ貼ります。</li>
+              <li>「貼り付けた履歴を読み込む」を押すと、ログイン中ならアカウントにも保存されます。</li>
+            </ol>
+          </div>
           <div className="auth-migration-actions">
             <button
               className="ghost-button"

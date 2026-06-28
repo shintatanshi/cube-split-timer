@@ -267,6 +267,17 @@ interface CloudSyncResult {
   skipped: number;
 }
 
+interface CloudImportResult {
+  total: number;
+  imported: number;
+  added: number;
+}
+
+interface AccountHistorySyncResult {
+  local: CloudSyncResult;
+  account: CloudImportResult;
+}
+
 interface LocalImportResult {
   imported: number;
   added: number;
@@ -510,6 +521,138 @@ function getAuthIdentityLabel(identity: AuthIdentity): string {
 
 function getLocalSyncNote(solve: SolveRecord): string {
   return `Local solve ID: ${solve.id}`;
+}
+
+function getCloudNoteValue(notes: string | null, label: string): string | null {
+  if (!notes) {
+    return null;
+  }
+
+  const prefix = `${label}:`;
+  const part = notes
+    .split(" / ")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(prefix));
+
+  return part ? part.slice(prefix.length).trim() : null;
+}
+
+function getCloudLocalSolveId(row: SolveSessionRow): string | null {
+  return getCloudNoteValue(row.notes, "Local solve ID");
+}
+
+function getCloudPenalty(row: SolveSessionRow): Penalty {
+  const penalty = getCloudNoteValue(row.notes, "Penalty");
+
+  if (row.is_dnf || penalty === "DNF") {
+    return "DNF";
+  }
+
+  if (penalty === "+2") {
+    return "+2";
+  }
+
+  return "none";
+}
+
+function isSolveMode(value: string): value is SolveMode {
+  return TIMER_MODES.some((entry) => entry.mode === value);
+}
+
+function getCloudBaseTime(row: SolveSessionRow, penalty: Penalty): number {
+  const storedTotal = Math.max(0, Math.round(row.total_ms));
+
+  if (penalty === "+2") {
+    return Math.max(0, storedTotal - 2000);
+  }
+
+  return storedTotal;
+}
+
+function getCloudTime(value: number | null | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.round(value))
+    : fallback;
+}
+
+function getCloudPairSplits(row: SolveSessionRow, fallback: number): [number, number, number, number] {
+  const rawSplits = getCloudNoteValue(row.notes, "Pair splits");
+
+  if (!rawSplits) {
+    return [fallback, 0, 0, 0];
+  }
+
+  const values = rawSplits
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value))
+    .map((value) => Math.max(0, Math.round(value)));
+
+  if (values.length < 4) {
+    return [fallback, 0, 0, 0];
+  }
+
+  return [values[0], values[1], values[2], values[3]];
+}
+
+function solveSessionRowToSolveRecord(row: SolveSessionRow): SolveRecord | null {
+  if (!isSolveMode(row.mode)) {
+    return null;
+  }
+
+  const penalty = getCloudPenalty(row);
+  const totalTime = getCloudBaseTime(row, penalty);
+  const baseSolve = {
+    id: getCloudLocalSolveId(row) ?? `cloud-${row.id}`,
+    mode: row.mode,
+    totalTime,
+    scramble: row.scramble,
+    penalty,
+    deletedAt: row.is_deleted ? row.created_at : null,
+    createdAt: row.created_at,
+  };
+
+  switch (row.mode) {
+    case "normal":
+      return {
+        ...baseSolve,
+        mode: "normal",
+      };
+    case "cfop_split":
+      return {
+        ...baseSolve,
+        mode: "cfop_split",
+        crossTime: getCloudTime(row.cross_ms, 0),
+        f2lTime: getCloudTime(row.f2l_ms, 0),
+        ollTime: getCloudTime(row.oll_ms, 0),
+        pllTime: getCloudTime(row.pll_ms, 0),
+      };
+    case "cross_practice":
+      return {
+        ...baseSolve,
+        mode: "cross_practice",
+        crossTime: getCloudTime(row.cross_ms, totalTime),
+        crossColor: getCloudNoteValue(row.notes, "Cross color") ?? "white",
+      };
+    case "f2l_practice":
+      return {
+        ...baseSolve,
+        mode: "f2l_practice",
+        f2lTime: getCloudTime(row.f2l_ms, totalTime),
+      };
+    case "f2l_pair_split": {
+      const [pair1Time, pair2Time, pair3Time, pair4Time] = getCloudPairSplits(row, totalTime);
+
+      return {
+        ...baseSolve,
+        mode: "f2l_pair_split",
+        pair1Time,
+        pair2Time,
+        pair3Time,
+        pair4Time,
+      };
+    }
+  }
 }
 
 function buildCloudSolveSessionInput(solve: SolveRecord): SaveSolveSessionInput {
@@ -853,7 +996,7 @@ export default function App() {
   const timerReturnScrollYRef = useRef(0);
   const restoreTimerScrollFrameRef = useRef<number | null>(null);
   const postStopInputGuardRef = useRef<PostStopInputGuard | null>(null);
-  const syncedLocalSolvesUserIdRef = useRef<string | null>(null);
+  const syncedAccountHistoryUserIdRef = useRef<string | null>(null);
 
   const activeSolves = useMemo(() => getActiveSolves(solves), [solves]);
   const stats = useMemo(() => calculateStats(solves), [solves]);
@@ -1230,6 +1373,29 @@ export default function App() {
     saveSolves(nextSolves);
   }, []);
 
+  const syncAccountSolvesToLocal = useCallback(async (): Promise<CloudImportResult> => {
+    if (!authUser || !isAuthConfigured()) {
+      return { total: 0, imported: 0, added: 0 };
+    }
+
+    const rows = await getMySolveSessions({ includeDeleted: false, limit: 10000 });
+    const cloudSolves = rows
+      .map(solveSessionRowToSolveRecord)
+      .filter((solve): solve is SolveRecord => solve !== null);
+    const mergedSolves = mergeSolvesById(solves, cloudSolves);
+    const added = Math.max(0, mergedSolves.length - solves.length);
+
+    if (cloudSolves.length > 0) {
+      persistAndSetSolves(mergedSolves);
+    }
+
+    return {
+      total: rows.length,
+      imported: cloudSolves.length,
+      added,
+    };
+  }, [authUser, persistAndSetSolves, solves]);
+
   const syncLocalSolvesToCloud = useCallback(
     async (candidateSolves = solves): Promise<CloudSyncResult> => {
       const localSolves = getActiveSolves(candidateSolves);
@@ -1273,35 +1439,58 @@ export default function App() {
     [authUser, solves],
   );
 
+  const syncAccountHistory = useCallback(async (): Promise<AccountHistorySyncResult> => {
+    const local = await syncLocalSolvesToCloud();
+    const account = await syncAccountSolvesToLocal();
+
+    return { local, account };
+  }, [syncAccountSolvesToLocal, syncLocalSolvesToCloud]);
+
+  useEffect(() => {
+    if (authUser) {
+      return;
+    }
+
+    syncedAccountHistoryUserIdRef.current = null;
+  }, [authUser]);
+
   useEffect(() => {
     if (
       !authUser ||
       !isAuthConfigured() ||
-      activeSolves.length === 0 ||
-      syncedLocalSolvesUserIdRef.current === authUser.id
+      syncedAccountHistoryUserIdRef.current === authUser.id
     ) {
       return;
     }
 
-    syncedLocalSolvesUserIdRef.current = authUser.id;
+    syncedAccountHistoryUserIdRef.current = authUser.id;
 
-    void syncLocalSolvesToCloud()
+    void syncAccountHistory()
       .then((result) => {
-        if (result.uploaded > 0) {
+        if (result.local.uploaded > 0 && result.account.added > 0) {
           setAuthNotice(
-            `この端末の履歴 ${result.uploaded}件をアカウントへアップロードしました。`,
+            `履歴を同期しました。${result.local.uploaded}件をアカウントへ保存し、${result.account.added}件をこの端末に表示しました。`,
           );
           return;
         }
 
-        if (result.skipped > 0) {
-          setAuthNotice("この端末の履歴はすでにアカウントへ保存済みです。");
+        if (result.local.uploaded > 0) {
+          setAuthNotice(
+            `この端末の履歴 ${result.local.uploaded}件をアカウントへ保存しました。`,
+          );
+          return;
+        }
+
+        if (result.account.added > 0) {
+          setAuthNotice(
+            `アカウントの履歴 ${result.account.added}件をこの端末にも表示しました。`,
+          );
         }
       })
       .catch(() => {
-        setAuthNotice("ログインしましたが、この端末の履歴アップロードに失敗しました。");
+        setAuthNotice("履歴の自動同期に失敗しました。Account画面からもう一度同期できます。");
       });
-  }, [activeSolves.length, authUser, syncLocalSolvesToCloud]);
+  }, [authUser, syncAccountHistory]);
 
   const syncSolveToCloud = useCallback(
     (solve: SolveRecord) => {
@@ -2171,6 +2360,26 @@ const handleTimerPointerCancel = useCallback(
     return result;
   }, [syncLocalSolvesToCloud]);
 
+  const importAccountSolvesToLocal = useCallback(async (): Promise<CloudImportResult> => {
+    const result = await syncAccountHistory();
+
+    if (result.local.uploaded > 0 && result.account.added > 0) {
+      setAuthNotice(
+        `履歴を同期しました。${result.local.uploaded}件をアカウントへ保存し、${result.account.added}件をこの端末に取り込みました。`,
+      );
+    } else if (result.local.uploaded > 0) {
+      setAuthNotice(`この端末の履歴 ${result.local.uploaded}件をアカウントへ保存しました。`);
+    } else if (result.account.added > 0) {
+      setAuthNotice(`アカウントの履歴 ${result.account.added}件をこの端末に取り込みました。`);
+    } else if (result.account.total === 0 && result.local.total === 0) {
+      setAuthNotice("アカウントには取り込む履歴がありません。");
+    } else {
+      setAuthNotice("履歴はすでに同期済みです。");
+    }
+
+    return result.account;
+  }, [syncAccountHistory]);
+
   const dismissTutorial = useCallback(() => {
     markTutorialSeen();
     setIsTutorialOpen(false);
@@ -2354,6 +2563,7 @@ const handleTimerPointerCancel = useCallback(
           onExportLocalSolves={exportLocalSolves}
           onImportLocalSolves={importLocalSolves}
           onUploadLocalSolves={uploadLocalSolvesToAccount}
+          onImportAccountSolves={importAccountSolvesToLocal}
         />
       </>
     );
@@ -2859,6 +3069,7 @@ interface AuthPageProps {
   onExportLocalSolves: () => Promise<void>;
   onImportLocalSolves: (raw: string) => LocalImportResult;
   onUploadLocalSolves: () => Promise<CloudSyncResult>;
+  onImportAccountSolves: () => Promise<CloudImportResult>;
 }
 
 function getAuthErrorMessage(error: unknown): string {
@@ -2883,6 +3094,7 @@ function AuthPage({
   onExportLocalSolves,
   onImportLocalSolves,
   onUploadLocalSolves,
+  onImportAccountSolves,
 }: AuthPageProps) {
   const [mode, setMode] = useState<AuthFormMode>("signIn");
   const [email, setEmail] = useState("");
@@ -2904,6 +3116,7 @@ function AuthPage({
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isUploadingLocalSolves, setIsUploadingLocalSolves] = useState(false);
+  const [isImportingAccountSolves, setIsImportingAccountSolves] = useState(false);
   const hasGoogleIdentity = authIdentities.some((identity) => identity.provider === "google");
   const authIdentityLabel = authIdentities.length > 0
     ? authIdentities.map(getAuthIdentityLabel).join(" / ")
@@ -3118,6 +3331,26 @@ function AuthPage({
     }
   };
 
+  const handleImportAccountSolves = async () => {
+    setIsImportingAccountSolves(true);
+    setDataStatus("idle");
+    setDataStatusMessage("");
+
+    try {
+      const result = await onImportAccountSolves();
+
+      setDataStatus("success");
+      setDataStatusMessage(
+        `履歴を同期しました。取り込み ${result.added}件 / 読み取り ${result.imported}件 / 対象 ${result.total}件です。`,
+      );
+    } catch {
+      setDataStatus("error");
+      setDataStatusMessage("履歴を同期できませんでした。ログイン状態とSupabase設定を確認してください。");
+    } finally {
+      setIsImportingAccountSolves(false);
+    }
+  };
+
   return (
     <main className="app-shell auth-page">
       <header className="app-header auth-header">
@@ -3163,7 +3396,8 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             </p>
           </div>
           <p className="auth-lead">
-            これ以降に保存した記録は、ローカル保存後にSupabaseの `solve_sessions` にも保存します。
+            ログイン中は、この端末の履歴をアカウントへ自動保存し、
+            アカウント履歴も履歴画面へ自動表示します。
           </p>
           {accountStatus !== "idle" && (
             <div className={`feedback-status feedback-status-${accountStatus}`} role="status">
@@ -3343,8 +3577,8 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           <p className="eyebrow">Data Transfer</p>
           <h2>端末の履歴を移す</h2>
           <p className="auth-lead">
-            この端末のローカル履歴は {localSolveCount} 件です。書き出し/読み込みを使うと、
-            NetlifyからVercelへ移したり、別端末の履歴をこの端末へまとめたりできます。
+            この端末のローカル履歴は {localSolveCount} 件です。ログイン中は自動でアカウントと同期します。
+            書き出し/読み込みは、別端末へ手動で移したいときに使えます。
           </p>
         </div>
 
@@ -3370,6 +3604,14 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             disabled={!user || isUploadingLocalSolves || localSolveCount === 0}
           >
             {isUploadingLocalSolves ? "保存中..." : "この端末の履歴をアカウントへ保存"}
+          </button>
+          <button
+            className="ghost-button"
+            type="button"
+            onClick={() => void handleImportAccountSolves()}
+            disabled={!user || isImportingAccountSolves}
+          >
+            {isImportingAccountSolves ? "同期中..." : "履歴を今すぐ同期"}
           </button>
         </div>
 

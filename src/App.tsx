@@ -66,6 +66,7 @@ import {
 type TimerState = "idle" | "pendingStart" | "holding" | "ready" | "running" | "finished";
 type StartHoldSource = "keyboard" | "pointer";
 type StartReturnState = "idle" | "finished";
+type TimerSidePanelTab = "history" | "stats";
 
 const INPUT_DEBOUNCE_MS = 200;
 const HOLD_TO_START_MS = 500;
@@ -198,6 +199,13 @@ function getSavedSplits(solve: SolveRecord): Array<{ key: string; label: string;
     case "normal":
       return [];
   }
+}
+
+function formatClockTime(isoDate: string): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(isoDate));
 }
 
 function getIdleHint(mode: SolveMode): string {
@@ -979,6 +987,7 @@ export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
+  const [timerSidePanelTab, setTimerSidePanelTab] = useState<TimerSidePanelTab>("history");
   const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
   const [timerState, setTimerState] = useState<TimerState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -2934,49 +2943,13 @@ const handleTimerPointerCancel = useCallback(
           </button>
         </section>
 
-        <aside className="home-side-panel" aria-label="Quick actions">
-          <section className="home-side-card home-side-card-primary">
-            <span>Analyze</span>
-            <strong>このスクランブルを解析</strong>
-            <p>Cross / F2L / OLL / PLL の流れをそのまま確認できます。</p>
-            <button type="button" onClick={openCurrentScrambleInAnalyzer}>
-              Analyzerで見る
-            </button>
-          </section>
-
-          <section className="home-stats-mini" aria-label="Today stats">
-            <div>
-              <span>Today</span>
-              <strong>{todaySolves.length}</strong>
-            </div>
-            <div>
-              <span>ao5</span>
-              <strong>{formatAverage(stats.ao5)}</strong>
-            </div>
-            <div>
-              <span>Best</span>
-              <strong>{formatAverage(stats.best)}</strong>
-            </div>
-          </section>
-
-          <section className="home-side-card">
-            <span>Learn</span>
-            <strong>OLL / PLL / F2Lを確認</strong>
-            <p>解析から見つけたケースも、Learnへ戻って復習できます。</p>
-            <button type="button" onClick={() => navigateTo("/learn")}>
-              Learnへ
-            </button>
-          </section>
-
-          <section className="home-side-card home-side-card-compact">
-            <button type="button" onClick={() => navigateTo("/history")}>
-              履歴を見る
-            </button>
-            <button type="button" onClick={() => navigateTo("/analysis")}>
-              分析を見る
-            </button>
-          </section>
-        </aside>
+        <TimerSidePanel
+          activeTab={timerSidePanelTab}
+          onTabChange={setTimerSidePanelTab}
+          recentChartSolves={recentChartSolves}
+          recentSolves={recentSolves}
+          stats={stats}
+        />
       </section>
 
       {lastSavedSolve && (
@@ -4107,6 +4080,290 @@ function StatCard({ label, value }: StatCardProps) {
       <strong>{value}</strong>
     </article>
   );
+}
+
+interface TimerSidePanelProps {
+  activeTab: TimerSidePanelTab;
+  onTabChange: (tab: TimerSidePanelTab) => void;
+  recentChartSolves: SolveRecord[];
+  recentSolves: SolveRecord[];
+  stats: TimerStats;
+}
+
+function TimerSidePanel({
+  activeTab,
+  onTabChange,
+  recentChartSolves,
+  recentSolves,
+  stats,
+}: TimerSidePanelProps) {
+  return (
+    <aside className="home-side-panel timer-insight-panel" aria-label="Timer insights">
+      <div className="timer-insight-tabs" role="tablist" aria-label="Timer insight tabs">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "history"}
+          onClick={() => onTabChange("history")}
+        >
+          History
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "stats"}
+          onClick={() => onTabChange("stats")}
+        >
+          Stats
+        </button>
+      </div>
+
+      {activeTab === "history" ? (
+        <TimerHistoryPanel recentSolves={recentSolves} stats={stats} />
+      ) : (
+        <TimerStatsPanel recentChartSolves={recentChartSolves} stats={stats} />
+      )}
+    </aside>
+  );
+}
+
+interface TimerHistoryPanelProps {
+  recentSolves: SolveRecord[];
+  stats: TimerStats;
+}
+
+function TimerHistoryPanel({ recentSolves, stats }: TimerHistoryPanelProps) {
+  const bestValue = stats.best?.value ?? null;
+  const visibleSolves = recentSolves.slice(0, 12);
+
+  return (
+    <section className="timer-insight-content" role="tabpanel" aria-label="Recent history">
+      {visibleSolves.length === 0 ? (
+        <p className="timer-insight-empty">まだ履歴がありません。</p>
+      ) : (
+        <ol className="timer-mini-history">
+          {visibleSolves.map((solve, index) => {
+            const value = getSolveValue(solve);
+            const isBest =
+              bestValue !== null && value.value !== null && value.value === bestValue;
+
+            return (
+              <li className={isBest ? "is-best" : ""} key={solve.id}>
+                <span className="timer-mini-history-rank">{index + 1}</span>
+                <span className="timer-mini-history-dot" aria-hidden="true" />
+                <strong>{formatSolveTime(solve)}</strong>
+                <time dateTime={solve.createdAt}>{formatClockTime(solve.createdAt)}</time>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </section>
+  );
+}
+
+interface TimerStatsPanelProps {
+  recentChartSolves: SolveRecord[];
+  stats: TimerStats;
+}
+
+function TimerStatsPanel({ recentChartSolves, stats }: TimerStatsPanelProps) {
+  return (
+    <section className="timer-insight-content timer-stats-panel" role="tabpanel" aria-label="Timer stats">
+      <TimerTrendChart solves={recentChartSolves} />
+      <div className="timer-stat-grid" aria-label="Session statistics">
+        <TimerMiniStat label="Best single" value={formatAverage(stats.best)} featured />
+        <TimerMiniStat label="ao5" value={formatAverage(stats.ao5)} />
+        <TimerMiniStat label="ao12" value={formatAverage(stats.ao12)} />
+        <TimerMiniStat label="Session mean" value={formatAverage(stats.average)} />
+        <TimerMiniStat label="ao50" value={formatAverage(stats.ao50)} />
+        <TimerMiniStat label="Total solves" value={String(stats.count)} />
+      </div>
+    </section>
+  );
+}
+
+interface TimerMiniStatProps {
+  label: string;
+  value: string;
+  featured?: boolean;
+}
+
+function TimerMiniStat({ label, value, featured = false }: TimerMiniStatProps) {
+  return (
+    <article className={featured ? "timer-mini-stat is-featured" : "timer-mini-stat"}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+interface TimerTrendChartProps {
+  solves: SolveRecord[];
+}
+
+function TimerTrendChart({ solves }: TimerTrendChartProps) {
+  const chartPoints = getTimerTrendPoints(solves);
+  const path = createSmoothPath(chartPoints);
+  const [hoveredPoint, setHoveredPoint] = useState<TimerTrendPoint | null>(null);
+  const areaPath =
+    chartPoints.length >= 2
+      ? `${path} L ${chartPoints[chartPoints.length - 1].x} 96 L ${chartPoints[0].x} 96 Z`
+      : "";
+  const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (chartPoints.length === 0) {
+      return;
+    }
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const pointerX = ((event.clientX - bounds.left) / bounds.width) * 320;
+    const nearestPoint = chartPoints.reduce((nearest, point) =>
+      Math.abs(point.x - pointerX) < Math.abs(nearest.x - pointerX) ? point : nearest,
+    );
+
+    setHoveredPoint(nearestPoint);
+  };
+  const tooltipX =
+    hoveredPoint === null ? 0 : Math.min(234, Math.max(8, hoveredPoint.x + 10));
+  const tooltipY =
+    hoveredPoint === null
+      ? 0
+      : Math.min(68, Math.max(8, hoveredPoint.y + (hoveredPoint.y < 52 ? 12 : -42)));
+
+  return (
+    <article className="timer-trend-card">
+      <p className="eyebrow">Time Trend</p>
+      {chartPoints.length < 2 ? (
+        <div className="timer-trend-empty">2件以上の記録でグラフを表示します。</div>
+      ) : (
+        <svg
+          className="timer-trend-chart"
+          viewBox="0 0 320 104"
+          role="img"
+          aria-label="直近タイムの推移"
+          onPointerLeave={() => setHoveredPoint(null)}
+          onPointerMove={handlePointerMove}
+        >
+          <rect className="timer-trend-hit-area" width="320" height="104" />
+          <path className="timer-trend-area" d={areaPath} />
+          <path className="timer-trend-line" d={path} />
+          {chartPoints.map((point) => (
+            <circle
+              className={
+                hoveredPoint?.id === point.id
+                  ? "timer-trend-point timer-trend-point-active"
+                  : "timer-trend-point"
+              }
+              cx={point.x}
+              cy={point.y}
+              key={point.id}
+              r="2.7"
+            />
+          ))}
+          {hoveredPoint && (
+            <g className="timer-trend-tooltip" aria-hidden="true">
+              <line x1={hoveredPoint.x} x2={hoveredPoint.x} y1="6" y2="98" />
+              <circle cx={hoveredPoint.x} cy={hoveredPoint.y} r="5.6" />
+              <g transform={`translate(${tooltipX} ${tooltipY})`}>
+                <rect width="78" height="30" rx="8" />
+                <text x="10" y="20">
+                  {hoveredPoint.timeLabel}
+                </text>
+              </g>
+            </g>
+          )}
+        </svg>
+      )}
+    </article>
+  );
+}
+
+interface TimerTrendPoint {
+  id: string;
+  timeLabel: string;
+  x: number;
+  y: number;
+}
+
+function getTimerTrendPoints(solves: SolveRecord[]): TimerTrendPoint[] {
+  const width = 320;
+  const height = 96;
+  const paddingX = 8;
+  const paddingY = 18;
+  const timedSolves = solves
+    .slice(0, 20)
+    .reverse()
+    .map((solve) => ({ solve, value: getSolveValue(solve).value }))
+    .filter((entry): entry is { solve: SolveRecord; value: number } => entry.value !== null);
+
+  if (timedSolves.length === 0) {
+    return [];
+  }
+
+  if (timedSolves.length === 1) {
+    return [
+      {
+        id: timedSolves[0].solve.id,
+        timeLabel: `${formatTime(timedSolves[0].value)}s`,
+        x: width / 2,
+        y: height / 2,
+      },
+    ];
+  }
+
+  const minValue = Math.min(...timedSolves.map((entry) => entry.value));
+  const maxValue = Math.max(...timedSolves.map((entry) => entry.value));
+  const range = Math.max(1, maxValue - minValue);
+  const usableWidth = width - paddingX * 2;
+  const usableHeight = height - paddingY * 2;
+
+  return timedSolves.map((entry, index) => ({
+    id: entry.solve.id,
+    timeLabel: `${formatTime(entry.value)}s`,
+    x: paddingX + (usableWidth * index) / (timedSolves.length - 1),
+    y: paddingY + ((entry.value - minValue) / range) * usableHeight,
+  }));
+}
+
+function createSmoothPath(points: TimerTrendPoint[]): string {
+  if (points.length === 0) {
+    return "";
+  }
+
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y}`;
+  }
+
+  const controlPoint = (
+    current: TimerTrendPoint,
+    previous: TimerTrendPoint | undefined,
+    next: TimerTrendPoint | undefined,
+    reverse = false,
+  ) => {
+    const previousPoint = previous ?? current;
+    const nextPoint = next ?? current;
+    const angle =
+      Math.atan2(nextPoint.y - previousPoint.y, nextPoint.x - previousPoint.x) +
+      (reverse ? Math.PI : 0);
+    const length = Math.hypot(nextPoint.x - previousPoint.x, nextPoint.y - previousPoint.y) * 0.16;
+
+    return {
+      x: current.x + Math.cos(angle) * length,
+      y: current.y + Math.sin(angle) * length,
+    };
+  };
+
+  return points.reduce((path, point, index) => {
+    if (index === 0) {
+      return `M ${point.x} ${point.y}`;
+    }
+
+    const previous = points[index - 1];
+    const controlStart = controlPoint(previous, points[index - 2], point);
+    const controlEnd = controlPoint(point, previous, points[index + 1], true);
+
+    return `${path} C ${controlStart.x} ${controlStart.y}, ${controlEnd.x} ${controlEnd.y}, ${point.x} ${point.y}`;
+  }, "");
 }
 
 interface PracticeStatCardProps {

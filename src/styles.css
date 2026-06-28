@@ -6695,7 +6695,7 @@ button:active {
 
 .home-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
   gap: 16px;
   align-items: start;
 }
@@ -6812,15 +6812,265 @@ button:active {
 
 .home-side-panel {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
 .home-side-card,
-.home-stats-mini {
+.home-stats-mini,
+.timer-insight-panel,
+.timer-mini-stat,
+.timer-trend-card {
   border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
   border-radius: 8px;
   background: var(--panel);
   box-shadow: 0 16px 44px color-mix(in srgb, var(--shadow) 68%, transparent);
+}
+
+.timer-insight-panel {
+  position: sticky;
+  top: 24px;
+  overflow: hidden;
+  align-self: start;
+}
+
+.timer-insight-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 13%, var(--border));
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+}
+
+.timer-insight-tabs button {
+  min-height: 64px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 84%, var(--text));
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 950;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.timer-insight-tabs button:last-child {
+  border-right: 0;
+}
+
+.timer-insight-tabs button[aria-selected="true"] {
+  color: var(--accent);
+  box-shadow:
+    inset 0 -3px 0 var(--accent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 48%, transparent),
+    0 0 28px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.timer-insight-content {
+  min-height: 510px;
+  padding: 16px;
+}
+
+.timer-insight-empty,
+.timer-trend-empty {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.timer-mini-history {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+}
+
+.timer-mini-history li {
+  display: grid;
+  grid-template-columns: 34px 18px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 50px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.timer-mini-history li:last-child {
+  border-bottom: 0;
+}
+
+.timer-mini-history-rank {
+  text-align: right;
+  font-weight: 850;
+}
+
+.timer-mini-history-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 45%, var(--panel));
+}
+
+.timer-mini-history strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timer-mini-history time {
+  font-size: 0.85rem;
+  font-weight: 850;
+}
+
+.timer-mini-history li.is-best .timer-mini-history-dot {
+  background: var(--warning);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--warning) 55%, transparent);
+}
+
+.timer-mini-history li.is-best strong {
+  color: var(--warning);
+}
+
+.timer-stats-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.timer-trend-card {
+  min-height: 182px;
+  padding: 16px;
+  overflow: hidden;
+  background:
+    linear-gradient(90deg, rgba(0, 212, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, transparent), var(--panel));
+  background-size: 48px 48px, auto;
+}
+
+.timer-trend-card .eyebrow {
+  margin: 0 0 12px;
+}
+
+.timer-trend-chart {
+  display: block;
+  width: 100%;
+  height: 126px;
+  cursor: crosshair;
+  overflow: visible;
+}
+
+.timer-trend-hit-area {
+  fill: transparent;
+}
+
+.timer-trend-area {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  pointer-events: none;
+}
+
+.timer-trend-line {
+  fill: none;
+  pointer-events: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 48%, transparent));
+}
+
+.timer-trend-point {
+  fill: color-mix(in srgb, var(--accent) 84%, white);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.timer-trend-point-active {
+  fill: var(--text-strong);
+  opacity: 1;
+}
+
+.timer-trend-tooltip {
+  pointer-events: none;
+}
+
+.timer-trend-tooltip line {
+  stroke: color-mix(in srgb, var(--text-strong) 70%, transparent);
+  stroke-width: 1.4;
+}
+
+.timer-trend-tooltip circle {
+  fill: var(--accent);
+  stroke: var(--text-strong);
+  stroke-width: 2.3;
+  filter: drop-shadow(0 0 9px color-mix(in srgb, var(--accent) 60%, transparent));
+}
+
+.timer-trend-tooltip rect {
+  fill: color-mix(in srgb, var(--panel-strong) 96%, black);
+  stroke: color-mix(in srgb, var(--accent) 60%, var(--border));
+  stroke-width: 1.2;
+}
+
+.timer-trend-tooltip text {
+  fill: var(--accent);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+}
+
+.timer-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.timer-mini-stat {
+  min-height: 96px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--panel-muted) 72%, transparent);
+}
+
+.timer-mini-stat span {
+  color: color-mix(in srgb, var(--muted) 78%, var(--accent));
+  font-size: 0.76rem;
+  font-weight: 950;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.timer-mini-stat strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-strong);
+  font-family:
+    "Rajdhani", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 1.8rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.timer-mini-stat.is-featured {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 17%, transparent), transparent 72%),
+    color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.timer-mini-stat.is-featured strong {
+  color: var(--accent);
 }
 
 .home-side-card {
@@ -7088,7 +7338,7 @@ button:active {
   }
 
   .home-side-panel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: none;
   }
 
   .home-stats-mini,
@@ -7385,6 +7635,9 @@ body {
 .timer-panel,
 .home-side-card,
 .home-stats-mini,
+.timer-insight-panel,
+.timer-mini-stat,
+.timer-trend-card,
 .post-solve-actions,
 .notice,
 .undo-toast,
@@ -7455,6 +7708,7 @@ body {
 .analyzer-step-chip,
 .home-side-card span,
 .home-stats-mini span,
+.timer-mini-stat span,
 .stat-card p,
 .phase-card dt,
 .practice-card dt {
@@ -7470,6 +7724,7 @@ body {
 .history-actions button,
 .home-side-card button,
 .home-side-card-compact button,
+.timer-insight-tabs button,
 .analyzer-action-grid button,
 .analyzer-controls button,
 .analyzer-mode-toggle button,
@@ -7501,6 +7756,7 @@ body {
 .scramble-refresh-button:hover,
 .home-side-card button:hover,
 .home-side-card-compact button:hover,
+.timer-insight-tabs button:hover,
 .analyzer-action-grid button:not(:disabled):hover,
 .analyzer-controls button:not(:disabled):hover,
 .analyzer-mode-toggle button:hover,
@@ -8210,16 +8466,7 @@ textarea:focus,
   }
 
   .timer-page-shell .home-side-panel {
-    display: block;
-  }
-
-  .timer-page-shell .home-side-card {
     display: none;
-  }
-
-  .timer-page-shell .home-stats-mini {
-    display: grid;
-    margin-top: 10px;
   }
 
   .post-solve-actions,

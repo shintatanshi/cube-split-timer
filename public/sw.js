@@ -1,9 +1,10 @@
-const CACHE_NAME = "cube-split-timer-pwa-v2";
+const CACHE_NAME = "cube-split-timer-pwa-v4";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/icons/icon.svg",
+  "/icons/favicon-32.png",
+  "/icons/apple-touch-icon.png",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
   "/icons/icon-maskable-512.png",

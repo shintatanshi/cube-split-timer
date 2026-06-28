@@ -10,7 +10,15 @@ import {
   saveAnimationSpeed,
   type AnimationSpeed,
 } from "../lib/cubeVisuals";
-import { playRandomCubeTurnSound } from "../lib/turnSounds";
+import {
+  loadCubeTurnSoundVolume,
+  playRandomCubeTurnSound,
+  saveCubeTurnSoundVolume,
+} from "../lib/turnSounds";
+import {
+  enterLandscapeFullscreen,
+  exitLandscapeFullscreen,
+} from "../lib/landscapeFullscreen";
 import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "../learn/moveNotation";
 import type { MoveAxis, MoveDescriptor } from "../learn/moveNotation";
 import { getLearningCasesByCategory } from "../learn/learningData";
@@ -1591,6 +1599,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   const f2lAnalysisWorkerRef = useRef<Worker | null>(null);
   const f2lAnalysisJobIdRef = useRef(0);
   const pendingQuickPhaseRef = useRef<AnalyzerQuickPhase | null>(null);
+  const pendingQuickPlayRef = useRef(false);
   const playerPanelRef = useRef<HTMLElement | null>(null);
   const lastAnalyzerStartStateSignatureRef = useRef<string | null>(null);
   const lastSelectedCrossSolutionSignatureRef = useRef<string | null>(null);
@@ -1634,6 +1643,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   const [isPlaying, setIsPlaying] = useState(false);
   const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() => loadAnalyzerSpeed());
   const [cubeScale, setCubeScale] = useState<AnalyzerCubeScale>(() => loadAnalyzerCubeScale());
+  const [turnSoundVolume, setTurnSoundVolume] = useState(() => loadCubeTurnSoundVolume());
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
   const [isManualMoveAnimating, setIsManualMoveAnimating] = useState(false);
@@ -1841,8 +1851,6 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         : [...parsedPlaybackScramble.invalidTokens, ...parsedPlaybackSolve.invalidTokens],
     [parsedPlaybackScramble.invalidTokens, parsedPlaybackSolve.invalidTokens, playbackMode],
   );
-  const currentMove = currentIndex > 0 ? activeMoves[currentIndex - 1] : null;
-  const nextMove = currentIndex < activeMoves.length ? activeMoves[currentIndex] : null;
   const canUseActiveSequence =
     activeInvalidTokens.length === 0 &&
     canUseOrientation &&
@@ -2316,20 +2324,13 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   const enterAnalyzerFullscreen = useCallback(() => {
     setIsAnalyzerFullscreen(true);
 
-    const element = playerPanelRef.current;
-    if (element?.requestFullscreen) {
-      void element.requestFullscreen().catch(() => {
-        // Fullscreen APIが使えない環境ではCSSの疑似全画面で表示します。
-      });
-    }
+    void enterLandscapeFullscreen(playerPanelRef.current);
   }, []);
 
   const exitAnalyzerFullscreen = useCallback(() => {
     setIsAnalyzerFullscreen(false);
 
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => undefined);
-    }
+    void exitLandscapeFullscreen();
   }, []);
 
   useEffect(() => {
@@ -3232,6 +3233,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       setCrossError("スクランブルを入力してください。");
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("Cross解析を開始できませんでした。");
       }
       return;
@@ -3241,6 +3243,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       setCrossError(orientationError ?? "キューブの向き設定を確認してください。");
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("Cross解析を開始できませんでした。");
       }
       return;
@@ -3252,6 +3255,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       );
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("Cross解析を開始できませんでした。");
       }
       return;
@@ -3263,6 +3267,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       );
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("Cross解析を開始できませんでした。");
       }
       return;
@@ -3315,6 +3320,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         setCrossError(event.data.error ?? "Cross探索中にエラーが発生しました。");
         if (pendingQuickPhaseRef.current === "cross") {
           pendingQuickPhaseRef.current = null;
+          pendingQuickPlayRef.current = false;
           setQuickPlaybackStatus("Cross解析に失敗しました。");
         }
         return;
@@ -3337,19 +3343,28 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         );
         if (pendingQuickPhaseRef.current === "cross") {
           pendingQuickPhaseRef.current = null;
+          pendingQuickPlayRef.current = false;
           setQuickPlaybackStatus("Cross bestを見つけられませんでした。");
         }
         return;
       }
 
       setCrossError(null);
-      selectCrossSolution(bestSolution, { scroll: false });
       if (pendingQuickPhaseRef.current === "cross") {
+        const shouldPlay = pendingQuickPlayRef.current;
+
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
+        selectCrossSolution(bestSolution, { play: shouldPlay, scroll: false });
         setQuickPlaybackStatus(
-          `Cross bestを再生待ちにしました。${bestSolution.moveCount} moves`,
+          shouldPlay
+            ? `Cross bestを再生します。${bestSolution.moveCount} moves`
+            : `Cross bestを再生待ちにしました。${bestSolution.moveCount} moves`,
         );
+        return;
       }
+
+      selectCrossSolution(bestSolution, { scroll: false });
     };
     worker.onerror = () => {
       if (jobId !== crossJobIdRef.current) {
@@ -3364,6 +3379,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       setCrossError("Cross探索Workerでエラーが発生しました。");
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("Cross解析に失敗しました。");
       }
     };
@@ -3560,8 +3576,30 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   );
 
   const getNextBasicF2lStepIndex = useCallback(
-    (plan: BasicF2lAnalysisPlan) => getCompletedBasicF2lStepCount(plan),
-    [getCompletedBasicF2lStepCount],
+    (plan: BasicF2lAnalysisPlan) => {
+      const completedCount = getCompletedBasicF2lStepCount(plan);
+      const isCurrentPlaybackComplete =
+        activeMoves.length === 0 || currentIndex >= activeMoves.length;
+
+      if (currentPracticeStep?.phase === "f2l" && isCurrentPlaybackComplete) {
+        return plan.steps.length;
+      }
+
+      if (currentPracticeStep?.phase === "f2l-step" && isCurrentPlaybackComplete) {
+        return Math.min(
+          plan.steps.length,
+          Math.max(completedCount, currentPracticeStep.stepIndex + 1),
+        );
+      }
+
+      return completedCount;
+    },
+    [
+      activeMoves.length,
+      currentIndex,
+      currentPracticeStep,
+      getCompletedBasicF2lStepCount,
+    ],
   );
 
   const prepareBasicF2lStepPlayback = useCallback(
@@ -3637,11 +3675,13 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     includeAllPlans?: boolean;
     preparePlayback?: boolean;
     prepareNextStep?: boolean;
+    play?: boolean;
   } = {}) => {
     const useLocalSearch = Boolean(options.useLocalSearch);
     const includeAllPlans = Boolean(options.includeAllPlans);
     const preparePlayback = Boolean(options.preparePlayback);
     const prepareNextStep = Boolean(options.prepareNextStep);
+    const playAfterPrepare = Boolean(options.play);
 
     f2lAnalysisWorkerRef.current?.terminate();
     f2lAnalysisWorkerRef.current = null;
@@ -3672,6 +3712,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         pendingQuickPhaseRef.current === "nextF2l"
       ) {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("先にCross bestを選択してください。");
       }
       return;
@@ -3714,6 +3755,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
           pendingQuickPhaseRef.current === "nextF2l"
         ) {
           pendingQuickPhaseRef.current = null;
+          pendingQuickPlayRef.current = false;
           setQuickPlaybackStatus(
             wasPreparingNextF2l
               ? "次のF2Lを作成できませんでした。"
@@ -3740,17 +3782,27 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
 
       if (isDone) {
         if (prepareNextStep || pendingQuickPhaseRef.current === "nextF2l") {
-          const result = prepareNextBasicF2lStepPlayback(event.data.plan);
+          const shouldPlay = playAfterPrepare || pendingQuickPlayRef.current;
+          const result = prepareNextBasicF2lStepPlayback(event.data.plan, {
+            play: shouldPlay,
+          });
 
           pendingQuickPhaseRef.current = null;
+          pendingQuickPlayRef.current = false;
           setQuickPlaybackStatus(result.message);
         } else if (preparePlayback || pendingQuickPhaseRef.current === "f2l") {
-          const prepared = prepareBasicF2lPlanPlayback(event.data.plan);
+          const shouldPlay = playAfterPrepare || pendingQuickPlayRef.current;
+          const prepared = prepareBasicF2lPlanPlayback(event.data.plan, {
+            play: shouldPlay,
+          });
 
           pendingQuickPhaseRef.current = null;
+          pendingQuickPlayRef.current = false;
           setQuickPlaybackStatus(
             prepared
-              ? `Cross完了状態からF2L bestを再生待ちにしました。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
+              ? shouldPlay
+                ? `Cross完了状態からF2L bestを再生します。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
+                : `Cross完了状態からF2L bestを再生待ちにしました。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
               : "F2L bestを再生待ちにできませんでした。",
           );
         }
@@ -3783,6 +3835,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         pendingQuickPhaseRef.current === "nextF2l"
       ) {
         pendingQuickPhaseRef.current = null;
+        pendingQuickPlayRef.current = false;
         setQuickPlaybackStatus("F2L解析に失敗しました。");
       }
     };
@@ -3833,35 +3886,46 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     playBasicF2lSteps(plan.steps.slice(0, stepIndex + 1));
   };
 
-  const prepareBestCrossPlayback = useCallback(() => {
+  const prepareBestCrossPlayback = useCallback((options: { play?: boolean } = {}) => {
+    const shouldPlay = Boolean(options.play);
+
     if (bestCrossSolution) {
       pendingQuickPhaseRef.current = null;
-      selectCrossSolution(bestCrossSolution, { scroll: false });
+      pendingQuickPlayRef.current = false;
+      selectCrossSolution(bestCrossSolution, { play: shouldPlay, scroll: false });
       setCurrentPracticeStep({ phase: "cross" });
       setQuickPlaybackStatus(
-        `Cross bestを再生待ちにしました。${bestCrossSolution.moveCount} moves`,
+        shouldPlay
+          ? `Cross bestを再生します。${bestCrossSolution.moveCount} moves`
+          : `Cross bestを再生待ちにしました。${bestCrossSolution.moveCount} moves`,
       );
       return;
     }
 
     pendingQuickPhaseRef.current = "cross";
-    setQuickPlaybackStatus("Cross bestを解析中...");
+    pendingQuickPlayRef.current = shouldPlay;
+    setQuickPlaybackStatus(shouldPlay ? "Cross bestを解析して再生します..." : "Cross bestを解析中...");
     analyzeCross();
   }, [analyzeCross, bestCrossSolution, selectCrossSolution]);
 
-  const prepareBestF2lPlayback = useCallback(() => {
+  const prepareBestF2lPlayback = useCallback((options: { play?: boolean } = {}) => {
+    const shouldPlay = Boolean(options.play);
+
     if (!selectedCrossSolution) {
       pendingQuickPhaseRef.current = null;
+      pendingQuickPlayRef.current = false;
       setQuickPlaybackStatus("先にCross bestを選択してください。");
       return;
     }
 
     if (basicF2lPlan && !isAnalyzingBasicF2l) {
-      const prepared = prepareBasicF2lPlanPlayback(basicF2lPlan);
+      const prepared = prepareBasicF2lPlanPlayback(basicF2lPlan, { play: shouldPlay });
 
       setQuickPlaybackStatus(
         prepared
-          ? `Cross完了状態からF2L bestを再生待ちにしました。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
+          ? shouldPlay
+            ? `Cross完了状態からF2L bestを再生します。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
+            : `Cross完了状態からF2L bestを再生待ちにしました。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
           : "F2L bestを再生待ちにできませんでした。",
       );
       if (prepared) {
@@ -3871,8 +3935,9 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     }
 
     pendingQuickPhaseRef.current = "f2l";
-    setQuickPlaybackStatus("F2L bestを解析中...");
-    runBasicF2lAnalysis({ preparePlayback: true });
+    pendingQuickPlayRef.current = shouldPlay;
+    setQuickPlaybackStatus(shouldPlay ? "F2L bestを解析して再生します..." : "F2L bestを解析中...");
+    runBasicF2lAnalysis({ preparePlayback: true, play: shouldPlay });
   }, [
     basicF2lPlan,
     isAnalyzingBasicF2l,
@@ -3881,23 +3946,27 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     selectedCrossSolution,
   ]);
 
-  const prepareNextF2lPlayback = useCallback(() => {
+  const prepareNextF2lPlayback = useCallback((options: { play?: boolean } = {}) => {
+    const shouldPlay = options.play ?? true;
+
     if (!selectedCrossSolution) {
       pendingQuickPhaseRef.current = null;
+      pendingQuickPlayRef.current = false;
       setQuickPlaybackStatus("先にCross bestを選択してください。");
       return;
     }
 
     if (basicF2lPlan && !isAnalyzingBasicF2l) {
-      const result = prepareNextBasicF2lStepPlayback(basicF2lPlan);
+      const result = prepareNextBasicF2lStepPlayback(basicF2lPlan, { play: shouldPlay });
 
       setQuickPlaybackStatus(result.message);
       return;
     }
 
     pendingQuickPhaseRef.current = "nextF2l";
-    setQuickPlaybackStatus("次のF2Lを解析中...");
-    runBasicF2lAnalysis({ prepareNextStep: true });
+    pendingQuickPlayRef.current = shouldPlay;
+    setQuickPlaybackStatus(shouldPlay ? "次のF2Lを解析して再生します..." : "次のF2Lを解析中...");
+    runBasicF2lAnalysis({ prepareNextStep: true, play: shouldPlay });
   }, [
     basicF2lPlan,
     isAnalyzingBasicF2l,
@@ -3906,8 +3975,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     selectedCrossSolution,
   ]);
 
-  const prepareBestOllPlayback = useCallback(() => {
+  const prepareBestOllPlayback = useCallback((options: { play?: boolean } = {}) => {
+    const shouldPlay = Boolean(options.play);
+
     pendingQuickPhaseRef.current = null;
+    pendingQuickPlayRef.current = false;
 
     if (!selectedCrossSolution || !basicF2lPlan) {
       setQuickPlaybackStatus("先にF2L bestを作ってください。");
@@ -3931,12 +4003,16 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         algorithm: recognition.algorithm,
         caseItem: recognition.caseItem,
       },
-      { play: false, scroll: false },
+      { play: shouldPlay, scroll: false },
     );
     setQuickPlaybackStatus(
       recognition.isSkip
-        ? "F2L完成状態からOLL Skipを再生待ちにしました。"
-        : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+        ? shouldPlay
+          ? "F2L完成状態からOLL Skipを再生します。"
+          : "F2L完成状態からOLL Skipを再生待ちにしました。"
+        : shouldPlay
+          ? `F2L完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount} moves`
+          : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
     );
     setCurrentPracticeStep({ phase: "oll" });
   }, [
@@ -3947,8 +4023,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     selectedCrossSolution,
   ]);
 
-  const prepareBestPllPlayback = useCallback(() => {
+  const prepareBestPllPlayback = useCallback((options: { play?: boolean } = {}) => {
+    const shouldPlay = Boolean(options.play);
+
     pendingQuickPhaseRef.current = null;
+    pendingQuickPlayRef.current = false;
 
     if (!selectedCrossSolution || !basicF2lPlan) {
       setQuickPlaybackStatus("先にF2L bestを作ってください。");
@@ -3981,12 +4060,16 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         algorithm: recognition.algorithm,
         caseItem: recognition.caseItem,
       },
-      { play: false, scroll: false },
+      { play: shouldPlay, scroll: false },
     );
     setQuickPlaybackStatus(
       recognition.isSkip
-        ? "OLL完成状態からPLL Skipを再生待ちにしました。"
-        : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+        ? shouldPlay
+          ? "OLL完成状態からPLL Skipを再生します。"
+          : "OLL完成状態からPLL Skipを再生待ちにしました。"
+        : shouldPlay
+          ? `OLL完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount} moves`
+          : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
     );
     setCurrentPracticeStep({ phase: "pll" });
   }, [
@@ -4130,8 +4213,17 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       ? `ソルブ手順に未対応の記号があります: ${parsedSolve.invalidTokens.join(", ")}`
       : "",
   ].filter(Boolean);
+  const turnSoundVolumePercent = Math.round(turnSoundVolume * 100);
   const nextBasicF2lStepIndex = basicF2lPlan ? getNextBasicF2lStepIndex(basicF2lPlan) : 0;
   const nextBasicF2lStep = basicF2lPlan?.steps[nextBasicF2lStepIndex] ?? null;
+  const canPlayBestCross = canUseStartState && !isSearchingCross;
+  const canPlayBestF2l = Boolean(selectedCrossSolution) && !isAnalyzingBasicF2l;
+  const canPlayBestOll = Boolean(
+    selectedCrossSolution && basicF2lPlan && ollRecognition?.ok,
+  ) && !isAnalyzingBasicF2l;
+  const canPlayBestPll = Boolean(
+    selectedCrossSolution && basicF2lPlan && ollRecognition?.ok && pllRecognition?.ok,
+  ) && !isAnalyzingBasicF2l;
   const canPlayNextF2l =
     Boolean(selectedCrossSolution) &&
     !isAnalyzingBasicF2l &&
@@ -4144,6 +4236,151 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       : basicF2lPlan
         ? "F2L完了"
         : "次のF2L";
+  const mainPhasePlaybackAction = (() => {
+    if (isSearchingCross) {
+      return {
+        label: "Crossを解析中...",
+        helper: "探索が終わるまで待機中です。",
+        onClick: () => prepareBestCrossPlayback({ play: true }),
+        disabled: true,
+      };
+    }
+
+    if (!selectedCrossSolution) {
+      return {
+        label: "Cross bestを再生",
+        helper: "まずクロスの最短候補を作ります。",
+        onClick: () => prepareBestCrossPlayback({ play: true }),
+        disabled: !canPlayBestCross,
+      };
+    }
+
+    if (isAnalyzingBasicF2l) {
+      return {
+        label: "F2Lを解析中...",
+        helper: "基本41ベースで順序を探しています。",
+        onClick: () => prepareBestF2lPlayback({ play: true }),
+        disabled: true,
+      };
+    }
+
+    if (!basicF2lPlan) {
+      return {
+        label: "F2L bestを再生",
+        helper: "Cross後の4ペアをまとめて準備します。",
+        onClick: () => prepareBestF2lPlayback({ play: true }),
+        disabled: !canPlayBestF2l,
+      };
+    }
+
+    if (nextBasicF2lStep) {
+      return {
+        label: `${nextF2lButtonLabel}を再生`,
+        helper: "1ペアずつ確認しながら進めます。",
+        onClick: () => prepareNextF2lPlayback({ play: true }),
+        disabled: !canPlayNextF2l,
+      };
+    }
+
+    if ((currentPracticeStep?.phase === "oll" || currentPracticeStep?.phase === "pll") && canPlayBestPll) {
+      return {
+        label: "PLL bestを再生",
+        helper: "最後のPLL候補を3Dで確認します。",
+        onClick: () => prepareBestPllPlayback({ play: true }),
+        disabled: !canPlayBestPll,
+      };
+    }
+
+    if (canPlayBestOll) {
+      return {
+        label: "OLL bestを再生",
+        helper: "F2L完成状態からOLL候補を確認します。",
+        onClick: () => prepareBestOllPlayback({ play: true }),
+        disabled: !canPlayBestOll,
+      };
+    }
+
+    if (canPlayBestPll) {
+      return {
+        label: "PLL bestを再生",
+        helper: "最後のPLL候補を3Dで確認します。",
+        onClick: () => prepareBestPllPlayback({ play: true }),
+        disabled: !canPlayBestPll,
+      };
+    }
+
+    return {
+      label: "次の工程を準備中",
+      helper: "前の工程が揃うと押せるようになります。",
+      onClick: () => prepareBestCrossPlayback({ play: true }),
+      disabled: true,
+    };
+  })();
+  const phasePlaybackActions = [
+    {
+      key: "cross",
+      label: "Cross",
+      state: currentPracticeStep?.phase === "cross"
+        ? "current"
+        : selectedCrossSolution
+          ? "done"
+          : canPlayBestCross
+            ? "ready"
+            : "locked",
+      onClick: () => prepareBestCrossPlayback(),
+      disabled: !canPlayBestCross,
+    },
+    {
+      key: "f2l",
+      label: "F2L",
+      state: currentPracticeStep?.phase === "f2l"
+        ? "current"
+        : basicF2lPlan
+          ? "done"
+          : canPlayBestF2l
+            ? "ready"
+            : "locked",
+      onClick: () => prepareBestF2lPlayback(),
+      disabled: !canPlayBestF2l,
+    },
+    {
+      key: "next-f2l",
+      label: nextF2lButtonLabel,
+      state: currentPracticeStep?.phase === "f2l-step"
+        ? "current"
+        : basicF2lPlan && !nextBasicF2lStep
+          ? "done"
+          : canPlayNextF2l
+            ? "ready"
+            : "locked",
+      onClick: () => prepareNextF2lPlayback(),
+      disabled: !canPlayNextF2l,
+    },
+    {
+      key: "oll",
+      label: "OLL",
+      state: currentPracticeStep?.phase === "oll"
+        ? "current"
+        : currentPracticeStep?.phase === "pll"
+          ? "done"
+          : canPlayBestOll
+            ? "ready"
+            : "locked",
+      onClick: () => prepareBestOllPlayback(),
+      disabled: !canPlayBestOll,
+    },
+    {
+      key: "pll",
+      label: "PLL",
+      state: currentPracticeStep?.phase === "pll"
+        ? "current"
+        : canPlayBestPll
+          ? "ready"
+          : "locked",
+      onClick: () => prepareBestPllPlayback(),
+      disabled: !canPlayBestPll,
+    },
+  ];
   const analyzerWorkspaceTabs: Array<{
     key: AnalyzerWorkspacePage;
     label: string;
@@ -4280,29 +4517,34 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
 
       <div className="analyzer-layout">
         <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
-          <nav className="analyzer-workspace-tabs" aria-label="Analyzer tools">
-            {analyzerWorkspaceTabs.map((tab) => (
-              <a
-                href={tab.path}
-                key={tab.key}
-                aria-current={activeWorkspacePage === tab.key ? "page" : undefined}
-                onClick={(event) => {
-                  event.preventDefault();
-                  onNavigate(tab.path);
-                }}
-              >
-                <span>{tab.label}</span>
-                <small>{tab.description}</small>
-                <b>{tab.status}</b>
-              </a>
-            ))}
-          </nav>
+          <details className="analyzer-detail-disclosure">
+            <summary>
+              <span>詳細を見る</span>
+            </summary>
+            <div className="analyzer-detail-body">
+              <nav className="analyzer-workspace-tabs" aria-label="Analyzer tools">
+                {analyzerWorkspaceTabs.map((tab) => (
+                  <a
+                    href={tab.path}
+                    key={tab.key}
+                    aria-current={activeWorkspacePage === tab.key ? "page" : undefined}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      onNavigate(tab.path);
+                    }}
+                  >
+                    <span>{tab.label}</span>
+                    <small>{tab.description}</small>
+                    <b>{tab.status}</b>
+                  </a>
+                ))}
+              </nav>
 
-          <div
-            className="analyzer-input-controls analyzer-route-panel"
-            id="analyzer-input-section"
-            hidden={activeWorkspacePage !== "input"}
-          >
+              <div
+                className="analyzer-input-controls analyzer-route-panel"
+                id="analyzer-input-section"
+                hidden={activeWorkspacePage !== "input"}
+              >
           <section className="analyzer-settings-card" aria-label="Analyzer settings">
             <div className="analyzer-subheading">
               <div>
@@ -4887,7 +5129,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                   <button
                     className="analyzer-primary-action analyzer-next-f2l-action"
                     type="button"
-                    onClick={prepareNextF2lPlayback}
+                    onClick={() => prepareNextF2lPlayback()}
                     disabled={!canPlayNextF2l}
                   >
                     {nextF2lButtonLabel}
@@ -5254,7 +5496,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                       <span>{ollRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
                     </div>
                     <div className="analyzer-f2l-actions">
-                      <button type="button" onClick={prepareBestOllPlayback}>
+                      <button type="button" onClick={() => prepareBestOllPlayback()}>
                         OLLを3D再生待ち
                       </button>
                       <button
@@ -5341,7 +5583,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                       <span>{pllRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
                     </div>
                     <div className="analyzer-f2l-actions">
-                      <button type="button" onClick={prepareBestPllPlayback}>
+                      <button type="button" onClick={() => prepareBestPllPlayback()}>
                         PLLを3D再生待ち
                       </button>
                       <button
@@ -5396,6 +5638,8 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             </details>
           </section>
           </div>
+            </div>
+          </details>
         </section>
 
         <section
@@ -5458,6 +5702,24 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                 />
                 <span>F2L強調</span>
               </label>
+              <label className="analyzer-sound-control">
+                <span>音量</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={turnSoundVolumePercent}
+                  aria-label="回転音の音量"
+                  onChange={(event) => {
+                    const nextVolume = Number(event.currentTarget.value) / 100;
+
+                    setTurnSoundVolume(nextVolume);
+                    saveCubeTurnSoundVolume(nextVolume);
+                  }}
+                />
+                <strong>{turnSoundVolumePercent}%</strong>
+              </label>
               <div className="analyzer-step">
                 Step: {currentIndex} / {activeMoves.length}
               </div>
@@ -5467,6 +5729,24 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                 onClick={isAnalyzerFullscreen ? exitAnalyzerFullscreen : enterAnalyzerFullscreen}
               >
                 {isAnalyzerFullscreen ? "閉じる" : "全画面"}
+              </button>
+            </div>
+          </div>
+
+          <div className="analyzer-landscape-blocker" role="dialog" aria-modal="true" aria-label="横画面案内">
+            <div className="analyzer-landscape-blocker-card">
+              <span className="analyzer-landscape-blocker-icon" aria-hidden="true">
+                <span />
+              </span>
+              <div>
+                <p className="eyebrow">Landscape mode</p>
+                <h3>スマホを横向きにしてください</h3>
+                <p>
+                  Analyzerの全画面3D再生は横画面で表示します。横向きにすると再生画面に切り替わります。
+                </p>
+              </div>
+              <button type="button" onClick={exitAnalyzerFullscreen}>
+                閉じる
               </button>
             </div>
           </div>
@@ -5483,41 +5763,125 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             </div>
 
             <aside className="analyzer-control-panel" aria-label="Animation controls">
-              <div className="analyzer-now">
-                <span>Now: {currentMove ?? "Ready"}</span>
-                <small>{nextMove ? `Next: ${nextMove}` : "最後まで再生済み、または手順待ちです。"}</small>
+              <div className="analyzer-phase-replay-panel" aria-label="Phase best playback">
+                <div className="analyzer-phase-replay-head">
+                  <div>
+                    <p className="eyebrow">Best Playback</p>
+                    <h3>工程別best</h3>
+                  </div>
+                  <span>{quickPlaybackStatus}</span>
+                </div>
+                <div className="analyzer-phase-primary">
+                  <span>次のおすすめ</span>
+                  <button
+                    className="analyzer-phase-primary-action"
+                    type="button"
+                    onClick={mainPhasePlaybackAction.onClick}
+                    disabled={mainPhasePlaybackAction.disabled}
+                  >
+                    <strong>{mainPhasePlaybackAction.label}</strong>
+                    <small>{mainPhasePlaybackAction.helper}</small>
+                  </button>
+                </div>
+                <div className="analyzer-phase-track" aria-label="Playback phases">
+                  {phasePlaybackActions.map((phase) => (
+                    <button
+                      className={`is-${phase.state}`}
+                      key={phase.key}
+                      type="button"
+                      onClick={phase.onClick}
+                      disabled={phase.disabled}
+                    >
+                      <span>{phase.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="analyzer-phase-support">
+                  <button
+                    className="analyzer-previous-step-action"
+                    type="button"
+                    onClick={preparePreviousPracticeStep}
+                    disabled={!canPlayPreviousPracticeStep}
+                  >
+                    {previousPracticeButtonLabel}
+                  </button>
+                  <div className="analyzer-phase-learn-actions" aria-label="Last layer learn links">
+                    <button
+                      type="button"
+                      disabled={!ollRecognition?.ok}
+                      onClick={() => openLastLayerLearnPreview("oll")}
+                    >
+                      OLL Learn
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!pllRecognition?.ok}
+                      onClick={() => openLastLayerLearnPreview("pll")}
+                    >
+                      PLL Learn
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <p className="analyzer-playback-note">
-                Analyzerではスクランブル適用後の状態を初期表示にし、再生リストにはCross / F2L手順だけを表示します。
-              </p>
-
-              <div className="analyzer-controls">
+              <div className="analyzer-controls analyzer-playback-controls" aria-label="Playback controls">
                 <button
                   type="button"
+                  className="analyzer-transport-button"
+                  onClick={() => void stepPrevious()}
+                  disabled={currentIndex <= 0}
+                  aria-label="1手戻る"
+                  title="1手戻る"
+                >
+                  <span aria-hidden="true">‹</span>
+                </button>
+                <button
+                  type="button"
+                  className="analyzer-transport-button analyzer-transport-play"
                   onClick={handlePlayToggle}
                   disabled={!canUseActiveSequence || activeMoves.length === 0}
+                  aria-label={isPlaying ? "一時停止" : isComplete ? "もう一度再生" : "再生"}
+                  title={isPlaying ? "一時停止" : isComplete ? "もう一度再生" : "再生"}
                 >
-                  {isPlaying ? "一時停止" : isComplete ? "もう一度再生" : "再生"}
-                </button>
-                <button type="button" onClick={() => void stepPrevious()} disabled={currentIndex <= 0}>
-                  1手戻る
+                  <span aria-hidden="true">{isPlaying ? "Ⅱ" : "▶"}</span>
                 </button>
                 <button
                   type="button"
+                  className="analyzer-transport-button"
                   onClick={() => void stepNext()}
                   disabled={!canUseActiveSequence || currentIndex >= activeMoves.length}
+                  aria-label="1手進む"
+                  title="1手進む"
                 >
-                  1手進む
+                  <span aria-hidden="true">›</span>
                 </button>
-                <button type="button" onClick={resetPlayback}>
-                  リセット
+                <button
+                  type="button"
+                  className="analyzer-utility-icon-button"
+                  onClick={resetPlayback}
+                  aria-label="再生をリセット"
+                  title="再生をリセット"
+                >
+                  <span aria-hidden="true">↺</span>
                 </button>
-                <button type="button" onClick={resetCameraView}>
-                  視点リセット
+                <button
+                  type="button"
+                  className="analyzer-utility-icon-button"
+                  onClick={resetCameraView}
+                  aria-label="視点リセット"
+                  title="視点リセット"
+                >
+                  <span aria-hidden="true">◎</span>
                 </button>
-                <button type="button" onClick={() => setShowManualControls((visible) => !visible)}>
-                  {showManualControls ? "回転記号を隠す" : "回転記号を表示"}
+                <button
+                  type="button"
+                  className="analyzer-utility-icon-button"
+                  onClick={() => setShowManualControls((visible) => !visible)}
+                  aria-label={showManualControls ? "回転記号を隠す" : "回転記号を表示"}
+                  title={showManualControls ? "回転記号を隠す" : "回転記号を表示"}
+                  aria-pressed={showManualControls}
+                >
+                  <span aria-hidden="true">⌘</span>
                 </button>
               </div>
 
@@ -5551,72 +5915,6 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                     </span>
                   ))
                 )}
-              </div>
-
-              <div className="analyzer-phase-replay-panel" aria-label="Phase best playback">
-                <div className="analyzer-phase-replay-head">
-                  <div>
-                    <p className="eyebrow">Best Playback</p>
-                    <h3>工程別best</h3>
-                  </div>
-                  <span>{quickPlaybackStatus}</span>
-                </div>
-                <div className="analyzer-phase-replay-actions">
-                  <button
-                    type="button"
-                    onClick={prepareBestCrossPlayback}
-                    disabled={isSearchingCross || !canUseStartState}
-                  >
-                    {isSearchingCross ? "Cross..." : "Cross"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={prepareBestF2lPlayback}
-                    disabled={!selectedCrossSolution || isAnalyzingBasicF2l}
-                  >
-                    {isAnalyzingBasicF2l ? "F2L..." : "F2L"}
-                  </button>
-                  <button
-                    className="analyzer-next-f2l-action"
-                    type="button"
-                    onClick={prepareNextF2lPlayback}
-                    disabled={!canPlayNextF2l}
-                  >
-                    {nextF2lButtonLabel}
-                  </button>
-                  <button type="button" onClick={prepareBestOllPlayback}>
-                    OLL
-                  </button>
-                  <button type="button" onClick={prepareBestPllPlayback}>
-                    PLL
-                  </button>
-                </div>
-                <div className="analyzer-previous-step-row" aria-label="Practice previous step">
-                  <button
-                    className="analyzer-previous-step-action"
-                    type="button"
-                    onClick={preparePreviousPracticeStep}
-                    disabled={!canPlayPreviousPracticeStep}
-                  >
-                    {previousPracticeButtonLabel}
-                  </button>
-                </div>
-                <div className="analyzer-phase-learn-actions" aria-label="Last layer learn links">
-                  <button
-                    type="button"
-                    disabled={!ollRecognition?.ok}
-                    onClick={() => openLastLayerLearnPreview("oll")}
-                  >
-                    OLL Learn
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!pllRecognition?.ok}
-                    onClick={() => openLastLayerLearnPreview("pll")}
-                  >
-                    PLL Learn
-                  </button>
-                </div>
               </div>
             </aside>
           </div>

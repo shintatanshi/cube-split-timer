@@ -7,7 +7,8 @@ const turnSoundModules = import.meta.glob("../../sounds/*.{mp3,wav,ogg,m4a}", {
 const TURN_SOUND_SOURCES = Object.values(turnSoundModules).filter(
   (source): source is string => typeof source === "string",
 );
-const TURN_SOUND_VOLUME = 0.34;
+const DEFAULT_TURN_SOUND_VOLUME = 0.34;
+const TURN_SOUND_VOLUME_STORAGE_KEY = "cubeSplitTimer.turnSoundVolume.v1";
 
 type AudioContextConstructor = new () => AudioContext;
 
@@ -17,6 +18,50 @@ let audioBuffersPromise: Promise<AudioBuffer[]> | null = null;
 let isUnlockListenerRegistered = false;
 let isAudioUnlocked = false;
 let lastSoundIndex = -1;
+
+function normalizeCubeTurnSoundVolume(volume: number): number {
+  if (!Number.isFinite(volume)) {
+    return DEFAULT_TURN_SOUND_VOLUME;
+  }
+
+  return Math.min(1, Math.max(0, volume));
+}
+
+export function loadCubeTurnSoundVolume(): number {
+  if (typeof localStorage === "undefined") {
+    return DEFAULT_TURN_SOUND_VOLUME;
+  }
+
+  try {
+    const storedVolume = localStorage.getItem(TURN_SOUND_VOLUME_STORAGE_KEY);
+
+    if (storedVolume === null) {
+      return DEFAULT_TURN_SOUND_VOLUME;
+    }
+
+    const parsed = Number(storedVolume);
+
+    return normalizeCubeTurnSoundVolume(parsed);
+  } catch {
+    return DEFAULT_TURN_SOUND_VOLUME;
+  }
+}
+
+let turnSoundVolume = loadCubeTurnSoundVolume();
+
+export function saveCubeTurnSoundVolume(volume: number): void {
+  turnSoundVolume = normalizeCubeTurnSoundVolume(volume);
+
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(TURN_SOUND_VOLUME_STORAGE_KEY, String(turnSoundVolume));
+  } catch {
+    // Volume is a local preference; sounds should still work if storage is unavailable.
+  }
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") {
@@ -143,7 +188,7 @@ export function playRandomCubeTurnSound(): void {
 
   const context = getAudioContext();
 
-  if (!context || audioBuffers.length === 0) {
+  if (!context || audioBuffers.length === 0 || turnSoundVolume <= 0) {
     return;
   }
 
@@ -157,7 +202,7 @@ export function playRandomCubeTurnSound(): void {
   const gain = context.createGain();
 
   source.buffer = buffer;
-  gain.gain.value = TURN_SOUND_VOLUME;
+  gain.gain.value = turnSoundVolume;
   source.connect(gain);
   gain.connect(context.destination);
   source.start();

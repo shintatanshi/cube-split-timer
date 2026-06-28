@@ -75,6 +75,9 @@ const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
 const DEFAULT_BRAND_LOGO_SOURCE = "/brand/cube-split-timer-logo-round.png";
+const DEFAULT_NETLIFY_MIGRATION_URL = "https://shintimer1123.netlify.app/";
+const NETLIFY_MIGRATION_BOOKMARKLET =
+  'javascript:(async()=>{const k="cubeSplitTimer.solves.v1";const raw=localStorage.getItem(k)||"[]";let solves=[];try{solves=JSON.parse(raw)}catch{}const data=JSON.stringify({app:"cube-split-timer",version:1,exportedAt:new Date().toISOString(),solves});try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(data);alert("Cube Split Timerの履歴をコピーしました。Vercel版に貼り付けて読み込んでください。");return}}catch(e){}const ta=document.createElement("textarea");ta.value=data;ta.style.cssText="position:fixed;inset:16px;z-index:2147483647;width:calc(100% - 32px);height:45vh;font-size:16px";document.body.appendChild(ta);ta.focus();ta.select();alert("履歴データを表示しました。全選択されている内容をコピーしてください。");})();';
 const BRAND_LOGO_CANDIDATE_SOURCES = [
   DEFAULT_BRAND_LOGO_SOURCE,
   "/brand/cube-split-timer-logo.png",
@@ -2337,13 +2340,27 @@ const handleTimerPointerCancel = useCallback(
 
       persistAndSetSolves(mergedSolves);
 
+      if (authUser && isAuthConfigured() && added > 0) {
+        void syncLocalSolvesToCloud(mergedSolves)
+          .then((result) => {
+            if (result.uploaded > 0) {
+              setAuthNotice(
+                `読み込んだ履歴を含めて ${result.uploaded}件をアカウントへ保存しました。`,
+              );
+            }
+          })
+          .catch(() => {
+            setAuthNotice("履歴は読み込みましたが、アカウントへの保存に失敗しました。");
+          });
+      }
+
       return {
         imported: importedSolves.length,
         added,
         total: mergedSolves.length,
       };
     },
-    [persistAndSetSolves, solves],
+    [authUser, persistAndSetSolves, solves, syncLocalSolvesToCloud],
   );
 
   const uploadLocalSolvesToAccount = useCallback(async (): Promise<CloudSyncResult> => {
@@ -3117,6 +3134,8 @@ function AuthPage({
   const [isImporting, setIsImporting] = useState(false);
   const [isUploadingLocalSolves, setIsUploadingLocalSolves] = useState(false);
   const [isImportingAccountSolves, setIsImportingAccountSolves] = useState(false);
+  const [netlifyMigrationUrl, setNetlifyMigrationUrl] = useState(DEFAULT_NETLIFY_MIGRATION_URL);
+  const [isCopyingMigrationCode, setIsCopyingMigrationCode] = useState(false);
   const hasGoogleIdentity = authIdentities.some((identity) => identity.provider === "google");
   const authIdentityLabel = authIdentities.length > 0
     ? authIdentities.map(getAuthIdentityLabel).join(" / ")
@@ -3348,6 +3367,43 @@ function AuthPage({
       setDataStatusMessage("履歴を同期できませんでした。ログイン状態とSupabase設定を確認してください。");
     } finally {
       setIsImportingAccountSolves(false);
+    }
+  };
+
+  const handleCopyMigrationCode = async () => {
+    setIsCopyingMigrationCode(true);
+    setDataStatus("idle");
+    setDataStatusMessage("");
+
+    try {
+      await copyTextWithFallback(NETLIFY_MIGRATION_BOOKMARKLET);
+      setDataStatus("success");
+      setDataStatusMessage(
+        "Netlify版で実行する移行コードをコピーしました。スマホではブックマークのURL欄へ貼り付けて使えます。",
+      );
+    } catch {
+      setDataStatus("error");
+      setDataStatusMessage("移行コードをコピーできませんでした。下のコードを手動で選択してコピーしてください。");
+    } finally {
+      setIsCopyingMigrationCode(false);
+    }
+  };
+
+  const handleOpenNetlifyMigrationUrl = () => {
+    const trimmedUrl = netlifyMigrationUrl.trim();
+
+    if (!trimmedUrl) {
+      setDataStatus("error");
+      setDataStatusMessage("Netlify版のURLを入力してください。");
+      return;
+    }
+
+    try {
+      const url = new URL(trimmedUrl);
+      window.open(url.href, "_blank", "noopener,noreferrer");
+    } catch {
+      setDataStatus("error");
+      setDataStatusMessage("Netlify版のURLを https:// から入力してください。");
     }
   };
 
@@ -3614,6 +3670,56 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             {isImportingAccountSolves ? "同期中..." : "履歴を今すぐ同期"}
           </button>
         </div>
+
+        <section className="auth-migration-panel" aria-label="Netlify history migration">
+          <div>
+            <p className="eyebrow">Netlify Migration</p>
+            <h3>Netlify版の履歴を取り出す</h3>
+            <p>
+              Netlify版を更新できなくても、同じスマホ/PCでNetlify版を開ければ履歴をコピーできます。
+              コピー後、この画面の貼り付け欄へ入れて読み込んでください。
+            </p>
+          </div>
+          <div className="auth-migration-actions">
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => void handleCopyMigrationCode()}
+              disabled={isCopyingMigrationCode}
+            >
+              {isCopyingMigrationCode ? "コピー中..." : "移行コードをコピー"}
+            </button>
+            <label className="auth-migration-url">
+              Netlify版URL
+              <input
+                type="url"
+                value={netlifyMigrationUrl}
+                placeholder={DEFAULT_NETLIFY_MIGRATION_URL}
+                onChange={(event) => setNetlifyMigrationUrl(event.currentTarget.value)}
+              />
+            </label>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={handleOpenNetlifyMigrationUrl}
+            >
+              旧Netlify版を開く
+            </button>
+          </div>
+          <details className="auth-migration-help">
+            <summary>スマホでの使い方</summary>
+            <ol>
+              <li>移行コードをコピーします。</li>
+              <li>ブラウザでブックマークを1つ作り、URL欄を移行コードに置き換えます。</li>
+              <li>Netlify版を開いた状態で、そのブックマークを押します。</li>
+              <li>コピーされた履歴を下の欄へ貼り付けて読み込みます。</li>
+            </ol>
+          </details>
+          <label className="auth-migration-code">
+            移行コード
+            <textarea readOnly rows={3} value={NETLIFY_MIGRATION_BOOKMARKLET} />
+          </label>
+        </section>
 
         <label className="auth-import-field">
           別端末の履歴データを貼り付け

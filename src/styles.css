@@ -5284,6 +5284,100 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   min-height: 44px;
 }
 
+.auth-migration-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-soft) 72%, transparent);
+}
+
+.auth-migration-panel h3,
+.auth-migration-panel p {
+  margin: 0;
+}
+
+.auth-migration-panel h3 {
+  color: var(--text-strong);
+}
+
+.auth-migration-panel p,
+.auth-migration-help {
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 760;
+  line-height: 1.55;
+}
+
+.auth-migration-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(180px, 1.1fr) minmax(0, 0.8fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.auth-migration-actions button {
+  min-height: 44px;
+}
+
+.auth-migration-url,
+.auth-migration-code {
+  display: grid;
+  gap: 7px;
+  color: var(--text-strong);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.auth-migration-url input,
+.auth-migration-code textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-muted);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+}
+
+.auth-migration-url input {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.auth-migration-code textarea {
+  min-height: 72px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.auth-migration-url input:focus,
+.auth-migration-code textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.auth-migration-help {
+  border-top: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  padding-top: 10px;
+}
+
+.auth-migration-help summary {
+  cursor: pointer;
+  color: var(--text-strong);
+  font-weight: 950;
+}
+
+.auth-migration-help ol {
+  margin: 8px 0 0;
+  padding-left: 1.35rem;
+}
+
+.auth-migration-help li + li {
+  margin-top: 4px;
+}
+
 .auth-import-field {
   display: grid;
   gap: 8px;
@@ -6224,6 +6318,10 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   }
 
   .auth-data-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-migration-actions {
     grid-template-columns: 1fr;
   }
 

@@ -8527,57 +8527,57 @@ textarea:focus,
 
 /* Light mode polish */
 :root[data-theme="light"] {
-  --background: #edf7ff;
-  --background-soft: #dceeff;
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-muted: rgba(31, 132, 188, 0.08);
-  --panel-strong: #f7fbff;
-  --text: #183149;
-  --text-strong: #071827;
-  --muted: #55728b;
-  --border: rgba(0, 112, 176, 0.18);
-  --accent: #008ed1;
+  --background: #d5e4ef;
+  --background-soft: #b8cedd;
+  --panel: rgba(221, 235, 245, 0.95);
+  --panel-muted: rgba(20, 84, 127, 0.11);
+  --panel-strong: #c7dcea;
+  --text: #142b40;
+  --text-strong: #061827;
+  --muted: #526f84;
+  --border: rgba(18, 82, 124, 0.25);
+  --accent: #006da6;
   --accent-contrast: #ffffff;
-  --warning: #a66b00;
-  --info: #4b65d9;
-  --danger: #c72a3b;
-  --shadow: rgba(48, 93, 126, 0.16);
+  --warning: #8b5d00;
+  --info: #485dbd;
+  --danger: #ad2836;
+  --shadow: rgba(22, 53, 78, 0.22);
 }
 
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
-    --background: #edf7ff;
-    --background-soft: #dceeff;
-    --panel: rgba(255, 255, 255, 0.94);
-    --panel-muted: rgba(31, 132, 188, 0.08);
-    --panel-strong: #f7fbff;
-    --text: #183149;
-    --text-strong: #071827;
-    --muted: #55728b;
-    --border: rgba(0, 112, 176, 0.18);
-    --accent: #008ed1;
+    --background: #d5e4ef;
+    --background-soft: #b8cedd;
+    --panel: rgba(221, 235, 245, 0.95);
+    --panel-muted: rgba(20, 84, 127, 0.11);
+    --panel-strong: #c7dcea;
+    --text: #142b40;
+    --text-strong: #061827;
+    --muted: #526f84;
+    --border: rgba(18, 82, 124, 0.25);
+    --accent: #006da6;
     --accent-contrast: #ffffff;
-    --warning: #a66b00;
-    --info: #4b65d9;
-    --danger: #c72a3b;
-    --shadow: rgba(48, 93, 126, 0.16);
+    --warning: #8b5d00;
+    --info: #485dbd;
+    --danger: #ad2836;
+    --shadow: rgba(22, 53, 78, 0.22);
   }
 }
 
 :root[data-theme="light"] body {
   background:
-    linear-gradient(rgba(0, 112, 176, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 112, 176, 0.055) 1px, transparent 1px),
-    linear-gradient(180deg, #fbfdff 0%, var(--background) 48%, var(--background-soft) 100%);
+    linear-gradient(rgba(18, 82, 124, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18, 82, 124, 0.055) 1px, transparent 1px),
+    linear-gradient(180deg, #dceaf4 0%, var(--background) 42%, var(--background-soft) 100%);
   background-size: 44px 44px, 44px 44px, auto;
 }
 
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] body {
     background:
-      linear-gradient(rgba(0, 112, 176, 0.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 112, 176, 0.055) 1px, transparent 1px),
-      linear-gradient(180deg, #fbfdff 0%, var(--background) 48%, var(--background-soft) 100%);
+      linear-gradient(rgba(18, 82, 124, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(18, 82, 124, 0.055) 1px, transparent 1px),
+      linear-gradient(180deg, #dceaf4 0%, var(--background) 42%, var(--background-soft) 100%);
     background-size: 44px 44px, 44px 44px, auto;
   }
 }
@@ -8587,6 +8587,9 @@ textarea:focus,
 :root[data-theme="light"] .mobile-more-sheet,
 :root[data-theme="light"] .timer-panel,
 :root[data-theme="light"] .home-stats-mini,
+:root[data-theme="light"] .timer-insight-panel,
+:root[data-theme="light"] .timer-mini-stat,
+:root[data-theme="light"] .timer-trend-card,
 :root[data-theme="light"] .notice,
 :root[data-theme="light"] .stat-card,
 :root[data-theme="light"] .phase-card,
@@ -8604,11 +8607,11 @@ textarea:focus,
 :root[data-theme="light"] .admin-card {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), color-mix(in srgb, var(--panel) 94%, #e9f5ff)),
+    linear-gradient(180deg, color-mix(in srgb, var(--panel) 96%, #e8f2f9), color-mix(in srgb, var(--panel) 84%, #c7dce9)),
     var(--panel);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    0 14px 34px color-mix(in srgb, var(--shadow) 64%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    0 14px 34px color-mix(in srgb, var(--shadow) 72%, transparent);
 }
 
 :root[data-theme="light"] .mobile-brand,
@@ -8623,7 +8626,7 @@ textarea:focus,
 :root[data-theme="light"] .home-side-card-compact button,
 :root[data-theme="light"] .history-actions button {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  background: color-mix(in srgb, white 82%, var(--panel-muted));
+  background: color-mix(in srgb, #d4e3ee 84%, var(--panel-muted));
   color: var(--text-strong);
 }
 
@@ -8640,27 +8643,27 @@ textarea:focus,
 :root[data-theme="light"] .scramble-actions .ghost-button,
 :root[data-theme="light"] .scramble-refresh-button {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
-  background: #e8f6ff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  background: #ccdeeb;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42);
   font-weight: 950;
 }
 
 :root[data-theme="light"] .mobile-account-button,
 :root[data-theme="light"] .theme-control select,
 :root[data-theme="light"] .help-button {
-  background: #edf8ff;
+  background: #d4e4ef;
 }
 
 :root[data-theme="light"] .theme-control,
 :root[data-theme="light"] .theme-control select,
 :root[data-theme="light"] .help-button {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(213, 228, 239, 0.9);
 }
 
 :root[data-theme="light"] .mode-toggle {
   border-color: color-mix(in srgb, var(--accent) 16%, var(--border));
-  background: color-mix(in srgb, #eaf5ff 84%, white);
+  background: color-mix(in srgb, #cbdde9 88%, var(--panel));
 }
 
 :root[data-theme="light"] .mode-toggle button {
@@ -8677,14 +8680,14 @@ textarea:focus,
 :root[data-theme="light"] .timer-button {
   border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
   background:
-    linear-gradient(rgba(0, 142, 209, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 142, 209, 0.045) 1px, transparent 1px),
-    linear-gradient(180deg, #fbfdff 0%, #edf7ff 100%);
+    linear-gradient(rgba(0, 109, 166, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 109, 166, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, #d9e8f2 0%, #c8dce9 100%);
   background-size: 34px 34px, 34px 34px, auto;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    inset 0 0 42px rgba(0, 142, 209, 0.055),
-    0 18px 44px color-mix(in srgb, var(--shadow) 78%, transparent);
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    inset 0 0 42px rgba(0, 109, 166, 0.065),
+    0 18px 44px color-mix(in srgb, var(--shadow) 82%, transparent);
 }
 
 :root[data-theme="light"] .timer-time {

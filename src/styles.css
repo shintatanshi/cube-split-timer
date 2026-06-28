@@ -5206,6 +5206,113 @@ body.learn-player-fullscreen-open .learn-landscape-hint {
   background: var(--border);
 }
 
+.auth-profile-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 72%, transparent);
+}
+
+.auth-profile-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-profile-preview img {
+  width: 74px;
+  height: 74px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 12px 28px color-mix(in srgb, var(--shadow) 56%, transparent);
+}
+
+.auth-profile-preview h3,
+.auth-profile-preview p {
+  margin: 0;
+}
+
+.auth-profile-preview h3 {
+  overflow-wrap: anywhere;
+  color: var(--text-strong);
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.auth-profile-preview span {
+  display: inline-flex;
+  margin-top: 6px;
+  color: color-mix(in srgb, var(--muted) 78%, var(--accent));
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.auth-profile-name {
+  display: grid;
+  gap: 7px;
+  color: var(--text-strong);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.auth-profile-name input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background-soft) 58%, transparent);
+  color: var(--text-strong);
+  font: inherit;
+  padding: 11px 12px;
+}
+
+.auth-avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 1px 4px 1px 1px;
+  scrollbar-color: color-mix(in srgb, var(--accent) 48%, transparent) transparent;
+}
+
+.auth-avatar-picker button {
+  display: grid;
+  min-width: 0;
+  min-height: 88px;
+  place-items: center;
+  gap: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 78%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.auth-avatar-picker button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel-muted));
+  color: var(--text-strong);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, white 14%, transparent),
+    0 10px 26px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.auth-avatar-picker img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
 .auth-account-panel {
   display: grid;
   gap: 8px;
@@ -6650,6 +6757,25 @@ button:active {
 .global-nav-links button,
 .global-account-button {
   border-color: transparent;
+}
+
+.global-account-button-signed-in,
+.mobile-account-button-signed-in,
+.mobile-more-account-signed-in {
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.global-account-button-signed-in img,
+.mobile-account-button-signed-in img,
+.mobile-more-account-signed-in img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
 .global-nav-links button[aria-current="page"] {
@@ -8707,6 +8833,11 @@ textarea:focus,
     line-height: 1.34;
     letter-spacing: 0.02em;
   }
+
+  .auth-avatar-picker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: min(46vh, 430px);
+  }
 }
 
 @media (max-width: 520px) {
@@ -8714,6 +8845,40 @@ textarea:focus,
     font-size: clamp(1rem, 5.2vw, 1.32rem);
     line-height: 1.32;
     letter-spacing: 0.012em;
+  }
+
+  .auth-profile-editor {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .auth-profile-preview {
+    gap: 10px;
+  }
+
+  .auth-profile-preview img {
+    width: 58px;
+    height: 58px;
+  }
+
+  .auth-profile-preview h3 {
+    font-size: 1.08rem;
+  }
+
+  .auth-avatar-picker {
+    gap: 7px;
+    max-height: min(42vh, 360px);
+  }
+
+  .auth-avatar-picker button {
+    min-height: 74px;
+    gap: 5px;
+    font-size: 0.68rem;
+  }
+
+  .auth-avatar-picker img {
+    width: 38px;
+    height: 38px;
   }
 }
 

@@ -25,8 +25,9 @@ import {
   type AuthIdentity,
   type AuthUser,
   updateCurrentUserPassword,
+  updateCurrentUserProfile,
 } from "./lib/auth";
-import { getMyProfile, type ProfileRow } from "./lib/admin";
+import { getMyProfile, updateMyProfileDisplayName, type ProfileRow } from "./lib/admin";
 import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
 import { generateScramble } from "./lib/scramble";
 import {
@@ -75,18 +76,61 @@ const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
-const DEFAULT_BRAND_LOGO_SOURCE = "/brand/cube-split-timer-logo-round.png";
+const DEFAULT_BRAND_LOGO_SOURCE = "/brand/avatar-timer-dash.png";
 const DEFAULT_NETLIFY_MIGRATION_URL = "https://shintimer1123.netlify.app/";
 const NETLIFY_MIGRATION_BOOKMARKLET =
   'javascript:(async()=>{const k="cubeSplitTimer.solves.v1";const raw=localStorage.getItem(k)||"[]";let solves=[];try{solves=JSON.parse(raw)}catch{}const data=JSON.stringify({app:"cube-split-timer",version:1,exportedAt:new Date().toISOString(),solves});try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(data);alert("Cube Split Timerの履歴をコピーしました。Vercel版に貼り付けて読み込んでください。");return}}catch(e){}const ta=document.createElement("textarea");ta.value=data;ta.style.cssText="position:fixed;inset:16px;z-index:2147483647;width:calc(100% - 32px);height:45vh;font-size:16px";document.body.appendChild(ta);ta.focus();ta.select();alert("履歴データを表示しました。全選択されている内容をコピーしてください。");})();';
 const BRAND_LOGO_CANDIDATE_SOURCES = [
   DEFAULT_BRAND_LOGO_SOURCE,
-  "/brand/cube-split-timer-logo.png",
-  "/brand/cube-split-timer-logo-peace.png",
-  "/brand/cube-split-timer-logo-jump.png",
-  "/brand/cube-split-timer-logo-think.png",
-  "/brand/cube-split-timer-logo-wave.png",
+  "/brand/avatar-cube-simple.png",
+  "/brand/avatar-lightning-bolt.png",
+  "/brand/avatar-robot-blue.png",
+  "/brand/avatar-gamepad.png",
+  "/brand/avatar-star-smile.png",
+  "/brand/avatar-cube-cat.png",
 ] as const;
+const DEFAULT_PROFILE_AVATAR_ID = "timer-dash";
+const PROFILE_AVATAR_OPTIONS = [
+  { id: "timer-dash", label: "Timer", source: "/brand/avatar-timer-dash.png" },
+  { id: "cube-simple", label: "Cube", source: "/brand/avatar-cube-simple.png" },
+  { id: "lightning-bolt", label: "Bolt", source: "/brand/avatar-lightning-bolt.png" },
+  { id: "robot-blue", label: "Robot", source: "/brand/avatar-robot-blue.png" },
+  { id: "gamepad", label: "Game", source: "/brand/avatar-gamepad.png" },
+  { id: "star-smile", label: "Star", source: "/brand/avatar-star-smile.png" },
+  { id: "cube-cat", label: "Cube Cat", source: "/brand/avatar-cube-cat.png" },
+  { id: "cat-soft", label: "Cat", source: "/brand/avatar-cat-soft.png" },
+  { id: "panda", label: "Panda", source: "/brand/avatar-panda.png" },
+  { id: "fox", label: "Fox", source: "/brand/avatar-fox.png" },
+  { id: "owl", label: "Owl", source: "/brand/avatar-owl.png" },
+  { id: "shark", label: "Shark", source: "/brand/avatar-shark.png" },
+  { id: "mountain-sun", label: "Summit", source: "/brand/avatar-mountain-sun.png" },
+  { id: "rocket-moon", label: "Rocket", source: "/brand/avatar-rocket-moon.png" },
+  { id: "coffee", label: "Coffee", source: "/brand/avatar-coffee.png" },
+  { id: "basketball", label: "Hoop", source: "/brand/avatar-basketball.png" },
+  { id: "ninja", label: "Ninja", source: "/brand/avatar-ninja.png" },
+  { id: "crystal", label: "Crystal", source: "/brand/avatar-crystal.png" },
+  { id: "crown", label: "Crown", source: "/brand/avatar-crown.png" },
+  { id: "donut", label: "Donut", source: "/brand/avatar-donut.png" },
+  { id: "music-note", label: "Music", source: "/brand/avatar-music-note.png" },
+  { id: "ramen", label: "Ramen", source: "/brand/avatar-ramen.png" },
+  { id: "space-bunny", label: "Bunny", source: "/brand/avatar-space-bunny.png" },
+  { id: "pixel-ghost", label: "Ghost", source: "/brand/avatar-pixel-ghost.png" },
+  { id: "firebird", label: "Flame", source: "/brand/avatar-firebird.png" },
+  { id: "magic-slime", label: "Slime", source: "/brand/avatar-magic-slime.png" },
+  { id: "daruma", label: "Daruma", source: "/brand/avatar-daruma.png" },
+  { id: "ice-wolf", label: "Ice Wolf", source: "/brand/avatar-ice-wolf.png" },
+  { id: "dj-penguin", label: "DJ", source: "/brand/avatar-dj-penguin.png" },
+  { id: "samurai-cat", label: "Samurai", source: "/brand/avatar-samurai-cat.png" },
+  { id: "nebula-jellyfish", label: "Nebula", source: "/brand/avatar-nebula-jellyfish.png" },
+  { id: "treasure-chest", label: "Treasure", source: "/brand/avatar-treasure-chest.png" },
+  { id: "strawberry-dragon", label: "Berry", source: "/brand/avatar-strawberry-dragon.png" },
+  { id: "gamer-frog", label: "Gamer", source: "/brand/avatar-gamer-frog.png" },
+  { id: "bubble-tea", label: "Boba", source: "/brand/avatar-bubble-tea.png" },
+  { id: "steampunk-octopus", label: "Octo", source: "/brand/avatar-steampunk-octopus.png" },
+  { id: "thunder-wolf", label: "Thunder", source: "/brand/avatar-thunder-wolf.png" },
+  { id: "sleepy-sheep", label: "Sleepy", source: "/brand/avatar-sleepy-sheep.png" },
+] as const;
+type ProfileAvatarId = (typeof PROFILE_AVATAR_OPTIONS)[number]["id"];
 const LearnPage = lazy(() => import("./learn/LearnPage"));
 const AnalyzerPage = lazy(() => import("./analyzer/AnalyzerPage"));
 const ScramblePreviewPage = lazy(() => import("./scramble/ScramblePreviewPage"));
@@ -509,13 +553,41 @@ function buildTodaySummaryShareText(todaySolves: SolveRecord[], todayStats: Time
 }
 
 function getAuthUserLabel(user: AuthUser): string {
+  return getAuthUserDisplayName(user) || user.email || "ログイン中";
+}
+
+function getAuthUserDisplayName(user: AuthUser): string {
   const displayName = user.user_metadata?.display_name;
 
   if (typeof displayName === "string" && displayName.trim()) {
     return displayName.trim();
   }
 
-  return user.email ?? "ログイン中";
+  return "";
+}
+
+function isProfileAvatarId(value: unknown): value is ProfileAvatarId {
+  return (
+    typeof value === "string" &&
+    PROFILE_AVATAR_OPTIONS.some((option) => option.id === value)
+  );
+}
+
+function getProfileAvatarOption(avatarId: unknown): (typeof PROFILE_AVATAR_OPTIONS)[number] {
+  const safeAvatarId = isProfileAvatarId(avatarId) ? avatarId : DEFAULT_PROFILE_AVATAR_ID;
+
+  return (
+    PROFILE_AVATAR_OPTIONS.find((option) => option.id === safeAvatarId) ??
+    PROFILE_AVATAR_OPTIONS[0]
+  );
+}
+
+function getAuthUserAvatarId(user: AuthUser | null): ProfileAvatarId {
+  return getProfileAvatarOption(user?.user_metadata?.avatar_id).id;
+}
+
+function getAuthUserAvatarSource(user: AuthUser | null): string {
+  return getProfileAvatarOption(user?.user_metadata?.avatar_id).source;
 }
 
 function getAuthIdentityLabel(identity: AuthIdentity): string {
@@ -792,6 +864,7 @@ interface GlobalAppNavProps {
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
   authLabel: string;
+  authAvatarSource: string;
   isAuthLoading: boolean;
   isSignedIn: boolean;
 }
@@ -802,6 +875,7 @@ function GlobalAppNav({
   onNavigate,
   onOpenLogin,
   authLabel,
+  authAvatarSource,
   isAuthLoading,
   isSignedIn,
 }: GlobalAppNavProps) {
@@ -874,7 +948,12 @@ function GlobalAppNav({
             );
           })}
         </div>
-        <button className="global-account-button" type="button" onClick={handleOpenAccount}>
+        <button
+          className={isSignedIn ? "global-account-button global-account-button-signed-in" : "global-account-button"}
+          type="button"
+          onClick={handleOpenAccount}
+        >
+          {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
           {accountLabel}
         </button>
       </nav>
@@ -887,7 +966,12 @@ function GlobalAppNav({
             <small>Timer</small>
           </span>
         </button>
-        <button className="mobile-account-button" type="button" onClick={handleOpenAccount}>
+        <button
+          className={isSignedIn ? "mobile-account-button mobile-account-button-signed-in" : "mobile-account-button"}
+          type="button"
+          onClick={handleOpenAccount}
+        >
+          {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
           {accountLabel}
         </button>
       </header>
@@ -961,7 +1045,12 @@ function GlobalAppNav({
                 );
               })}
             </div>
-            <button className="mobile-more-account" type="button" onClick={handleOpenAccount}>
+            <button
+              className={isSignedIn ? "mobile-more-account mobile-more-account-signed-in" : "mobile-more-account"}
+              type="button"
+              onClick={handleOpenAccount}
+            >
+              {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
               {accountLabel}
             </button>
           </section>
@@ -2433,6 +2522,7 @@ const handleTimerPointerCancel = useCallback(
       onNavigate={navigateTo}
       onOpenLogin={openLogin}
       authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
+      authAvatarSource={getAuthUserAvatarSource(authUser)}
       isAuthLoading={isAuthLoading}
       isSignedIn={Boolean(authUser)}
     />
@@ -2574,6 +2664,7 @@ const handleTimerPointerCancel = useCallback(
         {globalNav}
         <AuthPage
           user={authUser}
+          profile={authProfile}
           isAdmin={authProfile?.role === "admin"}
           isLoading={isAuthLoading}
           isConfigured={isAuthConfigured()}
@@ -2590,6 +2681,11 @@ const handleTimerPointerCancel = useCallback(
           onImportLocalSolves={importLocalSolves}
           onUploadLocalSolves={uploadLocalSolvesToAccount}
           onImportAccountSolves={importAccountSolvesToLocal}
+          onProfileUpdated={(nextUser, nextProfile) => {
+            setAuthUser(nextUser);
+            setAuthProfile(nextProfile);
+            setAuthNotice("マイページを更新しました。");
+          }}
         />
       </>
     );
@@ -3047,6 +3143,7 @@ type AuthFormMode = "signIn" | "signUp";
 
 interface AuthPageProps {
   user: AuthUser | null;
+  profile: ProfileRow | null;
   isAdmin: boolean;
   isLoading: boolean;
   isConfigured: boolean;
@@ -3060,6 +3157,7 @@ interface AuthPageProps {
   onImportLocalSolves: (raw: string) => LocalImportResult;
   onUploadLocalSolves: () => Promise<CloudSyncResult>;
   onImportAccountSolves: () => Promise<CloudImportResult>;
+  onProfileUpdated: (user: AuthUser, profile: ProfileRow) => void;
 }
 
 function getAuthErrorMessage(error: unknown): string {
@@ -3072,6 +3170,7 @@ function getAuthErrorMessage(error: unknown): string {
 
 function AuthPage({
   user,
+  profile,
   isAdmin,
   isLoading,
   isConfigured,
@@ -3085,6 +3184,7 @@ function AuthPage({
   onImportLocalSolves,
   onUploadLocalSolves,
   onImportAccountSolves,
+  onProfileUpdated,
 }: AuthPageProps) {
   const [mode, setMode] = useState<AuthFormMode>("signIn");
   const [email, setEmail] = useState("");
@@ -3100,6 +3200,12 @@ function AuthPage({
   const [isLinkingGoogleIdentity, setIsLinkingGoogleIdentity] = useState(false);
   const [accountStatus, setAccountStatus] = useState<"idle" | "success" | "error">("idle");
   const [accountStatusMessage, setAccountStatusMessage] = useState("");
+  const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [profileAvatarId, setProfileAvatarId] =
+    useState<ProfileAvatarId>(DEFAULT_PROFILE_AVATAR_ID);
+  const [profileStatus, setProfileStatus] = useState<"idle" | "success" | "error">("idle");
+  const [profileStatusMessage, setProfileStatusMessage] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [importText, setImportText] = useState("");
   const [dataStatus, setDataStatus] = useState<"idle" | "success" | "error">("idle");
   const [dataStatusMessage, setDataStatusMessage] = useState("");
@@ -3113,6 +3219,22 @@ function AuthPage({
   const authIdentityLabel = authIdentities.length > 0
     ? authIdentities.map(getAuthIdentityLabel).join(" / ")
     : "未確認";
+  const profileAvatarOption = getProfileAvatarOption(profileAvatarId);
+
+  useEffect(() => {
+    if (!user) {
+      setProfileDisplayName("");
+      setProfileAvatarId(DEFAULT_PROFILE_AVATAR_ID);
+      setProfileStatus("idle");
+      setProfileStatusMessage("");
+      return;
+    }
+
+    setProfileDisplayName(profile?.display_name ?? getAuthUserDisplayName(user));
+    setProfileAvatarId(getAuthUserAvatarId(user));
+    setProfileStatus("idle");
+    setProfileStatusMessage("");
+  }, [profile, user]);
 
   useEffect(() => {
     let isActive = true;
@@ -3155,6 +3277,42 @@ function AuthPage({
       isActive = false;
     };
   }, [isConfigured, user]);
+
+  const handleSaveProfile = async () => {
+    if (!user) {
+      setProfileStatus("error");
+      setProfileStatusMessage("マイページ編集にはログインが必要です。");
+      return;
+    }
+
+    const trimmedDisplayName = profileDisplayName.trim();
+
+    if (trimmedDisplayName.length > 40) {
+      setProfileStatus("error");
+      setProfileStatusMessage("ユーザー名は40文字以内にしてください。");
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setProfileStatus("idle");
+    setProfileStatusMessage("");
+
+    try {
+      const [nextUser, nextProfile] = await Promise.all([
+        updateCurrentUserProfile(trimmedDisplayName, profileAvatarId),
+        updateMyProfileDisplayName(trimmedDisplayName),
+      ]);
+
+      onProfileUpdated(nextUser, nextProfile);
+      setProfileStatus("success");
+      setProfileStatusMessage("ユーザー名とアイコンを保存しました。");
+    } catch (error) {
+      setProfileStatus("error");
+      setProfileStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -3414,6 +3572,57 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
         <section className="auth-card" aria-label="Current account">
           <p className="eyebrow">Signed in</p>
           <h2>{getAuthUserLabel(user)}</h2>
+          <section className="auth-profile-editor" aria-label="My page editor">
+            <div className="auth-profile-preview">
+              <img src={profileAvatarOption.source} alt="" aria-hidden="true" decoding="async" />
+              <div>
+                <p className="eyebrow">My Page</p>
+                <h3>{profileDisplayName.trim() || getAuthUserLabel(user)}</h3>
+                <span>{profileAvatarOption.label}</span>
+              </div>
+            </div>
+
+            {profileStatus !== "idle" && (
+              <div className={`feedback-status feedback-status-${profileStatus}`} role="status">
+                {profileStatusMessage}
+              </div>
+            )}
+
+            <label className="auth-profile-name">
+              ユーザー名
+              <input
+                maxLength={40}
+                value={profileDisplayName}
+                placeholder="例: shinta"
+                onChange={(event) => setProfileDisplayName(event.currentTarget.value)}
+              />
+            </label>
+
+            <div className="auth-avatar-picker" aria-label="アイコンを選択">
+              {PROFILE_AVATAR_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  aria-pressed={profileAvatarId === option.id}
+                  onClick={() => setProfileAvatarId(option.id)}
+                >
+                  <img src={option.source} alt="" aria-hidden="true" loading="lazy" decoding="async" />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="feedback-actions">
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void handleSaveProfile()}
+                disabled={isSavingProfile}
+              >
+                {isSavingProfile ? "保存中..." : "マイページを保存"}
+              </button>
+            </div>
+          </section>
           <div className="auth-account-panel">
             <p>
               <span>Email</span>

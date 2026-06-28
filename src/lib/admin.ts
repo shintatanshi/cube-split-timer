@@ -68,6 +68,50 @@ export async function updateProfileRole(
   return data;
 }
 
+export async function updateMyProfileDisplayName(displayName: string): Promise<ProfileRow> {
+  const supabase = getSupabaseClient();
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+
+  if (authError) {
+    throw authError;
+  }
+
+  if (!authData.user) {
+    throw new Error("ログインが必要です。");
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ display_name: displayName.trim() || null })
+    .eq("id", authData.user.id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    return data;
+  }
+
+  const { data: insertedData, error: insertError } = await supabase
+    .from("profiles")
+    .insert({
+      id: authData.user.id,
+      email: authData.user.email ?? null,
+      display_name: displayName.trim() || null,
+    })
+    .select("*")
+    .single();
+
+  if (insertError) {
+    throw insertError;
+  }
+
+  return insertedData;
+}
+
 export async function getAdminSolveSessions(
   options: GetAdminSolveSessionsOptions = {},
 ): Promise<SolveSessionRow[]> {

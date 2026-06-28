@@ -143,3 +143,25 @@ export async function updateCurrentUserPassword(password: string): Promise<void>
     throw error;
   }
 }
+
+export async function updateCurrentUserProfile(
+  displayName: string,
+  avatarId: string,
+): Promise<AuthUser> {
+  const { data, error } = await getSupabaseClient().auth.updateUser({
+    data: {
+      avatar_id: avatarId,
+      display_name: displayName.trim() || null,
+    },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data.user) {
+    throw new Error("プロフィールを更新できませんでした。");
+  }
+
+  return data.user;
+}

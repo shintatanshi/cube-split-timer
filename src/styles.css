@@ -7707,8 +7707,8 @@ button:active {
 .scramble-text {
   min-height: auto;
   padding-right: 4px;
-  font-size: clamp(1.28rem, 3vw, 2rem);
-  line-height: 1.36;
+  font-size: clamp(1.02rem, 1.55vw, 1.34rem);
+  line-height: 1.48;
   overflow-wrap: anywhere;
 }
 
@@ -8743,7 +8743,7 @@ body {
 
 .scramble-text {
   color: var(--text-strong);
-  letter-spacing: 0.035em;
+  letter-spacing: 0.012em;
 }
 
 .timer-button {
@@ -9056,7 +9056,7 @@ textarea:focus,
   }
 
   .scramble-text {
-    letter-spacing: 0.02em;
+    letter-spacing: 0.008em;
   }
 
   .timer-button {
@@ -9907,9 +9907,9 @@ textarea:focus,
 
 @media (max-width: 860px) {
   .scramble-text {
-    font-size: clamp(1.08rem, 4.8vw, 1.45rem);
-    line-height: 1.34;
-    letter-spacing: 0.02em;
+    font-size: clamp(0.96rem, 3.2vw, 1.12rem);
+    line-height: 1.42;
+    letter-spacing: 0.006em;
   }
 
   .auth-avatar-picker {
@@ -9920,9 +9920,9 @@ textarea:focus,
 
 @media (max-width: 520px) {
   .scramble-text {
-    font-size: clamp(1rem, 5.2vw, 1.32rem);
-    line-height: 1.32;
-    letter-spacing: 0.012em;
+    font-size: clamp(0.92rem, 3.85vw, 1.06rem);
+    line-height: 1.42;
+    letter-spacing: 0.004em;
   }
 
   .auth-profile-editor {

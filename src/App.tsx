@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { FormEvent, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import type {
   CfopPhase,
   F2lPairPhase,
@@ -27,8 +27,30 @@ import {
   updateCurrentUserPassword,
   updateCurrentUserProfile,
 } from "./lib/auth";
-import { getMyProfile, updateMyProfileDisplayName, type ProfileRow } from "./lib/admin";
+import { getMyProfile, updateMyProfileDetails, type ProfileRow } from "./lib/admin";
+import {
+  getChatMessages,
+  getChatThreads,
+  getChatUnreadCount,
+  markChatMessagesRead,
+  sendFriendMessage,
+  subscribeToChatMessageChanges,
+  type ChatMessage,
+  type ChatThread,
+} from "./lib/chat";
 import { submitFeedbackReport, type FeedbackCategory } from "./lib/feedback";
+import {
+  deleteFriendConnection,
+  getFriendConnections,
+  getFriendNotificationCount,
+  getFriendPublicProfile,
+  markFriendRequestNotificationsSeen,
+  respondFriendRequest,
+  sendFriendRequest,
+  subscribeToFriendRequestChanges,
+  type FriendConnection,
+  type FriendPublicProfile,
+} from "./lib/friends";
 import { generateScramble } from "./lib/scramble";
 import {
   getMySolveSessions,
@@ -76,18 +98,22 @@ const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
-const DEFAULT_BRAND_LOGO_SOURCE = "/brand/avatar-timer-dash.png";
+const PROFILE_PUBLIC_ID_PATTERN = /^[a-z0-9_]{3,20}$/;
+const PROFILE_PUBLIC_ID_LOCK_MS = 3 * 24 * 60 * 60 * 1000;
+const DEFAULT_BRAND_LOGO_SOURCE = "/brand/cube-split-timer-logo-round.png";
+const FRIEND_ICON_SOURCE = "/friends/friend-icon.png";
+const CHAT_ICON_SOURCE = "/chat/chat-icon.png";
+const NOTIFICATION_ICON_SOURCE = "/inform/notification-icon.png";
 const DEFAULT_NETLIFY_MIGRATION_URL = "https://shintimer1123.netlify.app/";
 const NETLIFY_MIGRATION_BOOKMARKLET =
   'javascript:(async()=>{const k="cubeSplitTimer.solves.v1";const raw=localStorage.getItem(k)||"[]";let solves=[];try{solves=JSON.parse(raw)}catch{}const data=JSON.stringify({app:"cube-split-timer",version:1,exportedAt:new Date().toISOString(),solves});try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(data);alert("Cube Split Timerの履歴をコピーしました。Vercel版に貼り付けて読み込んでください。");return}}catch(e){}const ta=document.createElement("textarea");ta.value=data;ta.style.cssText="position:fixed;inset:16px;z-index:2147483647;width:calc(100% - 32px);height:45vh;font-size:16px";document.body.appendChild(ta);ta.focus();ta.select();alert("履歴データを表示しました。全選択されている内容をコピーしてください。");})();';
 const BRAND_LOGO_CANDIDATE_SOURCES = [
   DEFAULT_BRAND_LOGO_SOURCE,
-  "/brand/avatar-cube-simple.png",
-  "/brand/avatar-lightning-bolt.png",
-  "/brand/avatar-robot-blue.png",
-  "/brand/avatar-gamepad.png",
-  "/brand/avatar-star-smile.png",
-  "/brand/avatar-cube-cat.png",
+  "/brand/cube-split-timer-logo.png",
+  "/brand/cube-split-timer-logo-peace.png",
+  "/brand/cube-split-timer-logo-jump.png",
+  "/brand/cube-split-timer-logo-think.png",
+  "/brand/cube-split-timer-logo-wave.png",
 ] as const;
 const DEFAULT_PROFILE_AVATAR_ID = "timer-dash";
 const PROFILE_AVATAR_OPTIONS = [
@@ -146,7 +172,11 @@ type AppPage =
   | "analyzer"
   | "scramble"
   | "feedback"
+  | "friends"
+  | "friend-profile"
+  | "chat"
   | "login"
+  | "settings"
   | "admin"
   | "reset-password";
 
@@ -352,7 +382,10 @@ const APP_NAV_ITEMS: AppNavItem[] = [
   { key: "history", label: "履歴", path: "/history" },
   { key: "analysis", label: "分析", path: "/analysis" },
   { key: "practice", label: "練習", path: "/practice" },
+  { key: "friends", label: "フレンド", path: "/friends" },
+  { key: "chat", label: "チャット", path: "/chat" },
   { key: "help", label: "ヘルプ", path: "/help" },
+  { key: "settings", label: "設定", path: "/settings" },
   { key: "feedback", label: "意見箱", path: "/feedback" },
 ];
 
@@ -376,7 +409,10 @@ const MOBILE_MORE_NAV_ITEMS: AppNavItem[] = [
   { key: "history", label: "履歴", path: "/history" },
   { key: "analysis", label: "分析", path: "/analysis" },
   { key: "practice", label: "練習", path: "/practice" },
+  { key: "friends", label: "フレンド", path: "/friends" },
+  { key: "chat", label: "チャット", path: "/chat" },
   { key: "help", label: "ヘルプ", path: "/help" },
+  { key: "settings", label: "設定", path: "/settings" },
   { key: "feedback", label: "意見箱", path: "/feedback" },
 ];
 
@@ -394,6 +430,34 @@ function getMobilePrimaryNavKey(activePage: AppPage): MobilePrimaryNavKey {
   }
 
   return "more";
+}
+
+function isNavItemCurrent(activePage: AppPage, itemKey: AppPage): boolean {
+  if (activePage === "friend-profile" && itemKey === "friends") {
+    return true;
+  }
+
+  return activePage === itemKey;
+}
+
+function getNavNotificationCount(
+  itemKey: AppPage,
+  friendNotificationCount: number,
+  chatUnreadCount: number,
+): number {
+  if (itemKey === "friends") {
+    return friendNotificationCount;
+  }
+
+  if (itemKey === "chat") {
+    return chatUnreadCount;
+  }
+
+  return 0;
+}
+
+function formatBadgeCount(count: number): string {
+  return count > 99 ? "99+" : String(count);
 }
 
 function getLocationInfo(): LocationInfo {
@@ -416,8 +480,16 @@ function getLocationInfo(): LocationInfo {
     page = "scramble";
   } else if (pathname === "/feedback") {
     page = "feedback";
+  } else if (pathname.startsWith("/friends/")) {
+    page = "friend-profile";
+  } else if (pathname === "/friends") {
+    page = "friends";
+  } else if (pathname === "/chat" || pathname.startsWith("/chat/")) {
+    page = "chat";
   } else if (pathname === "/login") {
     page = "login";
+  } else if (pathname === "/settings") {
+    page = "settings";
   } else if (pathname === "/admin") {
     page = "admin";
   } else if (pathname === "/reset-password") {
@@ -435,6 +507,19 @@ function getHelpTopicId(hash: string): string {
   const topicId = hash.replace("#", "");
 
   return HELP_TOPICS.some((topic) => topic.id === topicId) ? topicId : "overview";
+}
+
+function getFriendProfilePublicIdFromPath(path: string): string {
+  const rawPublicId = path.replace(/^\/friends\/?/, "").split("/")[0] ?? "";
+
+  return normalizeFriendPublicId(decodeURIComponent(rawPublicId));
+}
+
+function getChatPublicIdFromPath(path: string): string | null {
+  const rawPublicId = path.replace(/^\/chat\/?/, "").split("/")[0] ?? "";
+  const normalizedPublicId = normalizeFriendPublicId(decodeURIComponent(rawPublicId));
+
+  return normalizedPublicId || null;
 }
 
 function hasSeenTutorial(): boolean {
@@ -564,6 +649,39 @@ function getAuthUserDisplayName(user: AuthUser): string {
   }
 
   return "";
+}
+
+function normalizeProfilePublicId(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function getAuthUserPublicId(user: AuthUser | null): string {
+  const publicId = user?.user_metadata?.public_id;
+
+  return typeof publicId === "string" ? normalizeProfilePublicId(publicId) : "";
+}
+
+function getProfilePublicIdUnlockDate(profile: ProfileRow | null): Date | null {
+  if (!profile?.public_id_changed_at) {
+    return null;
+  }
+
+  const changedAt = new Date(profile.public_id_changed_at);
+
+  if (Number.isNaN(changedAt.getTime())) {
+    return null;
+  }
+
+  return new Date(changedAt.getTime() + PROFILE_PUBLIC_ID_LOCK_MS);
+}
+
+function formatProfilePublicIdUnlockDate(date: Date): string {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function isProfileAvatarId(value: unknown): value is ProfileAvatarId {
@@ -867,6 +985,8 @@ interface GlobalAppNavProps {
   authAvatarSource: string;
   isAuthLoading: boolean;
   isSignedIn: boolean;
+  friendNotificationCount: number;
+  chatUnreadCount: number;
 }
 
 function GlobalAppNav({
@@ -878,6 +998,8 @@ function GlobalAppNav({
   authAvatarSource,
   isAuthLoading,
   isSignedIn,
+  friendNotificationCount,
+  chatUnreadCount,
 }: GlobalAppNavProps) {
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
   const [brandLogoSource, setBrandLogoSource] = useState(DEFAULT_BRAND_LOGO_SOURCE);
@@ -888,6 +1010,7 @@ function GlobalAppNav({
     ? [...MOBILE_MORE_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
     : MOBILE_MORE_NAV_ITEMS;
   const mobileActiveKey = getMobilePrimaryNavKey(activePage);
+  const mobileHiddenNotificationCount = friendNotificationCount + chatUnreadCount;
   const accountLabel = isAuthLoading ? "Account" : isSignedIn ? authLabel : "ログイン";
 
   useEffect(() => {
@@ -934,7 +1057,12 @@ function GlobalAppNav({
         </button>
         <div className="global-nav-links">
           {desktopItems.map((item) => {
-            const isCurrent = activePage === item.key;
+            const isCurrent = isNavItemCurrent(activePage, item.key);
+            const badgeCount = getNavNotificationCount(
+              item.key,
+              friendNotificationCount,
+              chatUnreadCount,
+            );
 
             return (
               <button
@@ -943,7 +1071,12 @@ function GlobalAppNav({
                 aria-current={isCurrent ? "page" : undefined}
                 onClick={() => handleNavigate(item.path)}
               >
-                {item.label}
+                <span className="nav-link-label">{item.label}</span>
+                {badgeCount > 0 && (
+                  <span className="nav-notification-badge" aria-label={`未読通知 ${badgeCount}件`}>
+                    {formatBadgeCount(badgeCount)}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -1002,6 +1135,11 @@ function GlobalAppNav({
                 aria-hidden="true"
               />
               <span>{item.label}</span>
+              {isMore && mobileHiddenNotificationCount > 0 && (
+                <span className="mobile-tab-notification-badge" aria-label={`未読通知 ${mobileHiddenNotificationCount}件`}>
+                  {formatBadgeCount(mobileHiddenNotificationCount)}
+                </span>
+              )}
             </button>
           );
         })}
@@ -1031,7 +1169,12 @@ function GlobalAppNav({
             </div>
             <div className="mobile-more-grid">
               {mobileMoreItems.map((item) => {
-                const isCurrent = activePage === item.key;
+                const isCurrent = isNavItemCurrent(activePage, item.key);
+                const badgeCount = getNavNotificationCount(
+                  item.key,
+                  friendNotificationCount,
+                  chatUnreadCount,
+                );
 
                 return (
                   <button
@@ -1040,7 +1183,12 @@ function GlobalAppNav({
                     aria-current={isCurrent ? "page" : undefined}
                     onClick={() => handleNavigate(item.path)}
                   >
-                    {item.label}
+                    <span className="nav-link-label">{item.label}</span>
+                    {badgeCount > 0 && (
+                      <span className="nav-notification-badge" aria-label={`未読通知 ${badgeCount}件`}>
+                        {formatBadgeCount(badgeCount)}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1071,12 +1219,22 @@ export default function App() {
   const [lastSavedSolveId, setLastSavedSolveId] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<UndoState | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const [friendShareSolve, setFriendShareSolve] = useState<SolveRecord | null>(null);
+  const [friendShareFriends, setFriendShareFriends] = useState<FriendConnection[]>([]);
+  const [friendShareSelectedPublicId, setFriendShareSelectedPublicId] = useState("");
+  const [friendShareStatus, setFriendShareStatus] = useState<
+    "idle" | "loading" | "sending" | "success" | "error"
+  >("idle");
+  const [friendShareMessage, setFriendShareMessage] = useState("");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authProfile, setAuthProfile] = useState<ProfileRow | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
   const [timerSidePanelTab, setTimerSidePanelTab] = useState<TimerSidePanelTab>("history");
+  const [friendNotificationCount, setFriendNotificationCount] = useState(0);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
   const [timerState, setTimerState] = useState<TimerState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -1364,6 +1522,99 @@ export default function App() {
       isDisposed = true;
     };
   }, [authUser]);
+
+  const refreshFriendNotificationCount = useCallback(async () => {
+    if (!authUser || !isAuthConfigured()) {
+      setFriendNotificationCount(0);
+      setIsNotificationCenterOpen(false);
+      return;
+    }
+
+    try {
+      const nextCount = await getFriendNotificationCount();
+
+      setFriendNotificationCount(nextCount);
+    } catch {
+      setFriendNotificationCount(0);
+    }
+  }, [authUser]);
+
+  const refreshChatUnreadCount = useCallback(async () => {
+    if (!authUser || !isAuthConfigured()) {
+      setChatUnreadCount(0);
+      return;
+    }
+
+    try {
+      const nextCount = await getChatUnreadCount();
+
+      setChatUnreadCount(nextCount);
+    } catch {
+      setChatUnreadCount(0);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    void refreshFriendNotificationCount();
+  }, [refreshFriendNotificationCount]);
+
+  useEffect(() => {
+    void refreshChatUnreadCount();
+  }, [refreshChatUnreadCount]);
+
+  useEffect(() => {
+    if (!authUser || !isAuthConfigured()) {
+      return;
+    }
+
+    const refresh = () => {
+      void refreshFriendNotificationCount();
+    };
+    const unsubscribe = subscribeToFriendRequestChanges(authUser.id, refresh);
+    const intervalId = window.setInterval(refresh, 30000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      unsubscribe();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [authUser, refreshFriendNotificationCount]);
+
+  useEffect(() => {
+    if (!authUser || !isAuthConfigured()) {
+      return;
+    }
+
+    const refresh = () => {
+      void refreshChatUnreadCount();
+    };
+    const unsubscribe = subscribeToChatMessageChanges(authUser.id, refresh);
+    const intervalId = window.setInterval(refresh, 30000);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      unsubscribe();
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [authUser, refreshChatUnreadCount]);
 
   useEffect(() => {
     const draft = loadCurrentSolveDraft();
@@ -2344,6 +2595,100 @@ const handleTimerPointerCancel = useCallback(
     [shareText, stats],
   );
 
+  const closeFriendShareDialog = useCallback(() => {
+    setFriendShareSolve(null);
+    setFriendShareFriends([]);
+    setFriendShareSelectedPublicId("");
+    setFriendShareStatus("idle");
+    setFriendShareMessage("");
+  }, []);
+
+  const openFriendShareDialog = useCallback(
+    async (solve: SolveRecord) => {
+      if (solve.deletedAt !== null) {
+        return;
+      }
+
+      setFriendShareSolve(solve);
+      setFriendShareFriends([]);
+      setFriendShareSelectedPublicId("");
+
+      if (!isAuthConfigured()) {
+        setFriendShareStatus("error");
+        setFriendShareMessage("Supabase設定後にフレンドへ共有できます。");
+        return;
+      }
+
+      if (!authUser) {
+        setFriendShareStatus("error");
+        setFriendShareMessage("ログインするとフレンドへ共有できます。");
+        return;
+      }
+
+      setFriendShareStatus("loading");
+      setFriendShareMessage("フレンドを読み込んでいます。");
+
+      try {
+        const connections = await getFriendConnections();
+        const nextFriends = connections.filter(
+          (connection) =>
+            connection.direction === "friend" &&
+            connection.status === "accepted" &&
+            Boolean(connection.publicId),
+        );
+
+        setFriendShareFriends(nextFriends);
+        setFriendShareSelectedPublicId(nextFriends[0]?.publicId ?? "");
+
+        if (nextFriends.length === 0) {
+          setFriendShareStatus("error");
+          setFriendShareMessage("共有できるフレンドがまだいません。");
+          return;
+        }
+
+        setFriendShareStatus("idle");
+        setFriendShareMessage("");
+      } catch (error) {
+        setFriendShareStatus("error");
+        setFriendShareMessage(getAuthErrorMessage(error));
+      }
+    },
+    [authUser],
+  );
+
+  const sendSolveToFriendChat = useCallback(async () => {
+    if (!friendShareSolve || !friendShareSelectedPublicId) {
+      setFriendShareStatus("error");
+      setFriendShareMessage("共有先のフレンドを選んでください。");
+      return;
+    }
+
+    const selectedFriend = friendShareFriends.find(
+      (friend) => friend.publicId === friendShareSelectedPublicId,
+    );
+    const friendName = selectedFriend
+      ? getFriendConnectionDisplayName(selectedFriend)
+      : `@${friendShareSelectedPublicId}`;
+
+    setFriendShareStatus("sending");
+    setFriendShareMessage("チャットへ送信しています。");
+
+    try {
+      await sendFriendMessage(friendShareSelectedPublicId, buildSolveShareText(friendShareSolve, stats));
+      setShareStatus(`${friendName}へチャットで共有しました。`);
+      closeFriendShareDialog();
+    } catch (error) {
+      setFriendShareStatus("error");
+      setFriendShareMessage(getAuthErrorMessage(error));
+    }
+  }, [
+    closeFriendShareDialog,
+    friendShareFriends,
+    friendShareSelectedPublicId,
+    friendShareSolve,
+    stats,
+  ]);
+
   const shareTodaySummary = useCallback(() => {
     void shareText(buildTodaySummaryShareText(todaySolves, todayStats), "今日のまとめ");
   }, [shareText, todaySolves, todayStats]);
@@ -2386,8 +2731,70 @@ const handleTimerPointerCancel = useCallback(
     navigateTo("/feedback");
   }, [navigateTo]);
 
+  const openFriends = useCallback(() => {
+    setIsNotificationCenterOpen(false);
+    navigateTo("/friends");
+  }, [navigateTo]);
+
+  const openFriendProfile = useCallback(
+    (publicId: string) => {
+      const normalizedPublicId = normalizeFriendPublicId(publicId);
+
+      if (!normalizedPublicId) {
+        return;
+      }
+
+      setIsNotificationCenterOpen(false);
+      navigateTo(`/friends/${encodeURIComponent(normalizedPublicId)}`);
+    },
+    [navigateTo],
+  );
+
+  const openChat = useCallback(() => {
+    setIsNotificationCenterOpen(false);
+    navigateTo("/chat");
+  }, [navigateTo]);
+
+  const openChatThread = useCallback(
+    (publicId: string) => {
+      const normalizedPublicId = normalizeFriendPublicId(publicId);
+
+      if (!normalizedPublicId) {
+        return;
+      }
+
+      setIsNotificationCenterOpen(false);
+      navigateTo(`/chat/${encodeURIComponent(normalizedPublicId)}`);
+    },
+    [navigateTo],
+  );
+
+  const toggleNotificationCenter = useCallback(() => {
+    setIsNotificationCenterOpen((currentValue) => !currentValue);
+  }, []);
+
+  const closeNotificationCenter = useCallback(() => {
+    setIsNotificationCenterOpen(false);
+  }, []);
+
+  const handleFriendNotificationsSeen = useCallback(() => {
+    setFriendNotificationCount(0);
+  }, []);
+
+  const handleFriendActivity = useCallback(() => {
+    void refreshFriendNotificationCount();
+  }, [refreshFriendNotificationCount]);
+
+  const handleChatActivity = useCallback(() => {
+    void refreshChatUnreadCount();
+  }, [refreshChatUnreadCount]);
+
   const openLogin = useCallback(() => {
     navigateTo("/login");
+  }, [navigateTo]);
+
+  const openSettings = useCallback(() => {
+    navigateTo("/settings");
   }, [navigateTo]);
 
   const openAdmin = useCallback(() => {
@@ -2525,6 +2932,8 @@ const handleTimerPointerCancel = useCallback(
       authAvatarSource={getAuthUserAvatarSource(authUser)}
       isAuthLoading={isAuthLoading}
       isSignedIn={Boolean(authUser)}
+      friendNotificationCount={friendNotificationCount}
+      chatUnreadCount={chatUnreadCount}
     />
   );
 
@@ -2658,11 +3067,65 @@ const handleTimerPointerCancel = useCallback(
     );
   }
 
+  if (locationInfo.page === "friends") {
+    return (
+      <>
+        {globalNav}
+        <FriendsPage
+          user={authUser}
+          isConfigured={isAuthConfigured()}
+          onBack={openTimer}
+          onOpenLogin={openLogin}
+          onOpenTimer={openTimer}
+          onOpenFriendProfile={openFriendProfile}
+          onFriendActivity={handleFriendActivity}
+        />
+      </>
+    );
+  }
+
+  if (locationInfo.page === "friend-profile") {
+    return (
+      <>
+        {globalNav}
+        <FriendProfilePage
+          user={authUser}
+          isConfigured={isAuthConfigured()}
+          publicId={getFriendProfilePublicIdFromPath(locationInfo.path)}
+          onBack={openFriends}
+          onOpenLogin={openLogin}
+          onOpenFriends={openFriends}
+          onOpenChatThread={openChatThread}
+        />
+      </>
+    );
+  }
+
+  if (locationInfo.page === "chat") {
+    return (
+      <>
+        {globalNav}
+        <ChatPage
+          user={authUser}
+          isConfigured={isAuthConfigured()}
+          publicId={getChatPublicIdFromPath(locationInfo.path)}
+          onBack={openTimer}
+          onOpenLogin={openLogin}
+          onOpenFriends={openFriends}
+          onOpenChat={openChat}
+          onOpenChatThread={openChatThread}
+          onChatActivity={handleChatActivity}
+        />
+      </>
+    );
+  }
+
   if (locationInfo.page === "login") {
     return (
       <>
         {globalNav}
         <AuthPage
+          view="account"
           user={authUser}
           profile={authProfile}
           isAdmin={authProfile?.role === "admin"}
@@ -2671,9 +3134,45 @@ const handleTimerPointerCancel = useCallback(
           onBack={openTimer}
           onOpenTimer={openTimer}
           onOpenAdmin={openAdmin}
+          onOpenSettings={openSettings}
           onSignedIn={(message) => {
             setAuthNotice(message);
             openTimer();
+          }}
+          onSignedOut={handleSignOut}
+          localSolveCount={activeSolves.length}
+          onExportLocalSolves={exportLocalSolves}
+          onImportLocalSolves={importLocalSolves}
+          onUploadLocalSolves={uploadLocalSolvesToAccount}
+          onImportAccountSolves={importAccountSolvesToLocal}
+          onProfileUpdated={(nextUser, nextProfile) => {
+            setAuthUser(nextUser);
+            setAuthProfile(nextProfile);
+            setAuthNotice("マイページを更新しました。");
+          }}
+        />
+      </>
+    );
+  }
+
+  if (locationInfo.page === "settings") {
+    return (
+      <>
+        {globalNav}
+        <AuthPage
+          view="settings"
+          user={authUser}
+          profile={authProfile}
+          isAdmin={authProfile?.role === "admin"}
+          isLoading={isAuthLoading}
+          isConfigured={isAuthConfigured()}
+          onBack={openLogin}
+          onOpenTimer={openTimer}
+          onOpenAdmin={openAdmin}
+          onOpenSettings={openSettings}
+          onSignedIn={(message) => {
+            setAuthNotice(message);
+            openSettings();
           }}
           onSignedOut={handleSignOut}
           localSolveCount={activeSolves.length}
@@ -2895,6 +3394,9 @@ const handleTimerPointerCancel = useCallback(
                       <button type="button" onClick={() => shareSolve(solve)}>
                         Share
                       </button>
+                      <button type="button" onClick={() => void openFriendShareDialog(solve)}>
+                        フレンド
+                      </button>
                       <button type="button" onClick={() => updatePenalty(solve.id, "+2")}>
                         {solve.penalty === "+2" ? "Clear +2" : "+2"}
                       </button>
@@ -2910,6 +3412,84 @@ const handleTimerPointerCancel = useCallback(
               </ol>
             )}
           </section>
+
+          {friendShareSolve && (
+            <div className="friend-share-overlay" role="presentation">
+              <section
+                className="friend-share-dialog"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="friend-share-title"
+              >
+                <div className="friend-share-head">
+                  <div>
+                    <p className="eyebrow">Share to chat</p>
+                    <h2 id="friend-share-title">フレンドへ共有</h2>
+                  </div>
+                  <button className="ghost-button" type="button" onClick={closeFriendShareDialog}>
+                    閉じる
+                  </button>
+                </div>
+
+                <div className="friend-share-solve">
+                  <span>共有するタイム</span>
+                  <strong>{formatSolveTime(friendShareSolve)}</strong>
+                  <small>{getModeLabel(friendShareSolve.mode)} / {formatDateTime(friendShareSolve.createdAt)}</small>
+                </div>
+
+                {friendShareStatus !== "idle" && (
+                  <div
+                    className={`feedback-status${friendShareStatus === "error" ? " feedback-status-error" : ""}`}
+                    role="status"
+                  >
+                    {friendShareMessage}
+                  </div>
+                )}
+
+                {friendShareFriends.length > 0 && (
+                  <>
+                    <label className="friend-share-select">
+                      共有先
+                      <select
+                        value={friendShareSelectedPublicId}
+                        onChange={(event) => setFriendShareSelectedPublicId(event.currentTarget.value)}
+                      >
+                        {friendShareFriends.map((friend) => (
+                          <option value={friend.publicId ?? ""} key={friend.requestId}>
+                            {getFriendConnectionDisplayName(friend)}
+                            {friend.publicId ? ` (@${friend.publicId})` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="friend-share-preview" aria-label="送信内容プレビュー">
+                      <span>送信内容</span>
+                      <pre>{buildSolveShareText(friendShareSolve, stats)}</pre>
+                    </div>
+                  </>
+                )}
+
+                <div className="friend-share-actions">
+                  <button className="ghost-button" type="button" onClick={closeFriendShareDialog}>
+                    キャンセル
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void sendSolveToFriendChat()}
+                    disabled={
+                      friendShareStatus === "loading" ||
+                      friendShareStatus === "sending" ||
+                      !friendShareSelectedPublicId
+                    }
+                  >
+                    {friendShareStatus === "sending" ? "送信中..." : "チャットへ送信"}
+                  </button>
+                </div>
+              </section>
+            </div>
+          )}
         </main>
       </>
     );
@@ -2929,6 +3509,26 @@ const handleTimerPointerCancel = useCallback(
           </div>
           <div className="header-actions">
             <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
+            <ImageIconButton
+              label="フレンドを開く"
+              source={FRIEND_ICON_SOURCE}
+              tone="friend"
+              onClick={openFriends}
+            />
+            <ImageIconButton
+              label="チャットを開く"
+              source={CHAT_ICON_SOURCE}
+              tone="chat"
+              badgeCount={chatUnreadCount}
+              onClick={openChat}
+            />
+            <ImageIconButton
+              label="通知センターを開く"
+              source={NOTIFICATION_ICON_SOURCE}
+              badgeCount={friendNotificationCount + chatUnreadCount}
+              isActive={isNotificationCenterOpen}
+              onClick={toggleNotificationCenter}
+            />
             <div className="theme-control" aria-label="Theme setting">
               <label htmlFor="theme-select">Theme</label>
               <select
@@ -2943,6 +3543,21 @@ const handleTimerPointerCancel = useCallback(
             </div>
           </div>
         </header>
+
+      {isNotificationCenterOpen && (
+        <NotificationCenter
+          user={authUser}
+          isConfigured={isAuthConfigured()}
+          onClose={closeNotificationCenter}
+          onOpenLogin={openLogin}
+          onOpenFriends={openFriends}
+          onOpenFriendProfile={openFriendProfile}
+          onOpenChat={openChat}
+          chatUnreadCount={chatUnreadCount}
+          onNotificationsSeen={handleFriendNotificationsSeen}
+          onFriendActivity={handleFriendActivity}
+        />
+      )}
 
       {draftMessage && (
         <div className="notice" role="status">
@@ -3105,6 +3720,44 @@ function HelpButton({ label, onClick }: HelpButtonProps) {
   );
 }
 
+interface ImageIconButtonProps {
+  label: string;
+  source: string;
+  onClick: () => void;
+  badgeCount?: number;
+  isActive?: boolean;
+  tone?: "default" | "friend" | "chat";
+}
+
+function ImageIconButton({
+  label,
+  source,
+  onClick,
+  badgeCount = 0,
+  isActive = false,
+  tone = "default",
+}: ImageIconButtonProps) {
+  const hasBadge = badgeCount > 0;
+
+  return (
+    <button
+      className={`image-icon-button image-icon-button-${tone}${isActive ? " image-icon-button-active" : ""}`}
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-pressed={isActive ? true : undefined}
+      onClick={onClick}
+    >
+      <img src={source} alt="" aria-hidden="true" />
+      {hasBadge && (
+        <span className="notification-badge" aria-label={`未読通知 ${badgeCount}件`}>
+          {badgeCount > 99 ? "99+" : badgeCount}
+        </span>
+      )}
+    </button>
+  );
+}
+
 interface TutorialDialogProps {
   onClose: () => void;
   onOpenHelp: () => void;
@@ -3142,6 +3795,7 @@ function TutorialDialog({ onClose, onOpenHelp }: TutorialDialogProps) {
 type AuthFormMode = "signIn" | "signUp";
 
 interface AuthPageProps {
+  view: "account" | "settings";
   user: AuthUser | null;
   profile: ProfileRow | null;
   isAdmin: boolean;
@@ -3151,6 +3805,7 @@ interface AuthPageProps {
   onBack: () => void;
   onOpenTimer: () => void;
   onOpenAdmin: () => void;
+  onOpenSettings: () => void;
   onSignedIn: (message: string) => void;
   onSignedOut: () => void | Promise<void>;
   onExportLocalSolves: () => Promise<void>;
@@ -3169,6 +3824,7 @@ function getAuthErrorMessage(error: unknown): string {
 }
 
 function AuthPage({
+  view,
   user,
   profile,
   isAdmin,
@@ -3178,6 +3834,7 @@ function AuthPage({
   onBack,
   onOpenTimer,
   onOpenAdmin,
+  onOpenSettings,
   onSignedIn,
   onSignedOut,
   onExportLocalSolves,
@@ -3201,6 +3858,7 @@ function AuthPage({
   const [accountStatus, setAccountStatus] = useState<"idle" | "success" | "error">("idle");
   const [accountStatusMessage, setAccountStatusMessage] = useState("");
   const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [profilePublicId, setProfilePublicId] = useState("");
   const [profileAvatarId, setProfileAvatarId] =
     useState<ProfileAvatarId>(DEFAULT_PROFILE_AVATAR_ID);
   const [profileStatus, setProfileStatus] = useState<"idle" | "success" | "error">("idle");
@@ -3220,10 +3878,20 @@ function AuthPage({
     ? authIdentities.map(getAuthIdentityLabel).join(" / ")
     : "未確認";
   const profileAvatarOption = getProfileAvatarOption(profileAvatarId);
+  const isSettingsView = view === "settings";
+  const normalizedProfilePublicId = normalizeProfilePublicId(profilePublicId);
+  const publicIdUnlockDate = getProfilePublicIdUnlockDate(profile);
+  const isPublicIdLocked =
+    Boolean(profile?.public_id) &&
+    (publicIdUnlockDate ? publicIdUnlockDate.getTime() > Date.now() : false);
+  const publicIdHelpText = isPublicIdLocked && publicIdUnlockDate
+    ? `変更は${formatProfilePublicIdUnlockDate(publicIdUnlockDate)}以降にできます。`
+    : "3〜20文字。英小文字・数字・_ が使えます。変更後3日間は変えられません。";
 
   useEffect(() => {
     if (!user) {
       setProfileDisplayName("");
+      setProfilePublicId("");
       setProfileAvatarId(DEFAULT_PROFILE_AVATAR_ID);
       setProfileStatus("idle");
       setProfileStatusMessage("");
@@ -3231,6 +3899,7 @@ function AuthPage({
     }
 
     setProfileDisplayName(profile?.display_name ?? getAuthUserDisplayName(user));
+    setProfilePublicId(profile?.public_id ?? getAuthUserPublicId(user));
     setProfileAvatarId(getAuthUserAvatarId(user));
     setProfileStatus("idle");
     setProfileStatusMessage("");
@@ -3293,19 +3962,42 @@ function AuthPage({
       return;
     }
 
+    if (normalizedProfilePublicId && !PROFILE_PUBLIC_ID_PATTERN.test(normalizedProfilePublicId)) {
+      setProfileStatus("error");
+      setProfileStatusMessage("ユーザーIDは3〜20文字の英小文字・数字・_で入力してください。");
+      return;
+    }
+
+    if (
+      isPublicIdLocked &&
+      normalizedProfilePublicId !== (profile?.public_id ?? "") &&
+      publicIdUnlockDate
+    ) {
+      setProfileStatus("error");
+      setProfileStatusMessage(
+        `ユーザーIDは${formatProfilePublicIdUnlockDate(publicIdUnlockDate)}以降に変更できます。`,
+      );
+      return;
+    }
+
     setIsSavingProfile(true);
     setProfileStatus("idle");
     setProfileStatusMessage("");
 
     try {
-      const [nextUser, nextProfile] = await Promise.all([
-        updateCurrentUserProfile(trimmedDisplayName, profileAvatarId),
-        updateMyProfileDisplayName(trimmedDisplayName),
-      ]);
+      const nextProfile = await updateMyProfileDetails(
+        trimmedDisplayName,
+        normalizedProfilePublicId || null,
+      );
+      const nextUser = await updateCurrentUserProfile(
+        trimmedDisplayName,
+        profileAvatarId,
+        nextProfile.public_id,
+      );
 
       onProfileUpdated(nextUser, nextProfile);
       setProfileStatus("success");
-      setProfileStatusMessage("ユーザー名とアイコンを保存しました。");
+      setProfileStatusMessage("ユーザー名・ユーザーID・アイコンを保存しました。");
     } catch (error) {
       setProfileStatus("error");
       setProfileStatusMessage(getAuthErrorMessage(error));
@@ -3542,8 +4234,8 @@ function AuthPage({
     <main className="app-shell auth-page">
       <header className="app-header auth-header">
         <div>
-          <p className="eyebrow">Account</p>
-          <h1>ログイン</h1>
+          <p className="eyebrow">{isSettingsView ? "Settings" : "Account"}</p>
+          <h1>{isSettingsView ? "設定" : user ? "マイページ" : "ログイン"}</h1>
         </div>
         <div className="header-actions">
           <button className="ghost-button" type="button" onClick={onBack}>
@@ -3569,6 +4261,71 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </pre>
         </section>
       ) : user ? (
+        isSettingsView ? (
+          <section className="auth-card" aria-label="Account settings">
+            <div>
+              <p className="eyebrow">Account Settings</p>
+              <h2>アカウント設定</h2>
+              <p className="auth-lead">
+                ログイン方法の連携、履歴の移行、ログアウトはここでまとめて管理します。
+              </p>
+            </div>
+
+            {accountStatus !== "idle" && (
+              <div className={`feedback-status feedback-status-${accountStatus}`} role="status">
+                {accountStatusMessage}
+              </div>
+            )}
+
+            <div className="auth-link-panel">
+              <div>
+                <p className="eyebrow">Login methods</p>
+                <h3>Googleアカウント連携</h3>
+                <p>
+                  連携済み:{" "}
+                  <strong>{isLoadingAuthIdentities ? "確認中..." : authIdentityLabel}</strong>
+                </p>
+                <p>
+                  今のアカウントにGoogleログインを追加します。連携後はメール/パスワードでもGoogleでも同じ履歴へ入れます。
+                </p>
+              </div>
+              <button
+                className={hasGoogleIdentity ? "ghost-button" : "auth-provider-button"}
+                type="button"
+                onClick={() => void handleLinkGoogleIdentity()}
+                disabled={
+                  hasGoogleIdentity ||
+                  isLoadingAuthIdentities ||
+                  isLinkingGoogleIdentity
+                }
+              >
+                <span className="auth-provider-mark" aria-hidden="true">G</span>
+                {hasGoogleIdentity
+                  ? "Google連携済み"
+                  : isLinkingGoogleIdentity
+                    ? "Googleへ移動中..."
+                    : "Googleアカウントを連携"}
+              </button>
+            </div>
+
+            <div className="feedback-actions">
+              <button className="primary-button" type="button" onClick={onOpenTimer}>
+                Timerへ戻る
+              </button>
+              <button className="ghost-button" type="button" onClick={onBack}>
+                マイページへ
+              </button>
+              {isAdmin && (
+                <button className="ghost-button" type="button" onClick={onOpenAdmin}>
+                  管理者画面
+                </button>
+              )}
+              <button className="ghost-button" type="button" onClick={() => void onSignedOut()}>
+                ログアウト
+              </button>
+            </div>
+          </section>
+        ) : (
         <section className="auth-card" aria-label="Current account">
           <p className="eyebrow">Signed in</p>
           <h2>{getAuthUserLabel(user)}</h2>
@@ -3579,6 +4336,9 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
                 <p className="eyebrow">My Page</p>
                 <h3>{profileDisplayName.trim() || getAuthUserLabel(user)}</h3>
                 <span>{profileAvatarOption.label}</span>
+                {normalizedProfilePublicId && (
+                  <strong className="auth-profile-public-id">@{normalizedProfilePublicId}</strong>
+                )}
               </div>
             </div>
 
@@ -3596,6 +4356,27 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
                 placeholder="例: shinta"
                 onChange={(event) => setProfileDisplayName(event.currentTarget.value)}
               />
+            </label>
+
+            <label className="auth-profile-name">
+              ユーザーID
+              <div className="auth-profile-id-input">
+                <span>@</span>
+                <input
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  disabled={isPublicIdLocked}
+                  inputMode="text"
+                  maxLength={20}
+                  pattern="[a-z0-9_]{3,20}"
+                  value={profilePublicId}
+                  placeholder="例: shinta1123"
+                  onChange={(event) =>
+                    setProfilePublicId(event.currentTarget.value.trim().toLowerCase())
+                  }
+                />
+              </div>
+              <small>{publicIdHelpText}</small>
             </label>
 
             <div className="auth-avatar-picker" aria-label="アイコンを選択">
@@ -3625,11 +4406,15 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </section>
           <div className="auth-account-panel">
             <p>
+              <span>Public ID</span>
+              <strong>{profile?.public_id ? `@${profile.public_id}` : "未設定"}</strong>
+            </p>
+            <p>
               <span>Email</span>
               <strong>{user.email ?? "未設定"}</strong>
             </p>
             <p>
-              <span>User ID</span>
+              <span>Internal ID</span>
               <strong>{user.id}</strong>
             </p>
           </div>
@@ -3637,55 +4422,21 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             ログイン中は、この端末の履歴をアカウントへ自動保存し、
             アカウント履歴も履歴画面へ自動表示します。
           </p>
-          {accountStatus !== "idle" && (
-            <div className={`feedback-status feedback-status-${accountStatus}`} role="status">
-              {accountStatusMessage}
-            </div>
-          )}
-          <div className="auth-link-panel">
-            <div>
-              <p className="eyebrow">Login methods</p>
-              <h3>Googleアカウント連携</h3>
-              <p>
-                連携済み:{" "}
-                <strong>{isLoadingAuthIdentities ? "確認中..." : authIdentityLabel}</strong>
-              </p>
-              <p>
-                今のアカウントにGoogleログインを追加します。連携後はメール/パスワードでもGoogleでも同じ履歴へ入れます。
-              </p>
-            </div>
-            <button
-              className={hasGoogleIdentity ? "ghost-button" : "auth-provider-button"}
-              type="button"
-              onClick={() => void handleLinkGoogleIdentity()}
-              disabled={
-                hasGoogleIdentity ||
-                isLoadingAuthIdentities ||
-                isLinkingGoogleIdentity
-              }
-            >
-              <span className="auth-provider-mark" aria-hidden="true">G</span>
-              {hasGoogleIdentity
-                ? "Google連携済み"
-                : isLinkingGoogleIdentity
-                  ? "Googleへ移動中..."
-                  : "Googleアカウントを連携"}
-            </button>
-          </div>
           <div className="feedback-actions">
             <button className="primary-button" type="button" onClick={onOpenTimer}>
               Timerへ戻る
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenSettings}>
+              設定を開く
             </button>
             {isAdmin && (
               <button className="ghost-button" type="button" onClick={onOpenAdmin}>
                 管理者画面
               </button>
             )}
-            <button className="ghost-button" type="button" onClick={() => void onSignedOut()}>
-              ログアウト
-            </button>
           </div>
         </section>
+        )
       ) : (
         <section className="auth-card" aria-label="Login form">
           <div>
@@ -3810,6 +4561,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
         </section>
       )}
 
+      {isSettingsView && (
       <section className="auth-card auth-data-card" aria-label="Local data transfer">
         <div>
           <p className="eyebrow">Data Transfer</p>
@@ -3942,6 +4694,1061 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </button>
         </div>
       </section>
+      )}
+    </main>
+  );
+}
+
+interface FriendsPageProps {
+  user: AuthUser | null;
+  isConfigured: boolean;
+  onBack: () => void;
+  onOpenLogin: () => void;
+  onOpenTimer: () => void;
+  onOpenFriendProfile: (publicId: string) => void;
+  onFriendActivity: () => void;
+}
+
+function normalizeFriendPublicId(value: string): string {
+  return value.trim().replace(/^@/, "").toLowerCase();
+}
+
+function getFriendConnectionDisplayName(connection: FriendConnection): string {
+  return connection.displayName?.trim() || connection.publicId || "Cube Friend";
+}
+
+function getFriendConnectionMeta(connection: FriendConnection): string {
+  if (connection.direction === "incoming") {
+    return `申請日 ${formatDateTime(connection.createdAt)}`;
+  }
+
+  if (connection.direction === "outgoing") {
+    return `送信日 ${formatDateTime(connection.createdAt)}`;
+  }
+
+  return `フレンド追加日 ${formatDateTime(connection.respondedAt ?? connection.createdAt)}`;
+}
+
+interface FriendConnectionRowProps {
+  connection: FriendConnection;
+  children: ReactNode;
+  onOpenProfile?: (publicId: string) => void;
+}
+
+function FriendConnectionRow({
+  connection,
+  children,
+  onOpenProfile,
+}: FriendConnectionRowProps) {
+  const avatarOption = getProfileAvatarOption(connection.avatarId);
+  const canOpenProfile = Boolean(connection.publicId && onOpenProfile);
+  const handleOpenProfile = () => {
+    if (!connection.publicId || !onOpenProfile) {
+      return;
+    }
+
+    onOpenProfile(connection.publicId);
+  };
+
+  return (
+    <article className="friend-row">
+      <button
+        className="friend-profile-link"
+        type="button"
+        onClick={handleOpenProfile}
+        disabled={!canOpenProfile}
+      >
+        <img src={avatarOption.source} alt="" aria-hidden="true" loading="lazy" />
+        <span>
+          <strong>{getFriendConnectionDisplayName(connection)}</strong>
+          <em>{connection.publicId ? `@${connection.publicId}` : "ID未設定"}</em>
+          <small>{getFriendConnectionMeta(connection)}</small>
+        </span>
+      </button>
+      <div className="friend-row-actions">{children}</div>
+    </article>
+  );
+}
+
+interface NotificationCenterProps {
+  user: AuthUser | null;
+  isConfigured: boolean;
+  onClose: () => void;
+  onOpenLogin: () => void;
+  onOpenFriends: () => void;
+  onOpenFriendProfile: (publicId: string) => void;
+  onOpenChat: () => void;
+  chatUnreadCount: number;
+  onNotificationsSeen: () => void;
+  onFriendActivity: () => void;
+}
+
+function NotificationCenter({
+  user,
+  isConfigured,
+  onClose,
+  onOpenLogin,
+  onOpenFriends,
+  onOpenFriendProfile,
+  onOpenChat,
+  chatUnreadCount,
+  onNotificationsSeen,
+  onFriendActivity,
+}: NotificationCenterProps) {
+  const [incomingRequests, setIncomingRequests] = useState<FriendConnection[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+
+  const loadNotifications = useCallback(async () => {
+    if (!isConfigured || !user) {
+      setIncomingRequests([]);
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage("");
+
+    try {
+      const connections = await getFriendConnections();
+      const nextIncomingRequests = connections.filter(
+        (connection) => connection.direction === "incoming" && connection.status === "pending",
+      );
+
+      setIncomingRequests(nextIncomingRequests);
+      await markFriendRequestNotificationsSeen();
+      onNotificationsSeen();
+    } catch (error) {
+      setMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isConfigured, onNotificationsSeen, user]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  const handleRespond = async (connection: FriendConnection, accept: boolean) => {
+    setBusyConnectionId(connection.requestId);
+    setMessage("");
+
+    try {
+      await respondFriendRequest(connection.requestId, accept);
+      setIncomingRequests((currentRequests) =>
+        currentRequests.filter((currentRequest) => currentRequest.requestId !== connection.requestId),
+      );
+      setMessage(
+        accept
+          ? `${getFriendConnectionDisplayName(connection)} とフレンドになりました。`
+          : `${getFriendConnectionDisplayName(connection)} の申請を拒否しました。`,
+      );
+      onFriendActivity();
+    } catch (error) {
+      setMessage(getAuthErrorMessage(error));
+    } finally {
+      setBusyConnectionId(null);
+    }
+  };
+
+  return (
+    <section className="notification-center" aria-label="通知センター">
+      <div className="notification-center-head">
+        <div>
+          <p className="eyebrow">Notifications</p>
+          <h2>通知センター</h2>
+        </div>
+        <button className="ghost-button" type="button" onClick={onClose}>
+          閉じる
+        </button>
+      </div>
+
+      {!isConfigured ? (
+        <p className="notification-empty">Supabase設定後に通知を使えます。</p>
+      ) : !user ? (
+        <div className="notification-empty">
+          <p>ログインするとフレンド申請の通知を見られます。</p>
+          <button className="primary-button" type="button" onClick={onOpenLogin}>
+            ログインへ
+          </button>
+        </div>
+      ) : (
+        <>
+          {message && <div className="feedback-status" role="status">{message}</div>}
+          {chatUnreadCount > 0 && (
+            <button className="notification-chat-link" type="button" onClick={onOpenChat}>
+              <img src={CHAT_ICON_SOURCE} alt="" aria-hidden="true" />
+              <span>
+                <strong>未読チャット {chatUnreadCount}件</strong>
+                <small>チャット一覧で確認できます。</small>
+              </span>
+            </button>
+          )}
+          {isLoading ? (
+            <p className="notification-empty">通知を読み込んでいます。</p>
+          ) : incomingRequests.length === 0 ? (
+            <p className="notification-empty">新しいフレンド申請はありません。</p>
+          ) : (
+            <div className="notification-list">
+              {incomingRequests.map((connection) => (
+                <FriendConnectionRow
+                  connection={connection}
+                  key={connection.requestId}
+                  onOpenProfile={onOpenFriendProfile}
+                >
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void handleRespond(connection, true)}
+                    disabled={busyConnectionId === connection.requestId}
+                  >
+                    承認
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void handleRespond(connection, false)}
+                    disabled={busyConnectionId === connection.requestId}
+                  >
+                    拒否
+                  </button>
+                </FriendConnectionRow>
+              ))}
+            </div>
+          )}
+          <button className="ghost-button" type="button" onClick={onOpenFriends}>
+            フレンド画面へ
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
+
+function FriendsPage({
+  user,
+  isConfigured,
+  onBack,
+  onOpenLogin,
+  onOpenTimer,
+  onOpenFriendProfile,
+  onFriendActivity,
+}: FriendsPageProps) {
+  const [connections, setConnections] = useState<FriendConnection[]>([]);
+  const [friendPublicId, setFriendPublicId] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [busyConnectionId, setBusyConnectionId] = useState<string | null>(null);
+
+  const loadConnections = useCallback(async () => {
+    if (!isConfigured || !user) {
+      setConnections([]);
+      return;
+    }
+
+    setStatus("loading");
+    setStatusMessage("フレンド情報を読み込んでいます。");
+
+    try {
+      const nextConnections = await getFriendConnections();
+
+      setConnections(nextConnections);
+      if (
+        nextConnections.some(
+          (connection) =>
+            connection.direction === "incoming" &&
+            connection.status === "pending" &&
+            connection.seenAt === null,
+        )
+      ) {
+        await markFriendRequestNotificationsSeen();
+        onFriendActivity();
+      }
+      setStatus("idle");
+      setStatusMessage("");
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    }
+  }, [isConfigured, onFriendActivity, user]);
+
+  useEffect(() => {
+    void loadConnections();
+  }, [loadConnections]);
+
+  const incomingRequests = connections.filter(
+    (connection) => connection.direction === "incoming" && connection.status === "pending",
+  );
+  const outgoingRequests = connections.filter(
+    (connection) => connection.direction === "outgoing" && connection.status === "pending",
+  );
+  const acceptedFriends = connections.filter(
+    (connection) => connection.direction === "friend" && connection.status === "accepted",
+  );
+
+  const handleSendRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedPublicId = normalizeFriendPublicId(friendPublicId);
+
+    if (!PROFILE_PUBLIC_ID_PATTERN.test(normalizedPublicId)) {
+      setStatus("error");
+      setStatusMessage("追加するユーザーIDは3〜20文字の英小文字・数字・_で入力してください。");
+      return;
+    }
+
+    setIsSendingRequest(true);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      const connection = await sendFriendRequest(normalizedPublicId);
+
+      setFriendPublicId("");
+      setStatus("success");
+      setStatusMessage(
+        connection.direction === "friend"
+          ? `@${connection.publicId ?? normalizedPublicId} とフレンドになりました。`
+          : `@${connection.publicId ?? normalizedPublicId} にフレンド申請を送りました。`,
+      );
+      await loadConnections();
+      onFriendActivity();
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSendingRequest(false);
+    }
+  };
+
+  const handleRespondRequest = async (connection: FriendConnection, accept: boolean) => {
+    setBusyConnectionId(connection.requestId);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await respondFriendRequest(connection.requestId, accept);
+      setStatus("success");
+      setStatusMessage(
+        accept
+          ? `${getFriendConnectionDisplayName(connection)} とフレンドになりました。`
+          : `${getFriendConnectionDisplayName(connection)} の申請を拒否しました。`,
+      );
+      await loadConnections();
+      onFriendActivity();
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setBusyConnectionId(null);
+    }
+  };
+
+  const handleDeleteConnection = async (connection: FriendConnection) => {
+    setBusyConnectionId(connection.requestId);
+    setStatus("idle");
+    setStatusMessage("");
+
+    try {
+      await deleteFriendConnection(connection.requestId);
+      setStatus("success");
+      setStatusMessage(
+        connection.direction === "outgoing"
+          ? `${getFriendConnectionDisplayName(connection)} への申請を取り消しました。`
+          : `${getFriendConnectionDisplayName(connection)} をフレンドから削除しました。`,
+      );
+      await loadConnections();
+      onFriendActivity();
+    } catch (error) {
+      setStatus("error");
+      setStatusMessage(getAuthErrorMessage(error));
+    } finally {
+      setBusyConnectionId(null);
+    }
+  };
+
+  return (
+    <main className="app-shell friends-page">
+      <header className="app-header friends-header">
+        <div>
+          <p className="eyebrow">Friends</p>
+          <h1>フレンド</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={onBack}>
+            戻る
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenTimer}>
+            Timerへ戻る
+          </button>
+        </div>
+      </header>
+
+      {!isConfigured ? (
+        <section className="friends-card">
+          <p className="eyebrow">Setup required</p>
+          <h2>Supabaseが未設定です</h2>
+          <p>フレンド申請と通知を使うにはSupabase設定が必要です。</p>
+        </section>
+      ) : !user ? (
+        <section className="friends-card">
+          <p className="eyebrow">Login required</p>
+          <h2>ログインすると使えます</h2>
+          <p>ユーザーIDでフレンド申請を送り、承認された相手を一覧で管理できます。</p>
+          <div className="feedback-actions">
+            <button className="primary-button" type="button" onClick={onOpenLogin}>
+              ログインへ
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          <section className="friends-card friends-add-card">
+            <div>
+              <p className="eyebrow">Add Friend</p>
+              <h2>@ユーザーIDで申請</h2>
+              <p>
+                マイページで設定したユーザーIDを入力してください。
+                例: <strong>@shinta1123</strong>
+              </p>
+            </div>
+
+            {status !== "idle" && (
+              <div
+                className={`feedback-status${status === "loading" ? "" : ` feedback-status-${status}`}`}
+                role="status"
+              >
+                {statusMessage}
+              </div>
+            )}
+
+            <form className="friends-add-form" onSubmit={handleSendRequest}>
+              <label>
+                フレンドID
+                <div className="auth-profile-id-input">
+                  <span>@</span>
+                  <input
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    inputMode="text"
+                    maxLength={20}
+                    pattern="[a-z0-9_]{3,20}"
+                    value={friendPublicId}
+                    placeholder="friend_id"
+                    onChange={(event) =>
+                      setFriendPublicId(normalizeFriendPublicId(event.currentTarget.value))
+                    }
+                  />
+                </div>
+              </label>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={isSendingRequest || !friendPublicId.trim()}
+              >
+                {isSendingRequest ? "送信中..." : "申請を送る"}
+              </button>
+            </form>
+          </section>
+
+          <section className="friends-card">
+            <div className="friends-section-head">
+              <div>
+                <p className="eyebrow">Requests</p>
+                <h2>届いた申請</h2>
+              </div>
+              <span>{incomingRequests.length}件</span>
+            </div>
+
+            {incomingRequests.length === 0 ? (
+              <p className="friends-empty">届いているフレンド申請はありません。</p>
+            ) : (
+              <div className="friends-list">
+                {incomingRequests.map((connection) => (
+                  <FriendConnectionRow
+                    connection={connection}
+                    key={connection.requestId}
+                    onOpenProfile={onOpenFriendProfile}
+                  >
+                    <button
+                      className="primary-button"
+                      type="button"
+                      onClick={() => void handleRespondRequest(connection, true)}
+                      disabled={busyConnectionId === connection.requestId}
+                    >
+                      承認
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void handleRespondRequest(connection, false)}
+                      disabled={busyConnectionId === connection.requestId}
+                    >
+                      拒否
+                    </button>
+                  </FriendConnectionRow>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="friends-card">
+            <div className="friends-section-head">
+              <div>
+                <p className="eyebrow">Friend List</p>
+                <h2>フレンド一覧</h2>
+              </div>
+              <button className="ghost-button" type="button" onClick={() => void loadConnections()}>
+                更新
+              </button>
+            </div>
+
+            {acceptedFriends.length === 0 ? (
+              <p className="friends-empty">まだフレンドはいません。</p>
+            ) : (
+              <div className="friends-list">
+                {acceptedFriends.map((connection) => (
+                  <FriendConnectionRow
+                    connection={connection}
+                    key={connection.requestId}
+                    onOpenProfile={onOpenFriendProfile}
+                  >
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void handleDeleteConnection(connection)}
+                      disabled={busyConnectionId === connection.requestId}
+                    >
+                      {busyConnectionId === connection.requestId ? "削除中..." : "削除"}
+                    </button>
+                  </FriendConnectionRow>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="friends-card">
+            <div className="friends-section-head">
+              <div>
+                <p className="eyebrow">Pending</p>
+                <h2>送信中の申請</h2>
+              </div>
+              <span>{outgoingRequests.length}件</span>
+            </div>
+
+            {outgoingRequests.length === 0 ? (
+              <p className="friends-empty">送信中のフレンド申請はありません。</p>
+            ) : (
+              <div className="friends-list">
+                {outgoingRequests.map((connection) => (
+                  <FriendConnectionRow
+                    connection={connection}
+                    key={connection.requestId}
+                    onOpenProfile={onOpenFriendProfile}
+                  >
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void handleDeleteConnection(connection)}
+                      disabled={busyConnectionId === connection.requestId}
+                    >
+                      {busyConnectionId === connection.requestId ? "取消中..." : "取り消す"}
+                    </button>
+                  </FriendConnectionRow>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
+interface FriendProfilePageProps {
+  user: AuthUser | null;
+  isConfigured: boolean;
+  publicId: string;
+  onBack: () => void;
+  onOpenLogin: () => void;
+  onOpenFriends: () => void;
+  onOpenChatThread: (publicId: string) => void;
+}
+
+function formatProfileTime(value: number | null): string {
+  return value === null ? "--" : formatTime(value);
+}
+
+function FriendProfilePage({
+  user,
+  isConfigured,
+  publicId,
+  onBack,
+  onOpenLogin,
+  onOpenFriends,
+  onOpenChatThread,
+}: FriendProfilePageProps) {
+  const [profile, setProfile] = useState<FriendPublicProfile | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!isConfigured || !user) {
+      setProfile(null);
+      return;
+    }
+
+    if (!PROFILE_PUBLIC_ID_PATTERN.test(publicId)) {
+      setProfile(null);
+      setStatus("error");
+      setMessage("ユーザーIDの形式が正しくありません。");
+      return;
+    }
+
+    let isDisposed = false;
+
+    setStatus("loading");
+    setMessage("プロフィールを読み込んでいます。");
+
+    getFriendPublicProfile(publicId)
+      .then((nextProfile) => {
+        if (!isDisposed) {
+          setProfile(nextProfile);
+          setStatus("idle");
+          setMessage("");
+        }
+      })
+      .catch((error) => {
+        if (!isDisposed) {
+          setProfile(null);
+          setStatus("error");
+          setMessage(getAuthErrorMessage(error));
+        }
+      });
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [isConfigured, publicId, user]);
+
+  const avatarOption = getProfileAvatarOption(profile?.avatarId);
+  const displayName = profile?.displayName?.trim() || profile?.publicId || "Cube Friend";
+
+  return (
+    <main className="app-shell friend-profile-page">
+      <header className="app-header friends-header">
+        <div>
+          <p className="eyebrow">Friend Profile</p>
+          <h1>プロフィール</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={onBack}>
+            フレンドへ
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenFriends}>
+            一覧を見る
+          </button>
+        </div>
+      </header>
+
+      {!isConfigured ? (
+        <section className="friends-card">
+          <p className="eyebrow">Setup required</p>
+          <h2>Supabaseが未設定です</h2>
+          <p>プロフィールを見るにはSupabase設定が必要です。</p>
+        </section>
+      ) : !user ? (
+        <section className="friends-card">
+          <p className="eyebrow">Login required</p>
+          <h2>ログインすると見られます</h2>
+          <p>フレンドのプロフィールを見るにはログインが必要です。</p>
+          <div className="feedback-actions">
+            <button className="primary-button" type="button" onClick={onOpenLogin}>
+              ログインへ
+            </button>
+          </div>
+        </section>
+      ) : status === "loading" ? (
+        <section className="friends-card">
+          <p className="eyebrow">Loading</p>
+          <h2>読み込み中</h2>
+          <p>{message}</p>
+        </section>
+      ) : status === "error" ? (
+        <section className="friends-card">
+          <p className="eyebrow">Error</p>
+          <h2>プロフィールを表示できません</h2>
+          <p>{message}</p>
+        </section>
+      ) : profile ? (
+        <section className="friend-profile-card">
+          <div className="friend-profile-hero">
+            <img src={avatarOption.source} alt="" aria-hidden="true" />
+            <div>
+              <p className="eyebrow">Player</p>
+              <h2>{displayName}</h2>
+              <p>{profile.publicId ? `@${profile.publicId}` : "ID未設定"}</p>
+            </div>
+          </div>
+
+          <div className="friend-profile-stats">
+            <div>
+              <span>最速タイム</span>
+              <strong>{formatProfileTime(profile.bestMs)}</strong>
+            </div>
+            <div>
+              <span>今日の最速</span>
+              <strong>{formatProfileTime(profile.todayBestMs)}</strong>
+            </div>
+          </div>
+
+          {profile.publicId && (
+            <button
+              className="primary-button friend-profile-chat-button"
+              type="button"
+              onClick={() => onOpenChatThread(profile.publicId ?? "")}
+            >
+              チャットを開く
+            </button>
+          )}
+        </section>
+      ) : (
+        <section className="friends-card">
+          <p className="eyebrow">Profile</p>
+          <h2>プロフィールがありません</h2>
+          <p>もう一度フレンド一覧から開いてください。</p>
+        </section>
+      )}
+    </main>
+  );
+}
+
+interface ChatPageProps {
+  user: AuthUser | null;
+  isConfigured: boolean;
+  publicId: string | null;
+  onBack: () => void;
+  onOpenLogin: () => void;
+  onOpenFriends: () => void;
+  onOpenChat: () => void;
+  onOpenChatThread: (publicId: string) => void;
+  onChatActivity: () => void;
+}
+
+function getChatDisplayName(thread: ChatThread): string {
+  return thread.displayName?.trim() || thread.publicId || "Cube Friend";
+}
+
+function getChatProfileDisplayName(profile: FriendPublicProfile): string {
+  return profile.displayName?.trim() || profile.publicId || "Cube Friend";
+}
+
+function ChatPage({
+  user,
+  isConfigured,
+  publicId,
+  onBack,
+  onOpenLogin,
+  onOpenFriends,
+  onOpenChat,
+  onOpenChatThread,
+  onChatActivity,
+}: ChatPageProps) {
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [profile, setProfile] = useState<FriendPublicProfile | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [draft, setDraft] = useState("");
+  const [status, setStatus] = useState<"idle" | "loading" | "error" | "success">("idle");
+  const [message, setMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const normalizedPublicId = publicId ? normalizeFriendPublicId(publicId) : null;
+  const isThreadView = Boolean(normalizedPublicId);
+
+  const scrollMessagesToEnd = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ block: "end" });
+    });
+  }, []);
+
+  const loadThreads = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!isConfigured || !user) {
+      setThreads([]);
+      return;
+    }
+
+    if (!options.silent) {
+      setStatus("loading");
+      setMessage("チャット一覧を読み込んでいます。");
+    }
+
+    try {
+      const nextThreads = await getChatThreads();
+
+      setThreads(nextThreads);
+      if (!options.silent) {
+        setStatus("idle");
+        setMessage("");
+      }
+      onChatActivity();
+    } catch (error) {
+      setStatus("error");
+      setMessage(getAuthErrorMessage(error));
+    }
+  }, [isConfigured, onChatActivity, user]);
+
+  const loadThread = useCallback(async (options: { silent?: boolean } = {}) => {
+    if (!isConfigured || !user || !normalizedPublicId) {
+      setProfile(null);
+      setMessages([]);
+      return;
+    }
+
+    if (!options.silent) {
+      setStatus("loading");
+      setMessage("チャットを読み込んでいます。");
+    }
+
+    try {
+      const [nextProfile, nextMessages] = await Promise.all([
+        getFriendPublicProfile(normalizedPublicId),
+        getChatMessages(normalizedPublicId),
+      ]);
+
+      setProfile(nextProfile);
+      setMessages(nextMessages);
+      await markChatMessagesRead(normalizedPublicId);
+      if (!options.silent) {
+        setStatus("idle");
+        setMessage("");
+      }
+      onChatActivity();
+      scrollMessagesToEnd();
+    } catch (error) {
+      setProfile(null);
+      setMessages([]);
+      setStatus("error");
+      setMessage(getAuthErrorMessage(error));
+    }
+  }, [isConfigured, normalizedPublicId, onChatActivity, scrollMessagesToEnd, user]);
+
+  useEffect(() => {
+    if (isThreadView) {
+      void loadThread();
+      return;
+    }
+
+    void loadThreads();
+  }, [isThreadView, loadThread, loadThreads]);
+
+  useEffect(() => {
+    if (!isThreadView || !user || !isConfigured) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadThread({ silent: true });
+    }, 6000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isConfigured, isThreadView, loadThread, user]);
+
+  useEffect(() => {
+    if (isThreadView || !user || !isConfigured) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadThreads({ silent: true });
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isConfigured, isThreadView, loadThreads, user]);
+
+  const handleSendMessage = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!normalizedPublicId) {
+      return;
+    }
+
+    const trimmedDraft = draft.trim();
+
+    if (!trimmedDraft) {
+      setStatus("error");
+      setMessage("メッセージを入力してください。");
+      return;
+    }
+
+    if (trimmedDraft.length > 1000) {
+      setStatus("error");
+      setMessage("メッセージは1000文字以内にしてください。");
+      return;
+    }
+
+    setIsSending(true);
+    setStatus("idle");
+    setMessage("");
+
+    try {
+      const sentMessage = await sendFriendMessage(normalizedPublicId, trimmedDraft);
+
+      setMessages((currentMessages) => [...currentMessages, sentMessage]);
+      setDraft("");
+      setStatus("success");
+      setMessage("送信しました。");
+      onChatActivity();
+      scrollMessagesToEnd();
+    } catch (error) {
+      setStatus("error");
+      setMessage(getAuthErrorMessage(error));
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const headerTitle = isThreadView ? "チャット" : "チャット一覧";
+
+  return (
+    <main className="app-shell chat-page">
+      <header className="app-header friends-header">
+        <div>
+          <p className="eyebrow">Chat</p>
+          <h1>{headerTitle}</h1>
+        </div>
+        <div className="header-actions">
+          <button className="ghost-button" type="button" onClick={isThreadView ? onOpenChat : onBack}>
+            {isThreadView ? "一覧へ" : "戻る"}
+          </button>
+          <button className="primary-button" type="button" onClick={onOpenFriends}>
+            フレンドへ
+          </button>
+        </div>
+      </header>
+
+      {!isConfigured ? (
+        <section className="friends-card">
+          <p className="eyebrow">Setup required</p>
+          <h2>Supabaseが未設定です</h2>
+          <p>チャットを使うにはSupabase設定が必要です。</p>
+        </section>
+      ) : !user ? (
+        <section className="friends-card">
+          <p className="eyebrow">Login required</p>
+          <h2>ログインすると使えます</h2>
+          <p>承認済みのフレンドと1対1チャットできます。</p>
+          <div className="feedback-actions">
+            <button className="primary-button" type="button" onClick={onOpenLogin}>
+              ログインへ
+            </button>
+          </div>
+        </section>
+      ) : isThreadView ? (
+        <section className="chat-card">
+          {profile && (
+            <div className="chat-thread-head">
+              <img src={getProfileAvatarOption(profile.avatarId).source} alt="" aria-hidden="true" />
+              <div>
+                <p className="eyebrow">Friend chat</p>
+                <h2>{getChatProfileDisplayName(profile)}</h2>
+                <p>{profile.publicId ? `@${profile.publicId}` : "ID未設定"}</p>
+              </div>
+            </div>
+          )}
+
+          {status !== "idle" && (
+            <div
+              className={`feedback-status${status === "loading" ? "" : ` feedback-status-${status}`}`}
+              role="status"
+            >
+              {message}
+            </div>
+          )}
+
+          <div className="chat-message-list" aria-label="メッセージ一覧">
+            {messages.length === 0 ? (
+              <p className="chat-empty">まだメッセージはありません。</p>
+            ) : (
+              messages.map((chatMessage) => {
+                const isMine = chatMessage.senderId === user.id;
+
+                return (
+                  <article
+                    className={isMine ? "chat-message chat-message-mine" : "chat-message"}
+                    key={chatMessage.messageId}
+                  >
+                    <p>{chatMessage.body}</p>
+                    <small>{formatDateTime(chatMessage.createdAt)}</small>
+                  </article>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <form className="chat-compose" onSubmit={handleSendMessage}>
+            <label>
+              メッセージ
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={draft}
+                placeholder="メッセージを書く"
+                onChange={(event) => setDraft(event.currentTarget.value)}
+              />
+            </label>
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={isSending || !draft.trim()}
+            >
+              {isSending ? "送信中..." : "送信"}
+            </button>
+          </form>
+        </section>
+      ) : (
+        <section className="chat-card">
+          {status !== "idle" && (
+            <div
+              className={`feedback-status${status === "loading" ? "" : ` feedback-status-${status}`}`}
+              role="status"
+            >
+              {message}
+            </div>
+          )}
+
+          {threads.length === 0 ? (
+            <div className="chat-empty-panel">
+              <p className="eyebrow">No chats</p>
+              <h2>チャットできるフレンドがいません</h2>
+              <p>フレンド申請が承認されると、ここにチャットが表示されます。</p>
+            </div>
+          ) : (
+            <div className="chat-thread-list">
+              {threads.map((thread) => (
+                <button
+                  className="chat-thread-row"
+                  type="button"
+                  key={thread.userId}
+                  onClick={() => thread.publicId && onOpenChatThread(thread.publicId)}
+                  disabled={!thread.publicId}
+                >
+                  <img src={getProfileAvatarOption(thread.avatarId).source} alt="" aria-hidden="true" />
+                  <span>
+                    <strong>{getChatDisplayName(thread)}</strong>
+                    <em>{thread.publicId ? `@${thread.publicId}` : "ID未設定"}</em>
+                    <small>{thread.lastMessage ?? "まだメッセージはありません。"}</small>
+                  </span>
+                  {thread.unreadCount > 0 && (
+                    <mark>{thread.unreadCount > 99 ? "99+" : thread.unreadCount}</mark>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </main>
   );
 }

@@ -147,11 +147,13 @@ export async function updateCurrentUserPassword(password: string): Promise<void>
 export async function updateCurrentUserProfile(
   displayName: string,
   avatarId: string,
+  publicId: string | null,
 ): Promise<AuthUser> {
   const { data, error } = await getSupabaseClient().auth.updateUser({
     data: {
       avatar_id: avatarId,
       display_name: displayName.trim() || null,
+      public_id: publicId?.trim() || null,
     },
   });
 

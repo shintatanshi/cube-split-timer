@@ -25,7 +25,9 @@ function getProfileLabel(profile: ProfileRow | null | undefined): string {
     return "Unknown user";
   }
 
-  return profile.display_name?.trim() || profile.email || profile.id;
+  const name = profile.display_name?.trim() || profile.email || profile.id;
+
+  return profile.public_id ? `${name} (@${profile.public_id})` : name;
 }
 
 function getSolveDisplayTime(solve: SolveSessionRow): string {

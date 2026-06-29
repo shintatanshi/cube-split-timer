@@ -69,6 +69,15 @@ export async function updateProfileRole(
 }
 
 export async function updateMyProfileDisplayName(displayName: string): Promise<ProfileRow> {
+  const currentProfile = await getMyProfile();
+
+  return updateMyProfileDetails(displayName, currentProfile?.public_id ?? null);
+}
+
+export async function updateMyProfileDetails(
+  displayName: string,
+  publicId: string | null,
+): Promise<ProfileRow> {
   const supabase = getSupabaseClient();
   const { data: authData, error: authError } = await supabase.auth.getUser();
 
@@ -80,36 +89,20 @@ export async function updateMyProfileDisplayName(displayName: string): Promise<P
     throw new Error("ログインが必要です。");
   }
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .update({ display_name: displayName.trim() || null })
-    .eq("id", authData.user.id)
-    .select("*")
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("update_my_profile", {
+    p_display_name: displayName.trim() || null,
+    p_public_id: publicId?.trim() || null,
+  });
 
   if (error) {
     throw error;
   }
 
-  if (data) {
-    return data;
+  if (!data) {
+    throw new Error("プロフィールを更新できませんでした。");
   }
 
-  const { data: insertedData, error: insertError } = await supabase
-    .from("profiles")
-    .insert({
-      id: authData.user.id,
-      email: authData.user.email ?? null,
-      display_name: displayName.trim() || null,
-    })
-    .select("*")
-    .single();
-
-  if (insertError) {
-    throw insertError;
-  }
-
-  return insertedData;
+  return data;
 }
 
 export async function getAdminSolveSessions(

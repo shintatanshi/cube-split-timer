@@ -1,0 +1,347 @@
+{
+ "generator": "tests/reference/xcross_reference.py",
+ "seed": 20261122,
+ "metric": "HTM",
+ "cases": [
+  {
+   "scramble": "F2 D2 L2 F U2 L D' L2 D2 R' L2 R2 B2 L' R L2 R2 B' F B2 R2 D' F' R2 U",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 7,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 7,
+    "B": 8,
+    "R": 7,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "L' D F' B' R F2 D2 L2 D' U2 R' L B' F2 R2 L D' B D' L R2 U' D' R L2",
+   "dSlots": {
+    "FR": 7,
+    "FL": 9,
+    "BL": 7,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 7,
+    "B": 8,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "D B' D F' B' U B2 L' U R U' D F' D2 R2 F B2 L2 B D' R2 U2 L2 B' U'",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 8,
+    "BR": 9
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 7,
+    "F": 8,
+    "B": 8,
+    "R": 8,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "D' L D2 F' D' F2 U' F2 D2 B U2 R U' D' U' R' L U F' R2 U' L' F R' B'",
+   "dSlots": {
+    "FR": 7,
+    "FL": 7,
+    "BL": 7,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 6,
+    "B": 7,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "D L F2 D' F L' D U2 D2 B R2 B' L' R2 B' F' R2 F' B' U' R' B D2 U2 F",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 6,
+    "F": 7,
+    "B": 6,
+    "R": 7,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "F L F2 D' B2 R B2 U' B U D' U D' F' R' F R B2 D L R' U2 B U' D",
+   "dSlots": {
+    "FR": 9,
+    "FL": 8,
+    "BL": 7,
+    "BR": 7
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 7,
+    "B": 7,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "F2 B2 F2 L2 F' L' B2 U' D U' L' F' D2 L' B U2 R F' R D B D' L' F' L2",
+   "dSlots": {
+    "FR": 8,
+    "FL": 9,
+    "BL": 9,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 8,
+    "F": 8,
+    "B": 6,
+    "R": 7,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "F' U F' L2 B U' B F L' B2 L U2 D2 L B' L D' B' D' F' R L' F' D2 B'",
+   "dSlots": {
+    "FR": 8,
+    "FL": 6,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 6,
+    "U": 7,
+    "F": 8,
+    "B": 8,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "F U L2 U L R B L2 R2 D2 L' U L2 U2 L U' R' F B R U' R L' F2 U2",
+   "dSlots": {
+    "FR": 8,
+    "FL": 7,
+    "BL": 8,
+    "BR": 9
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 6,
+    "F": 8,
+    "B": 7,
+    "R": 8,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "D' U R' D F2 D F U D B' D' R' D U' B2 D2 U' F D2 L B' L B2 F2 U",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 8,
+    "F": 8,
+    "B": 8,
+    "R": 8,
+    "L": 6
+   }
+  },
+  {
+   "scramble": "R2 L' F R U R' U F' R' D' L B U' B F2 L2 R' B' R' F B' U B' R2 D2",
+   "dSlots": {
+    "FR": 9,
+    "FL": 9,
+    "BL": 9,
+    "BR": 9
+   },
+   "bestByFace": {
+    "D": 9,
+    "U": 7,
+    "F": 8,
+    "B": 7,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "D' F U' L' B D' B' D' R2 D2 L' R' B' U L' U R2 L' F D' B' R' F R D",
+   "dSlots": {
+    "FR": 8,
+    "FL": 9,
+    "BL": 8,
+    "BR": 7
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 7,
+    "B": 6,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "L U' F2 B2 D F U2 B2 D L2 U' F U2 D' U B R2 D U L' U2 F2 D2 L R'",
+   "dSlots": {
+    "FR": 7,
+    "FL": 7,
+    "BL": 6,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 6,
+    "U": 8,
+    "F": 7,
+    "B": 8,
+    "R": 8,
+    "L": 5
+   }
+  },
+  {
+   "scramble": "D2 U R2 F2 R2 B2 L2 R B' L2 D2 B' F2 B F B' F B2 F R D' B2 L' B2 U'",
+   "dSlots": {
+    "FR": 7,
+    "FL": 8,
+    "BL": 8,
+    "BR": 7
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 7,
+    "B": 8,
+    "R": 6,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "D B D2 F2 L U' D2 F B2 R' F U2 R' L F R' D2 L2 D R' F' D L2 U2 B'",
+   "dSlots": {
+    "FR": 9,
+    "FL": 8,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 7,
+    "F": 8,
+    "B": 8,
+    "R": 7,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "U2 B' R' D U D L D' F R F U2 B R2 F' B' F U2 D' U B' D2 U2 F' B2",
+   "dSlots": {
+    "FR": 9,
+    "FL": 8,
+    "BL": 8,
+    "BR": 9
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 7,
+    "F": 7,
+    "B": 7,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "U2 R' D2 B2 D B F' L2 B2 R' F2 D L B2 L2 B' R2 L' D' L' U' L' U2 F2 R'",
+   "dSlots": {
+    "FR": 5,
+    "FL": 8,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 5,
+    "U": 8,
+    "F": 7,
+    "B": 8,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "R D' U F U D2 L2 U B U B' U' F' R' B2 L2 F' R F L' B' D U2 L B",
+   "dSlots": {
+    "FR": 7,
+    "FL": 7,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 7,
+    "U": 7,
+    "F": 8,
+    "B": 7,
+    "R": 8,
+    "L": 7
+   }
+  },
+  {
+   "scramble": "F' U2 L2 R' B2 U L2 U2 D F D F' L2 F D2 B L U' F2 B' L F B2 U B'",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 8,
+    "BR": 8
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 7,
+    "F": 7,
+    "B": 7,
+    "R": 7,
+    "L": 8
+   }
+  },
+  {
+   "scramble": "L2 B U D F2 L' F D' F R' F2 L D' L B U' F' U2 L F L2 R D' F D'",
+   "dSlots": {
+    "FR": 8,
+    "FL": 8,
+    "BL": 8,
+    "BR": 9
+   },
+   "bestByFace": {
+    "D": 8,
+    "U": 8,
+    "F": 8,
+    "B": 7,
+    "R": 7,
+    "L": 7
+   }
+  }
+ ]
+}

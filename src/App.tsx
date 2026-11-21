@@ -56,6 +56,7 @@ import {
   getInspectionPenalty,
   getInspectionStage,
 } from "./lib/inspection";
+import { getCloudDeletedLocalIds } from "./lib/cloudSync";
 import { generateScramble } from "./lib/scramble";
 import {
   getMySolveSessions,
@@ -1964,10 +1965,9 @@ export default function App() {
       .map(solveSessionRowToSolveRecord)
       .filter((solve): solve is SolveRecord => solve !== null);
     // Solves deleted on another device are deleted here too.
-    const cloudDeletedIds = new Set(
-      allRows
-        .filter((row) => row.is_deleted)
-        .map((row) => getCloudLocalSolveId(row) ?? `cloud-${row.id}`),
+    const cloudDeletedIds = getCloudDeletedLocalIds(
+      allRows,
+      (row) => getCloudNoteValue(row.notes, "Local solve ID") ?? `cloud-${row.id}`,
     );
     const localWithCloudDeletions = solves.map((solve) =>
       solve.deletedAt === null && cloudDeletedIds.has(solve.id)

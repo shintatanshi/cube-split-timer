@@ -116,7 +116,11 @@ export function escapeLikePattern(value: string): string {
  * Applies a local change (delete / restore / penalty) to the cloud row of a local solve.
  * Rows are found by their cloud id for cloud-only solves, otherwise by the
  * "Local solve ID: <id>" note written when the solve was uploaded.
- * Returns how many rows were updated (0 when the solve was never uploaded).
+ *
+ * A local solve can have several cloud rows (older duplicate uploads that were
+ * cleaned up by soft-deleting them). Only the active rows are changed; a restore
+ * revives one row, and only when no active row exists, so cleaned-up duplicates
+ * stay deleted. Returns how many rows were updated (0 when never uploaded).
  */
 export async function updateSolveSessionForLocalSolve(
   localSolveId: string,
@@ -124,6 +128,37 @@ export async function updateSolveSessionForLocalSolve(
 ): Promise<number> {
   const supabase = getSupabaseClient();
   const userId = await getSignedInUserId();
+
+  // Admins may read and update any row under RLS, so always scope to the signed-in user.
+  let lookup = supabase.from("solve_sessions").select("id, is_deleted").eq("user_id", userId);
+
+  if (localSolveId.startsWith(CLOUD_ONLY_SOLVE_ID_PREFIX)) {
+    lookup = lookup.eq("id", localSolveId.slice(CLOUD_ONLY_SOLVE_ID_PREFIX.length));
+  } else {
+    lookup = lookup.like(
+      "notes",
+      `%${LOCAL_SOLVE_ID_NOTE_PREFIX}${escapeLikePattern(localSolveId)}%`,
+    );
+  }
+
+  const { data: matches, error: lookupError } = await lookup.order("id", { ascending: true });
+
+  if (lookupError) {
+    throw lookupError;
+  }
+
+  const rows = matches ?? [];
+  const activeIds = rows.filter((row) => !row.is_deleted).map((row) => row.id);
+  let targetIds = activeIds;
+
+  if (patch.isDeleted === false && activeIds.length === 0) {
+    const firstDeleted = rows.find((row) => row.is_deleted);
+    targetIds = firstDeleted ? [firstDeleted.id] : [];
+  }
+
+  if (targetIds.length === 0) {
+    return 0;
+  }
 
   const update: Database["public"]["Tables"]["solve_sessions"]["Update"] = {};
 
@@ -143,19 +178,12 @@ export async function updateSolveSessionForLocalSolve(
     update.is_deleted = patch.isDeleted;
   }
 
-  // Admins may update any row under RLS, so always scope to the signed-in user.
-  let query = supabase.from("solve_sessions").update(update).eq("user_id", userId);
-
-  if (localSolveId.startsWith(CLOUD_ONLY_SOLVE_ID_PREFIX)) {
-    query = query.eq("id", localSolveId.slice(CLOUD_ONLY_SOLVE_ID_PREFIX.length));
-  } else {
-    query = query.like(
-      "notes",
-      `%${LOCAL_SOLVE_ID_NOTE_PREFIX}${escapeLikePattern(localSolveId)}%`,
-    );
-  }
-
-  const { data, error } = await query.select("id");
+  const { data, error } = await supabase
+    .from("solve_sessions")
+    .update(update)
+    .eq("user_id", userId)
+    .in("id", targetIds)
+    .select("id");
 
   if (error) {
     throw error;

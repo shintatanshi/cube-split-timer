@@ -51,6 +51,11 @@ import {
   type FriendConnection,
   type FriendPublicProfile,
 } from "./lib/friends";
+import {
+  formatInspectionDisplay,
+  getInspectionPenalty,
+  getInspectionStage,
+} from "./lib/inspection";
 import { generateScramble } from "./lib/scramble";
 import {
   getMySolveSessions,
@@ -61,12 +66,14 @@ import {
 } from "./lib/solveSessions";
 import {
   clearCurrentSolveDraft,
+  loadInspectionEnabled,
   mergeSolvesById,
   loadCurrentSolveDraft,
   loadSolves,
   loadThemePreference,
   parseSolvesBackup,
   saveCurrentSolveDraft,
+  saveInspectionEnabled,
   saveSolves,
   saveThemePreference,
   stringifySolvesBackup,
@@ -93,9 +100,16 @@ import {
   getSolveValue,
 } from "./lib/time";
 
-type TimerState = "idle" | "pendingStart" | "holding" | "ready" | "running" | "finished";
+type TimerState =
+  | "idle"
+  | "pendingStart"
+  | "holding"
+  | "ready"
+  | "inspecting"
+  | "running"
+  | "finished";
 type StartHoldSource = "keyboard" | "pointer";
-type StartReturnState = "idle" | "finished";
+type StartReturnState = "idle" | "inspecting" | "finished";
 type TimerSidePanelTab = "history" | "stats";
 
 const INPUT_DEBOUNCE_MS = 200;
@@ -297,7 +311,11 @@ function formatClockTime(isoDate: string): string {
   }).format(new Date(isoDate));
 }
 
-function getIdleHint(mode: SolveMode): string {
+function getIdleHint(mode: SolveMode, inspectionEnabled = false): string {
+  if (inspectionEnabled) {
+    return "Tap timer or press & release Space for 15s inspection";
+  }
+
   switch (mode) {
     case "normal":
       return "Hold Space or press timer, release on green";
@@ -312,11 +330,23 @@ function getIdleHint(mode: SolveMode): string {
   }
 }
 
-function isStartableTimerState(timerState: TimerState): boolean {
+function canHoldToStartSolve(timerState: TimerState, inspectionEnabled: boolean): boolean {
+  if (inspectionEnabled) {
+    return timerState === "inspecting";
+  }
+
   return timerState === "idle" || timerState === "finished";
 }
 
-function getTimerPrepareHint(timerState: TimerState, mode: SolveMode): string {
+function canTapToStartInspection(timerState: TimerState, inspectionEnabled: boolean): boolean {
+  return inspectionEnabled && (timerState === "idle" || timerState === "finished");
+}
+
+function getTimerPrepareHint(
+  timerState: TimerState,
+  mode: SolveMode,
+  inspectionEnabled: boolean,
+): string {
   if (timerState === "holding") {
     return "Hold...";
   }
@@ -325,7 +355,11 @@ function getTimerPrepareHint(timerState: TimerState, mode: SolveMode): string {
     return "Ready - release to start";
   }
 
-  return getIdleHint(mode);
+  if (timerState === "inspecting") {
+    return "Hold Space or screen, release on green to start";
+  }
+
+  return getIdleHint(mode, inspectionEnabled);
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -347,6 +381,12 @@ interface PointerStartCandidate {
   startY: number;
   returnState: StartReturnState;
   timeoutId: number;
+}
+
+interface PendingInspectionPointer {
+  pointerId: number;
+  startX: number;
+  startY: number;
 }
 
 interface PostStopInputGuard {
@@ -1278,6 +1318,9 @@ export default function App() {
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     loadThemePreference(),
   );
+  const [inspectionEnabled, setInspectionEnabled] = useState<boolean>(() =>
+    loadInspectionEnabled(),
+  );
   const [draftMessage, setDraftMessage] = useState<string | null>(null);
   const [lastSavedSolveId, setLastSavedSolveId] = useState<string | null>(null);
   const [undoState, setUndoState] = useState<UndoState | null>(null);
@@ -1305,10 +1348,18 @@ export default function App() {
     () => !initialRecordingMode && !hasSeenTutorial(),
   );
   const [timerState, setTimerState] = useState<TimerState>("idle");
+  const [isInspectingSession, setIsInspectingSession] = useState(false);
+  const [inspectionElapsedMs, setInspectionElapsedMs] = useState(0);
+  const [finishedPenalty, setFinishedPenalty] = useState<Penalty>("none");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [splitDrafts, setSplitDrafts] = useState<SplitDraft[]>([]);
   const startTimeRef = useRef<number | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const inspectionStartTimeRef = useRef<number | null>(null);
+  const inspectionFrameRef = useRef<number | null>(null);
+  const activeSolvePenaltyRef = useRef<Penalty>("none");
+  const pendingInspectionSourceRef = useRef<StartHoldSource | null>(null);
+  const pendingInspectionPointerRef = useRef<PendingInspectionPointer | null>(null);
   const lastInputAtRef = useRef(-INPUT_DEBOUNCE_MS);
   const timerStateRef = useRef<TimerState>("idle");
   const holdTimeoutRef = useRef<number | null>(null);
@@ -1770,7 +1821,11 @@ export default function App() {
   }, [isRecordingMode]);
 
   useEffect(() => {
-    document.body.classList.toggle("timing", timerState === "running");
+    saveInspectionEnabled(inspectionEnabled);
+  }, [inspectionEnabled]);
+
+  useEffect(() => {
+    document.body.classList.toggle("timing", timerState === "running" || isInspectingSession);
     document.body.classList.toggle(
       "timer-preparing",
       timerState === "holding" || timerState === "ready",
@@ -1780,7 +1835,7 @@ export default function App() {
       document.body.classList.remove("timing");
       document.body.classList.remove("timer-preparing");
     };
-  }, [timerState]);
+  }, [isInspectingSession, timerState]);
 
   useEffect(() => {
     if (lastSavedSolveId === null) {
@@ -1865,6 +1920,30 @@ export default function App() {
     setUndoState(null);
     setSolveStorageUserId(targetSolveStorageUserId);
   }, [isAuthLoading, solveStorageUserId, targetSolveStorageUserId]);
+
+  useEffect(() => {
+    if (!isInspectingSession) {
+      return;
+    }
+
+    const update = (now: number) => {
+      if (inspectionStartTimeRef.current === null) {
+        return;
+      }
+
+      setInspectionElapsedMs(Math.max(0, now - inspectionStartTimeRef.current));
+      inspectionFrameRef.current = requestAnimationFrame(update);
+    };
+
+    inspectionFrameRef.current = requestAnimationFrame(update);
+
+    return () => {
+      if (inspectionFrameRef.current !== null) {
+        cancelAnimationFrame(inspectionFrameRef.current);
+        inspectionFrameRef.current = null;
+      }
+    };
+  }, [isInspectingSession]);
 
   const persistAndSetSolves = useCallback((nextSolves: SolveRecord[]) => {
     setSolves(nextSolves);
@@ -2066,6 +2145,8 @@ export default function App() {
   const finishSolve = useCallback(
     (solve: SolveRecord, finalTime: number) => {
       startTimeRef.current = null;
+      activeSolvePenaltyRef.current = "none";
+      setFinishedPenalty(solve.penalty);
       setElapsedMs(finalTime);
       setTimerStatus("finished");
       setSplitDrafts([]);
@@ -2096,10 +2177,39 @@ export default function App() {
     ],
   );
 
-  const startTimer = useCallback(() => {
-    const startTime = performance.now();
+  const startInspection = useCallback(() => {
+    if (inspectionStartTimeRef.current !== null) {
+      return;
+    }
 
     rememberTimerReturnScroll();
+    inspectionStartTimeRef.current = performance.now();
+    activeSolvePenaltyRef.current = "none";
+    setFinishedPenalty("none");
+    setInspectionElapsedMs(0);
+    setIsInspectingSession(true);
+    setDraftMessage(null);
+    setTimerStatus("inspecting");
+  }, [rememberTimerReturnScroll, setTimerStatus]);
+
+  const startTimer = useCallback(() => {
+    const startTime = performance.now();
+    const wasInspecting = inspectionStartTimeRef.current !== null;
+    const inspectionPenalty = wasInspecting
+      ? getInspectionPenalty(
+          Math.max(0, Math.round(startTime - (inspectionStartTimeRef.current ?? startTime))),
+        )
+      : "none";
+
+    if (!wasInspecting) {
+      rememberTimerReturnScroll();
+    }
+
+    inspectionStartTimeRef.current = null;
+    activeSolvePenaltyRef.current = inspectionPenalty;
+    setIsInspectingSession(false);
+    setInspectionElapsedMs(0);
+    setFinishedPenalty("none");
     startTimeRef.current = startTime;
     setElapsedMs(0);
     setSplitDrafts([]);
@@ -2128,7 +2238,7 @@ export default function App() {
       mode: "normal",
       totalTime,
       scramble,
-      penalty: "none",
+      penalty: activeSolvePenaltyRef.current,
       deletedAt: null,
       createdAt: new Date().toISOString(),
     };
@@ -2183,7 +2293,7 @@ export default function App() {
       ollTime: getSplitTime(nextSplits, "oll"),
       pllTime: getSplitTime(nextSplits, "pll"),
       scramble,
-      penalty: "none",
+      penalty: activeSolvePenaltyRef.current,
       deletedAt: null,
       createdAt: new Date().toISOString(),
     };
@@ -2204,7 +2314,7 @@ export default function App() {
       crossTime: totalTime,
       crossColor: "white",
       scramble,
-      penalty: "none",
+      penalty: activeSolvePenaltyRef.current,
       deletedAt: null,
       createdAt: new Date().toISOString(),
     };
@@ -2224,7 +2334,7 @@ export default function App() {
       totalTime,
       f2lTime: totalTime,
       scramble,
-      penalty: "none",
+      penalty: activeSolvePenaltyRef.current,
       deletedAt: null,
       createdAt: new Date().toISOString(),
     };
@@ -2279,7 +2389,7 @@ export default function App() {
       pair3Time: getSplitTime(nextSplits, "pair3"),
       pair4Time: getSplitTime(nextSplits, "pair4"),
       scramble,
-      penalty: "none",
+      penalty: activeSolvePenaltyRef.current,
       deletedAt: null,
       createdAt: new Date().toISOString(),
     };
@@ -2390,7 +2500,7 @@ export default function App() {
       const pointerCanStartFromPending = source === "pointer" && currentState === "pendingStart";
 
       if (
-        (!isStartableTimerState(currentState) && !pointerCanStartFromPending) ||
+        (!canHoldToStartSolve(currentState, inspectionEnabled) && !pointerCanStartFromPending) ||
         holdSourceRef.current !== null
       ) {
         return;
@@ -2404,9 +2514,13 @@ export default function App() {
 
       clearHoldTimeout();
       const pointerCandidate = pointerStartCandidateRef.current;
-      const returnState =
+      const returnState: StartReturnState =
         pointerCandidate?.returnState ??
-        (currentState === "finished" ? "finished" : "idle");
+        (currentState === "inspecting"
+          ? "inspecting"
+          : currentState === "finished"
+            ? "finished"
+            : "idle");
 
       clearPointerStartCandidate(false);
       elapsedBeforeHoldRef.current = elapsedMs;
@@ -2428,15 +2542,35 @@ export default function App() {
         holdTimeoutRef.current = null;
       }, readyDelayMs);
     },
-    [clearHoldTimeout, clearPointerStartCandidate, elapsedMs, setTimerStatus],
+    [clearHoldTimeout, clearPointerStartCandidate, elapsedMs, inspectionEnabled, setTimerStatus],
   );
+
+  const cancelInspection = useCallback(() => {
+    const wasInspecting = inspectionStartTimeRef.current !== null;
+
+    pendingInspectionSourceRef.current = null;
+    pendingInspectionPointerRef.current = null;
+    clearHoldTimeout();
+    clearPointerStartCandidate(false);
+    holdSourceRef.current = null;
+    holdPointerIdRef.current = null;
+    inspectionStartTimeRef.current = null;
+    activeSolvePenaltyRef.current = "none";
+    setIsInspectingSession(false);
+    setInspectionElapsedMs(0);
+    setTimerStatus("idle");
+
+    if (wasInspecting) {
+      restoreTimerReturnScroll();
+    }
+  }, [clearHoldTimeout, clearPointerStartCandidate, restoreTimerReturnScroll, setTimerStatus]);
 
   const beginPointerStartCandidate = useCallback(
     (pointerId: number, clientX: number, clientY: number) => {
       const currentState = timerStateRef.current;
 
       if (
-        !isStartableTimerState(currentState) ||
+        !canHoldToStartSolve(currentState, inspectionEnabled) ||
         holdSourceRef.current !== null ||
         pointerStartCandidateRef.current !== null
       ) {
@@ -2481,7 +2615,7 @@ export default function App() {
         timeoutId,
       };
     },
-    [beginStartHold, elapsedMs, setTimerStatus],
+    [beginStartHold, elapsedMs, inspectionEnabled, setTimerStatus],
   );
 
 const hasPointerMovedEnoughToScroll = useCallback(
@@ -2591,6 +2725,46 @@ const hasPointerMovedEnoughToScroll = useCallback(
         return;
       }
 
+      if (timerStateRef.current === "inspecting") {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (event.pointerType === "mouse") {
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {
+            // Pointer capture is best-effort; pointerup still works when supported by the browser.
+          }
+        }
+
+        beginStartHold("pointer", event.pointerId, HOLD_TO_START_MS);
+        return;
+      }
+
+      if (canTapToStartInspection(timerStateRef.current, inspectionEnabled)) {
+        if (
+          pendingInspectionPointerRef.current !== null ||
+          performance.now() - lastInputAtRef.current < INPUT_DEBOUNCE_MS
+        ) {
+          return;
+        }
+
+        if (event.pointerType === "mouse") {
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {
+            // Pointer capture is best-effort; pointerup still works when supported by the browser.
+          }
+        }
+
+        pendingInspectionPointerRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+        };
+        return;
+      }
+
       if (event.pointerType === "mouse") {
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -2604,7 +2778,9 @@ const hasPointerMovedEnoughToScroll = useCallback(
     [
       armPostStopInputGuard,
       beginPointerStartCandidate,
+      beginStartHold,
       handleRunningTimerInput,
+      inspectionEnabled,
       willRunningTimerInputFinishSolve,
     ],
   );
@@ -2612,6 +2788,20 @@ const hasPointerMovedEnoughToScroll = useCallback(
   const handleTimerPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLElement>) => {
       if (!event.isPrimary) {
+        return;
+      }
+
+      const pendingInspection = pendingInspectionPointerRef.current;
+
+      if (pendingInspection && pendingInspection.pointerId === event.pointerId) {
+        const deltaX = event.clientX - pendingInspection.startX;
+        const deltaY = event.clientY - pendingInspection.startY;
+        const distance = Math.hypot(deltaX, deltaY);
+
+        if (Math.abs(deltaY) >= POINTER_SCROLL_CANCEL_PX || distance >= POINTER_SCROLL_CANCEL_PX) {
+          pendingInspectionPointerRef.current = null;
+        }
+
         return;
       }
 
@@ -2628,6 +2818,22 @@ const hasPointerMovedEnoughToScroll = useCallback(
         return;
       }
 
+      if (pendingInspectionPointerRef.current?.pointerId === event.pointerId) {
+        pendingInspectionPointerRef.current = null;
+
+        if (
+          canTapToStartInspection(timerStateRef.current, inspectionEnabled) &&
+          performance.now() - lastInputAtRef.current >= INPUT_DEBOUNCE_MS
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          lastInputAtRef.current = performance.now();
+          startInspection();
+        }
+
+        return;
+      }
+
       if (pointerStartCandidateRef.current?.pointerId === event.pointerId) {
         clearPointerStartCandidate(true);
         return;
@@ -2641,12 +2847,17 @@ const hasPointerMovedEnoughToScroll = useCallback(
       event.stopPropagation();
       releaseStartHold("pointer", event.pointerId);
     },
-    [clearPointerStartCandidate, releaseStartHold],
+    [clearPointerStartCandidate, inspectionEnabled, releaseStartHold, startInspection],
   );
 
 const handleTimerPointerCancel = useCallback(
   (event: ReactPointerEvent<HTMLElement>) => {
     if (!event.isPrimary) {
+      return;
+    }
+
+    if (pendingInspectionPointerRef.current?.pointerId === event.pointerId) {
+      pendingInspectionPointerRef.current = null;
       return;
     }
 
@@ -2669,7 +2880,12 @@ const handleTimerPointerCancel = useCallback(
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.code === "Escape") {
+        pendingInspectionSourceRef.current = null;
+        pendingInspectionPointerRef.current = null;
         cancelStartHold();
+        if (inspectionStartTimeRef.current !== null) {
+          cancelInspection();
+        }
         return;
       }
 
@@ -2693,6 +2909,18 @@ const handleTimerPointerCancel = useCallback(
         return;
       }
 
+      if (timerStateRef.current === "inspecting") {
+        beginStartHold("keyboard");
+        return;
+      }
+
+      if (canTapToStartInspection(timerStateRef.current, inspectionEnabled)) {
+        if (performance.now() - lastInputAtRef.current >= INPUT_DEBOUNCE_MS) {
+          pendingInspectionSourceRef.current = "keyboard";
+        }
+        return;
+      }
+
       beginStartHold("keyboard");
     };
 
@@ -2707,6 +2935,21 @@ const handleTimerPointerCancel = useCallback(
 
       event.preventDefault();
       event.stopPropagation();
+
+      if (pendingInspectionSourceRef.current === "keyboard") {
+        pendingInspectionSourceRef.current = null;
+
+        if (
+          canTapToStartInspection(timerStateRef.current, inspectionEnabled) &&
+          performance.now() - lastInputAtRef.current >= INPUT_DEBOUNCE_MS
+        ) {
+          lastInputAtRef.current = performance.now();
+          startInspection();
+        }
+
+        return;
+      }
+
       releaseStartHold("keyboard");
     };
 
@@ -2719,24 +2962,42 @@ const handleTimerPointerCancel = useCallback(
     };
   }, [
     beginStartHold,
+    cancelInspection,
     cancelStartHold,
     handleRunningTimerInput,
+    inspectionEnabled,
     locationInfo.page,
     releaseStartHold,
+    startInspection,
   ]);
 
   useEffect(() => {
     if (locationInfo.page !== "timer") {
-      cancelStartHold();
+      pendingInspectionSourceRef.current = null;
+      pendingInspectionPointerRef.current = null;
+      if (inspectionStartTimeRef.current !== null) {
+        cancelInspection();
+      } else {
+        cancelStartHold();
+      }
     }
-  }, [cancelStartHold, locationInfo.page]);
+  }, [cancelInspection, cancelStartHold, locationInfo.page]);
 
   useEffect(() => {
-    cancelStartHold();
-  }, [cancelStartHold, timerMode]);
+    pendingInspectionSourceRef.current = null;
+    pendingInspectionPointerRef.current = null;
+    setFinishedPenalty("none");
+    if (inspectionStartTimeRef.current !== null) {
+      cancelInspection();
+    } else {
+      cancelStartHold();
+    }
+  }, [cancelInspection, cancelStartHold, timerMode]);
 
   useEffect(() => {
     const cancelIfPreparing = () => {
+      pendingInspectionSourceRef.current = null;
+      pendingInspectionPointerRef.current = null;
       if (timerStateRef.current === "holding" || timerStateRef.current === "ready") {
         cancelStartHold();
       }
@@ -3153,6 +3414,12 @@ const handleTimerPointerCancel = useCallback(
     openHelp("overview");
   }, [dismissTutorial, openHelp]);
 
+  const toggleInspectionEnabled = useCallback(() => {
+    pendingInspectionSourceRef.current = null;
+    pendingInspectionPointerRef.current = null;
+    setInspectionEnabled((currentValue) => !currentValue);
+  }, []);
+
   const isPreparingToStart = timerState === "holding" || timerState === "ready";
   const timerButtonClassName = [
     "timer-button",
@@ -3161,8 +3428,17 @@ const handleTimerPointerCancel = useCallback(
   ]
     .filter(Boolean)
     .join(" ");
-  const timerDisplayText = isPreparingToStart ? "0.00" : formatTime(elapsedMs);
-  const timerButtonHint = getTimerPrepareHint(timerState, timerMode);
+  const timerDisplayText = isPreparingToStart
+    ? "0.00"
+    : timerState === "finished" && finishedPenalty === "DNF"
+      ? "DNF"
+      : timerState === "finished" && finishedPenalty === "+2"
+        ? `${formatTime(elapsedMs + 2000)}+`
+        : formatTime(elapsedMs);
+  const timerButtonHint =
+    timerState === "finished" && finishedPenalty !== "none"
+      ? `${finishedPenalty} (Inspection) · ${getTimerPrepareHint(timerState, timerMode, inspectionEnabled)}`
+      : getTimerPrepareHint(timerState, timerMode, inspectionEnabled);
   const globalNav = (
     <GlobalAppNav
       activePage={locationInfo.page}
@@ -3178,6 +3454,62 @@ const handleTimerPointerCancel = useCallback(
       chatUnreadCount={isRecordingMode ? 0 : chatUnreadCount}
     />
   );
+
+  if (isInspectingSession) {
+    const inspectionStage = getInspectionStage(inspectionElapsedMs);
+    const inspectionDisplayText = formatInspectionDisplay(inspectionElapsedMs);
+    const inspectionScreenClassName = [
+      "timer-screen",
+      "timer-screen-inspection",
+      `timer-screen-inspection-${inspectionStage}`,
+      timerState === "holding" ? "timer-screen-holding" : "",
+      timerState === "ready" ? "timer-screen-ready" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const inspectionLabel =
+      inspectionStage === "dnf"
+        ? "Inspection · DNF"
+        : inspectionStage === "plus2"
+          ? "Inspection · +2"
+          : inspectionStage === "warn12"
+            ? "Inspection · 12s"
+            : inspectionStage === "warn8"
+              ? "Inspection · 8s"
+              : "Inspection";
+    const inspectionHint =
+      timerState === "ready"
+        ? "Ready - release to start"
+        : timerState === "holding"
+          ? "Hold..."
+          : "Hold Space or screen, release on green to start";
+
+    return (
+      <main
+        className={inspectionScreenClassName}
+        onPointerDown={handleTimerPointerDown}
+        onPointerUp={handleTimerPointerUp}
+        onPointerCancel={handleTimerPointerCancel}
+        aria-label="Inspection"
+      >
+        <p className="timer-screen-label">{inspectionLabel}</p>
+        <div className="timer-screen-time">{inspectionDisplayText}</div>
+        <p className="timer-screen-hint">{inspectionHint}</p>
+        <button
+          className="timer-screen-cancel"
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            cancelInspection();
+          }}
+        >
+          キャンセル (Esc)
+        </button>
+      </main>
+    );
+  }
 
   if (timerState === "running") {
     const currentCfopPhase =
@@ -3381,6 +3713,8 @@ const handleTimerPointerCancel = useCallback(
           themePreference={themePreference}
           friendNotificationCount={friendNotificationCount}
           chatUnreadCount={chatUnreadCount}
+          inspectionEnabled={inspectionEnabled}
+          onToggleInspection={toggleInspectionEnabled}
           onBack={openTimer}
           onOpenTimer={openTimer}
           onOpenAdmin={openAdmin}
@@ -3421,6 +3755,8 @@ const handleTimerPointerCancel = useCallback(
           themePreference={themePreference}
           friendNotificationCount={friendNotificationCount}
           chatUnreadCount={chatUnreadCount}
+          inspectionEnabled={inspectionEnabled}
+          onToggleInspection={toggleInspectionEnabled}
           onBack={openTimer}
           onOpenTimer={openTimer}
           onOpenAdmin={openAdmin}
@@ -3920,6 +4256,18 @@ const handleTimerPointerCancel = useCallback(
             </div>
           )}
 
+          <div className="timer-options-row">
+            <button
+              className="inspection-toggle-button"
+              type="button"
+              aria-pressed={inspectionEnabled}
+              onClick={toggleInspectionEnabled}
+            >
+              <span>インスペクション 15秒 (WCA)</span>
+              <strong>{inspectionEnabled ? "ON" : "OFF"}</strong>
+            </button>
+          </div>
+
           <div
             className={FIGMA_UI_TRIAL_ENABLED ? "scramble-card figma-trial-scramble-card" : "scramble-card"}
             data-testid="recording-scramble"
@@ -4181,7 +4529,9 @@ interface AuthPageProps {
   themePreference: ThemePreference;
   friendNotificationCount: number;
   chatUnreadCount: number;
+  inspectionEnabled: boolean;
   localSolveCount: number;
+  onToggleInspection: () => void;
   onBack: () => void;
   onOpenTimer: () => void;
   onOpenAdmin: () => void;
@@ -4215,7 +4565,9 @@ function AuthPage({
   themePreference,
   friendNotificationCount,
   chatUnreadCount,
+  inspectionEnabled,
   localSolveCount,
+  onToggleInspection,
   onBack,
   onOpenTimer,
   onOpenAdmin,
@@ -4669,6 +5021,22 @@ function AuthPage({
               <option value="light">Light</option>
               <option value="system">System</option>
             </select>
+          </div>
+
+          <div className="figma-trial-more-theme" data-testid="inspection-settings">
+            <div>
+              <p className="eyebrow">Timer</p>
+              <h3>WCA インスペクション（15秒）</h3>
+              <p>15秒超〜17秒で+2、17秒超でDNF</p>
+            </div>
+            <button
+              className="inspection-toggle-button"
+              type="button"
+              aria-pressed={inspectionEnabled}
+              onClick={onToggleInspection}
+            >
+              <strong>{inspectionEnabled ? "ON" : "OFF"}</strong>
+            </button>
           </div>
 
           <div className="figma-trial-more-list">

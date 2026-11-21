@@ -8,6 +8,7 @@ import type {
 
 const STORAGE_KEY = "cubeSplitTimer.solves.v1";
 const THEME_KEY = "cubeSplitTimer.theme.v1";
+const INSPECTION_ENABLED_KEY = "cubeSplitTimer.inspection.v1";
 const CURRENT_SOLVE_DRAFT_KEY = "cubeSplitTimer.currentSolveDraft.v1";
 const SOLVES_BACKUP_APP_ID = "cube-split-timer";
 const SOLVES_BACKUP_VERSION = 1;
@@ -184,6 +185,22 @@ export function loadThemePreference(): ThemePreference {
 
 export function saveThemePreference(theme: ThemePreference): void {
   localStorage.setItem(THEME_KEY, theme);
+}
+
+export function loadInspectionEnabled(): boolean {
+  try {
+    return localStorage.getItem(INSPECTION_ENABLED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function saveInspectionEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(INSPECTION_ENABLED_KEY, enabled ? "true" : "false");
+  } catch {
+    // localStorage may be unavailable in private modes; the timer should still work.
+  }
 }
 
 function isSplitDraft(value: unknown): value is SplitDraft {

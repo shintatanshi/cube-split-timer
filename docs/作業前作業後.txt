@@ -1,0 +1,7 @@
+作業前:
+git pull origin main
+作業後:
+npm run build
+git add .
+git commit -m "作業内容"
+git push origin main

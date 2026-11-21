@@ -71,6 +71,12 @@ import {
   stringifySolvesBackup,
 } from "./lib/storage";
 import {
+  RECORDING_DEMO_SCRAMBLE,
+  RECORDING_DEMO_SOLVES,
+  isRecordingModeUrl,
+  withRecordingModeParam,
+} from "./lib/recordingMode";
+import {
   calculateCfopPhaseStats,
   calculatePracticeStats,
   calculateStats,
@@ -96,65 +102,72 @@ const HOLD_TO_START_MS = 500;
 const POINTER_START_PENDING_MS = 90;
 const POINTER_SCROLL_CANCEL_PX = 10;
 const LAST_SOLVE_NOTICE_MS = 8000;
+// Trial switch for the Figma-inspired progressive UI. Set to false to fall back quickly.
+const FIGMA_UI_TRIAL_ENABLED = true;
 const TUTORIAL_STORAGE_KEY = "cubeSplitTimer.tutorialSeen.v1";
 const CURRENT_SCRAMBLE_STORAGE_KEY = "cubeSplitTimer.currentScramble.v1";
 const PROFILE_PUBLIC_ID_PATTERN = /^[a-z0-9_]{3,20}$/;
 const PROFILE_PUBLIC_ID_LOCK_MS = 3 * 24 * 60 * 60 * 1000;
-const DEFAULT_BRAND_LOGO_SOURCE = "/brand/cube-split-timer-logo-round.png";
-const FRIEND_ICON_SOURCE = "/friends/friend-icon.png";
-const CHAT_ICON_SOURCE = "/chat/chat-icon.png";
-const NOTIFICATION_ICON_SOURCE = "/inform/notification-icon.png";
+const OPTIMIZED_BRAND_IMAGE_DIR = "/brand/optimized";
+const getOptimizedBrandImageSource = (name: string): string =>
+  `${OPTIMIZED_BRAND_IMAGE_DIR}/${name}-160.webp`;
+const getOptimizedProfileAvatarSource = (id: string): string =>
+  getOptimizedBrandImageSource(`avatar-${id}`);
+const DEFAULT_BRAND_LOGO_SOURCE = getOptimizedBrandImageSource("cube-split-timer-logo-round");
+const FRIEND_ICON_SOURCE = "/friends/friend-icon-160.webp";
+const CHAT_ICON_SOURCE = "/chat/chat-icon-160.webp";
+const NOTIFICATION_ICON_SOURCE = "/inform/notification-icon-160.webp";
 const DEFAULT_NETLIFY_MIGRATION_URL = "https://shintimer1123.netlify.app/";
 const NETLIFY_MIGRATION_BOOKMARKLET =
   'javascript:(async()=>{const k="cubeSplitTimer.solves.v1";const raw=localStorage.getItem(k)||"[]";let solves=[];try{solves=JSON.parse(raw)}catch{}const data=JSON.stringify({app:"cube-split-timer",version:1,exportedAt:new Date().toISOString(),solves});try{if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(data);alert("Cube Split Timerの履歴をコピーしました。Vercel版に貼り付けて読み込んでください。");return}}catch(e){}const ta=document.createElement("textarea");ta.value=data;ta.style.cssText="position:fixed;inset:16px;z-index:2147483647;width:calc(100% - 32px);height:45vh;font-size:16px";document.body.appendChild(ta);ta.focus();ta.select();alert("履歴データを表示しました。全選択されている内容をコピーしてください。");})();';
 const BRAND_LOGO_CANDIDATE_SOURCES = [
   DEFAULT_BRAND_LOGO_SOURCE,
-  "/brand/cube-split-timer-logo.png",
-  "/brand/cube-split-timer-logo-peace.png",
-  "/brand/cube-split-timer-logo-jump.png",
-  "/brand/cube-split-timer-logo-think.png",
-  "/brand/cube-split-timer-logo-wave.png",
+  getOptimizedBrandImageSource("cube-split-timer-logo"),
+  getOptimizedBrandImageSource("cube-split-timer-logo-peace"),
+  getOptimizedBrandImageSource("cube-split-timer-logo-jump"),
+  getOptimizedBrandImageSource("cube-split-timer-logo-think"),
+  getOptimizedBrandImageSource("cube-split-timer-logo-wave"),
 ] as const;
 const DEFAULT_PROFILE_AVATAR_ID = "timer-dash";
 const PROFILE_AVATAR_OPTIONS = [
-  { id: "timer-dash", label: "Timer", source: "/brand/avatar-timer-dash.png" },
-  { id: "cube-simple", label: "Cube", source: "/brand/avatar-cube-simple.png" },
-  { id: "lightning-bolt", label: "Bolt", source: "/brand/avatar-lightning-bolt.png" },
-  { id: "robot-blue", label: "Robot", source: "/brand/avatar-robot-blue.png" },
-  { id: "gamepad", label: "Game", source: "/brand/avatar-gamepad.png" },
-  { id: "star-smile", label: "Star", source: "/brand/avatar-star-smile.png" },
-  { id: "cube-cat", label: "Cube Cat", source: "/brand/avatar-cube-cat.png" },
-  { id: "cat-soft", label: "Cat", source: "/brand/avatar-cat-soft.png" },
-  { id: "panda", label: "Panda", source: "/brand/avatar-panda.png" },
-  { id: "fox", label: "Fox", source: "/brand/avatar-fox.png" },
-  { id: "owl", label: "Owl", source: "/brand/avatar-owl.png" },
-  { id: "shark", label: "Shark", source: "/brand/avatar-shark.png" },
-  { id: "mountain-sun", label: "Summit", source: "/brand/avatar-mountain-sun.png" },
-  { id: "rocket-moon", label: "Rocket", source: "/brand/avatar-rocket-moon.png" },
-  { id: "coffee", label: "Coffee", source: "/brand/avatar-coffee.png" },
-  { id: "basketball", label: "Hoop", source: "/brand/avatar-basketball.png" },
-  { id: "ninja", label: "Ninja", source: "/brand/avatar-ninja.png" },
-  { id: "crystal", label: "Crystal", source: "/brand/avatar-crystal.png" },
-  { id: "crown", label: "Crown", source: "/brand/avatar-crown.png" },
-  { id: "donut", label: "Donut", source: "/brand/avatar-donut.png" },
-  { id: "music-note", label: "Music", source: "/brand/avatar-music-note.png" },
-  { id: "ramen", label: "Ramen", source: "/brand/avatar-ramen.png" },
-  { id: "space-bunny", label: "Bunny", source: "/brand/avatar-space-bunny.png" },
-  { id: "pixel-ghost", label: "Ghost", source: "/brand/avatar-pixel-ghost.png" },
-  { id: "firebird", label: "Flame", source: "/brand/avatar-firebird.png" },
-  { id: "magic-slime", label: "Slime", source: "/brand/avatar-magic-slime.png" },
-  { id: "daruma", label: "Daruma", source: "/brand/avatar-daruma.png" },
-  { id: "ice-wolf", label: "Ice Wolf", source: "/brand/avatar-ice-wolf.png" },
-  { id: "dj-penguin", label: "DJ", source: "/brand/avatar-dj-penguin.png" },
-  { id: "samurai-cat", label: "Samurai", source: "/brand/avatar-samurai-cat.png" },
-  { id: "nebula-jellyfish", label: "Nebula", source: "/brand/avatar-nebula-jellyfish.png" },
-  { id: "treasure-chest", label: "Treasure", source: "/brand/avatar-treasure-chest.png" },
-  { id: "strawberry-dragon", label: "Berry", source: "/brand/avatar-strawberry-dragon.png" },
-  { id: "gamer-frog", label: "Gamer", source: "/brand/avatar-gamer-frog.png" },
-  { id: "bubble-tea", label: "Boba", source: "/brand/avatar-bubble-tea.png" },
-  { id: "steampunk-octopus", label: "Octo", source: "/brand/avatar-steampunk-octopus.png" },
-  { id: "thunder-wolf", label: "Thunder", source: "/brand/avatar-thunder-wolf.png" },
-  { id: "sleepy-sheep", label: "Sleepy", source: "/brand/avatar-sleepy-sheep.png" },
+  { id: "timer-dash", label: "Timer", source: getOptimizedProfileAvatarSource("timer-dash") },
+  { id: "cube-simple", label: "Cube", source: getOptimizedProfileAvatarSource("cube-simple") },
+  { id: "lightning-bolt", label: "Bolt", source: getOptimizedProfileAvatarSource("lightning-bolt") },
+  { id: "robot-blue", label: "Robot", source: getOptimizedProfileAvatarSource("robot-blue") },
+  { id: "gamepad", label: "Game", source: getOptimizedProfileAvatarSource("gamepad") },
+  { id: "star-smile", label: "Star", source: getOptimizedProfileAvatarSource("star-smile") },
+  { id: "cube-cat", label: "Cube Cat", source: getOptimizedProfileAvatarSource("cube-cat") },
+  { id: "cat-soft", label: "Cat", source: getOptimizedProfileAvatarSource("cat-soft") },
+  { id: "panda", label: "Panda", source: getOptimizedProfileAvatarSource("panda") },
+  { id: "fox", label: "Fox", source: getOptimizedProfileAvatarSource("fox") },
+  { id: "owl", label: "Owl", source: getOptimizedProfileAvatarSource("owl") },
+  { id: "shark", label: "Shark", source: getOptimizedProfileAvatarSource("shark") },
+  { id: "mountain-sun", label: "Summit", source: getOptimizedProfileAvatarSource("mountain-sun") },
+  { id: "rocket-moon", label: "Rocket", source: getOptimizedProfileAvatarSource("rocket-moon") },
+  { id: "coffee", label: "Coffee", source: getOptimizedProfileAvatarSource("coffee") },
+  { id: "basketball", label: "Hoop", source: getOptimizedProfileAvatarSource("basketball") },
+  { id: "ninja", label: "Ninja", source: getOptimizedProfileAvatarSource("ninja") },
+  { id: "crystal", label: "Crystal", source: getOptimizedProfileAvatarSource("crystal") },
+  { id: "crown", label: "Crown", source: getOptimizedProfileAvatarSource("crown") },
+  { id: "donut", label: "Donut", source: getOptimizedProfileAvatarSource("donut") },
+  { id: "music-note", label: "Music", source: getOptimizedProfileAvatarSource("music-note") },
+  { id: "ramen", label: "Ramen", source: getOptimizedProfileAvatarSource("ramen") },
+  { id: "space-bunny", label: "Bunny", source: getOptimizedProfileAvatarSource("space-bunny") },
+  { id: "pixel-ghost", label: "Ghost", source: getOptimizedProfileAvatarSource("pixel-ghost") },
+  { id: "firebird", label: "Flame", source: getOptimizedProfileAvatarSource("firebird") },
+  { id: "magic-slime", label: "Slime", source: getOptimizedProfileAvatarSource("magic-slime") },
+  { id: "daruma", label: "Daruma", source: getOptimizedProfileAvatarSource("daruma") },
+  { id: "ice-wolf", label: "Ice Wolf", source: getOptimizedProfileAvatarSource("ice-wolf") },
+  { id: "dj-penguin", label: "DJ", source: getOptimizedProfileAvatarSource("dj-penguin") },
+  { id: "samurai-cat", label: "Samurai", source: getOptimizedProfileAvatarSource("samurai-cat") },
+  { id: "nebula-jellyfish", label: "Nebula", source: getOptimizedProfileAvatarSource("nebula-jellyfish") },
+  { id: "treasure-chest", label: "Treasure", source: getOptimizedProfileAvatarSource("treasure-chest") },
+  { id: "strawberry-dragon", label: "Berry", source: getOptimizedProfileAvatarSource("strawberry-dragon") },
+  { id: "gamer-frog", label: "Gamer", source: getOptimizedProfileAvatarSource("gamer-frog") },
+  { id: "bubble-tea", label: "Boba", source: getOptimizedProfileAvatarSource("bubble-tea") },
+  { id: "steampunk-octopus", label: "Octo", source: getOptimizedProfileAvatarSource("steampunk-octopus") },
+  { id: "thunder-wolf", label: "Thunder", source: getOptimizedProfileAvatarSource("thunder-wolf") },
+  { id: "sleepy-sheep", label: "Sleepy", source: getOptimizedProfileAvatarSource("sleepy-sheep") },
 ] as const;
 type ProfileAvatarId = (typeof PROFILE_AVATAR_OPTIONS)[number]["id"];
 const LearnPage = lazy(() => import("./learn/LearnPage"));
@@ -183,6 +196,7 @@ type AppPage =
 interface LocationInfo {
   page: AppPage;
   path: string;
+  search: string;
   hash: string;
 }
 
@@ -388,6 +402,12 @@ const APP_NAV_ITEMS: AppNavItem[] = [
   { key: "settings", label: "設定", path: "/settings" },
   { key: "feedback", label: "意見箱", path: "/feedback" },
 ];
+const FIGMA_TRIAL_DESKTOP_NAV_ITEMS: AppNavItem[] = [
+  { key: "timer", label: "計測", path: "/" },
+  { key: "analyzer", label: "解析", path: "/analyzer" },
+  { key: "learn", label: "学ぶ", path: "/learn" },
+  { key: "settings", label: "その他", path: "/settings" },
+];
 
 type MobilePrimaryNavKey = "timer" | "analyzer" | "learn" | "more";
 
@@ -401,7 +421,7 @@ interface MobilePrimaryNavItem {
 const MOBILE_PRIMARY_NAV_ITEMS: MobilePrimaryNavItem[] = [
   { key: "timer", label: "計測", path: "/", icon: "timer" },
   { key: "analyzer", label: "解析", path: "/analyzer", icon: "analyzer" },
-  { key: "learn", label: "学習", path: "/learn", icon: "learn" },
+  { key: "learn", label: "学ぶ", path: "/learn", icon: "learn" },
   { key: "more", label: "その他", icon: "more" },
 ];
 
@@ -437,6 +457,14 @@ function isNavItemCurrent(activePage: AppPage, itemKey: AppPage): boolean {
     return true;
   }
 
+  if (
+    FIGMA_UI_TRIAL_ENABLED &&
+    itemKey === "settings" &&
+    !["timer", "analyzer", "scramble", "learn"].includes(activePage)
+  ) {
+    return true;
+  }
+
   return activePage === itemKey;
 }
 
@@ -445,6 +473,10 @@ function getNavNotificationCount(
   friendNotificationCount: number,
   chatUnreadCount: number,
 ): number {
+  if (FIGMA_UI_TRIAL_ENABLED && itemKey === "settings") {
+    return friendNotificationCount + chatUnreadCount;
+  }
+
   if (itemKey === "friends") {
     return friendNotificationCount;
   }
@@ -461,7 +493,7 @@ function formatBadgeCount(count: number): string {
 }
 
 function getLocationInfo(): LocationInfo {
-  const { pathname, hash } = window.location;
+  const { pathname, search, hash } = window.location;
   let page: AppPage = "timer";
 
   if (pathname === "/history" || (pathname === "/" && hash === "#history")) {
@@ -499,6 +531,7 @@ function getLocationInfo(): LocationInfo {
   return {
     page,
     path: pathname,
+    search,
     hash,
   };
 }
@@ -979,6 +1012,7 @@ function copyTextWithFallback(text: string): Promise<void> {
 interface GlobalAppNavProps {
   activePage: AppPage;
   isAdmin: boolean;
+  isRecordingMode: boolean;
   onNavigate: (path: string) => void;
   onOpenLogin: () => void;
   authLabel: string;
@@ -992,6 +1026,7 @@ interface GlobalAppNavProps {
 function GlobalAppNav({
   activePage,
   isAdmin,
+  isRecordingMode,
   onNavigate,
   onOpenLogin,
   authLabel,
@@ -1003,14 +1038,23 @@ function GlobalAppNav({
 }: GlobalAppNavProps) {
   const [isMobileMoreOpen, setIsMobileMoreOpen] = useState(false);
   const [brandLogoSource, setBrandLogoSource] = useState(DEFAULT_BRAND_LOGO_SOURCE);
-  const desktopItems = isAdmin
-    ? [...APP_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
+  const baseDesktopItems = FIGMA_UI_TRIAL_ENABLED
+    ? FIGMA_TRIAL_DESKTOP_NAV_ITEMS
     : APP_NAV_ITEMS;
-  const mobileMoreItems = isAdmin
+  const visibleBaseDesktopItems = isRecordingMode
+    ? baseDesktopItems.filter((item) => ["timer", "analyzer", "learn"].includes(item.key))
+    : baseDesktopItems;
+  const desktopItems = isAdmin && !isRecordingMode
+    ? [...visibleBaseDesktopItems, { key: "admin" as const, label: "Admin", path: "/admin" }]
+    : visibleBaseDesktopItems;
+  const visibleMobilePrimaryItems = isRecordingMode
+    ? MOBILE_PRIMARY_NAV_ITEMS.filter((item) => item.key !== "more")
+    : MOBILE_PRIMARY_NAV_ITEMS;
+  const mobileMoreItems = isAdmin && !isRecordingMode
     ? [...MOBILE_MORE_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
     : MOBILE_MORE_NAV_ITEMS;
   const mobileActiveKey = getMobilePrimaryNavKey(activePage);
-  const mobileHiddenNotificationCount = friendNotificationCount + chatUnreadCount;
+  const mobileHiddenNotificationCount = isRecordingMode ? 0 : friendNotificationCount + chatUnreadCount;
   const accountLabel = isAuthLoading ? "Account" : isSignedIn ? authLabel : "ログイン";
 
   useEffect(() => {
@@ -1018,6 +1062,11 @@ function GlobalAppNav({
   }, [activePage]);
 
   useEffect(() => {
+    if (isRecordingMode) {
+      setBrandLogoSource(DEFAULT_BRAND_LOGO_SOURCE);
+      return;
+    }
+
     let isMounted = true;
 
     Promise.all(BRAND_LOGO_CANDIDATE_SOURCES.map(loadImageCandidate)).then((sources) => {
@@ -1035,7 +1084,7 @@ function GlobalAppNav({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [isRecordingMode]);
 
   const handleNavigate = (path: string) => {
     setIsMobileMoreOpen(false);
@@ -1053,7 +1102,7 @@ function GlobalAppNav({
         <button className="global-brand" type="button" onClick={() => handleNavigate("/")}>
           <img src={brandLogoSource} alt="" aria-hidden="true" />
           <span>Cube Split Timer</span>
-          <small>計測・学習・解析</small>
+          <small>計測・解析・学ぶ</small>
         </button>
         <div className="global-nav-links">
           {desktopItems.map((item) => {
@@ -1081,14 +1130,16 @@ function GlobalAppNav({
             );
           })}
         </div>
-        <button
-          className={isSignedIn ? "global-account-button global-account-button-signed-in" : "global-account-button"}
-          type="button"
-          onClick={handleOpenAccount}
-        >
-          {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
-          {accountLabel}
-        </button>
+        {!isRecordingMode && (
+          <button
+            className={isSignedIn ? "global-account-button global-account-button-signed-in" : "global-account-button"}
+            type="button"
+            onClick={handleOpenAccount}
+          >
+            {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
+            {accountLabel}
+          </button>
+        )}
       </nav>
 
       <header className="mobile-app-topbar">
@@ -1099,18 +1150,20 @@ function GlobalAppNav({
             <small>Timer</small>
           </span>
         </button>
-        <button
-          className={isSignedIn ? "mobile-account-button mobile-account-button-signed-in" : "mobile-account-button"}
-          type="button"
-          onClick={handleOpenAccount}
-        >
-          {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
-          {accountLabel}
-        </button>
+        {!isRecordingMode && (
+          <button
+            className={isSignedIn ? "mobile-account-button mobile-account-button-signed-in" : "mobile-account-button"}
+            type="button"
+            onClick={handleOpenAccount}
+          >
+            {isSignedIn && <img src={authAvatarSource} alt="" aria-hidden="true" />}
+            {accountLabel}
+          </button>
+        )}
       </header>
 
       <nav className="mobile-tab-nav" aria-label="Mobile primary navigation">
-        {MOBILE_PRIMARY_NAV_ITEMS.map((item) => {
+        {visibleMobilePrimaryItems.map((item) => {
           const isCurrent = mobileActiveKey === item.key;
           const isMore = item.key === "more";
 
@@ -1123,6 +1176,11 @@ function GlobalAppNav({
               aria-haspopup={isMore ? "dialog" : undefined}
               onClick={() => {
                 if (isMore) {
+                  if (FIGMA_UI_TRIAL_ENABLED) {
+                    handleNavigate("/settings");
+                    return;
+                  }
+
                   setIsMobileMoreOpen((currentValue) => !currentValue);
                   return;
                 }
@@ -1209,8 +1267,12 @@ function GlobalAppNav({
 }
 
 export default function App() {
+  const initialRecordingMode = isRecordingModeUrl();
+  const [isRecordingMode, setIsRecordingMode] = useState(initialRecordingMode);
   const [solves, setSolves] = useState<SolveRecord[]>(() => loadSolves());
-  const [scramble, setScramble] = useState(() => loadCurrentScramble() ?? generateScramble());
+  const [scramble, setScramble] = useState(() =>
+    initialRecordingMode ? RECORDING_DEMO_SCRAMBLE : loadCurrentScramble() ?? generateScramble(),
+  );
   const [timerMode, setTimerMode] = useState<SolveMode>("normal");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     loadThemePreference(),
@@ -1228,14 +1290,19 @@ export default function App() {
   const [friendShareMessage, setFriendShareMessage] = useState("");
   const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [authProfile, setAuthProfile] = useState<ProfileRow | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(() => isAuthConfigured());
+  const [isAuthLoading, setIsAuthLoading] = useState(() =>
+    initialRecordingMode ? false : isAuthConfigured(),
+  );
+  const [solveStorageUserId, setSolveStorageUserId] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [locationInfo, setLocationInfo] = useState<LocationInfo>(() => getLocationInfo());
   const [timerSidePanelTab, setTimerSidePanelTab] = useState<TimerSidePanelTab>("history");
   const [friendNotificationCount, setFriendNotificationCount] = useState(0);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
-  const [isTutorialOpen, setIsTutorialOpen] = useState(() => !hasSeenTutorial());
+  const [isTutorialOpen, setIsTutorialOpen] = useState(
+    () => !initialRecordingMode && !hasSeenTutorial(),
+  );
   const [timerState, setTimerState] = useState<TimerState>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [splitDrafts, setSplitDrafts] = useState<SplitDraft[]>([]);
@@ -1257,10 +1324,14 @@ export default function App() {
   const postStopInputGuardRef = useRef<PostStopInputGuard | null>(null);
   const syncedAccountHistoryUserIdRef = useRef<string | null>(null);
 
-  const activeSolves = useMemo(() => getActiveSolves(solves), [solves]);
-  const stats = useMemo(() => calculateStats(solves), [solves]);
-  const cfopPhaseStats = useMemo(() => calculateCfopPhaseStats(solves), [solves]);
-  const practiceStats = useMemo(() => calculatePracticeStats(solves), [solves]);
+  const displaySolves = useMemo(
+    () => (isRecordingMode ? RECORDING_DEMO_SOLVES : solves),
+    [isRecordingMode, solves],
+  );
+  const activeSolves = useMemo(() => getActiveSolves(displaySolves), [displaySolves]);
+  const stats = useMemo(() => calculateStats(displaySolves), [displaySolves]);
+  const cfopPhaseStats = useMemo(() => calculateCfopPhaseStats(displaySolves), [displaySolves]);
+  const practiceStats = useMemo(() => calculatePracticeStats(displaySolves), [displaySolves]);
   const recentSolves = useMemo(() => activeSolves.slice(0, 100), [activeSolves]);
   const recentChartSolves = useMemo(() => activeSolves.slice(0, 50), [activeSolves]);
   const todaySolves = useMemo(() => {
@@ -1283,9 +1354,13 @@ export default function App() {
     [activeSolves],
   );
   const lastSavedSolve = useMemo(
-    () => solves.find((solve) => solve.id === lastSavedSolveId && solve.deletedAt === null),
-    [lastSavedSolveId, solves],
+    () =>
+      isRecordingMode
+        ? null
+        : solves.find((solve) => solve.id === lastSavedSolveId && solve.deletedAt === null),
+    [isRecordingMode, lastSavedSolveId, solves],
   );
+  const targetSolveStorageUserId = authUser?.id ?? null;
 
   const setTimerStatus = useCallback((nextTimerState: TimerState) => {
     timerStateRef.current = nextTimerState;
@@ -1374,7 +1449,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const syncLocation = () => setLocationInfo(getLocationInfo());
+    const syncLocation = () => {
+      setLocationInfo(getLocationInfo());
+      setIsRecordingMode(isRecordingModeUrl());
+    };
 
     window.addEventListener("popstate", syncLocation);
     window.addEventListener("hashchange", syncLocation);
@@ -1464,6 +1542,14 @@ export default function App() {
   );
 
   useEffect(() => {
+    if (isRecordingMode) {
+      setAuthUser(null);
+      setAuthProfile(null);
+      setIsAuthLoading(false);
+      setAuthNotice(null);
+      return;
+    }
+
     if (!isAuthConfigured()) {
       setIsAuthLoading(false);
       return;
@@ -1617,22 +1703,68 @@ export default function App() {
   }, [authUser, refreshChatUnreadCount]);
 
   useEffect(() => {
+    if (isRecordingMode) {
+      clearCurrentSolveDraft();
+      return;
+    }
+
     const draft = loadCurrentSolveDraft();
 
     if (draft?.status === "running") {
       clearCurrentSolveDraft();
       setDraftMessage("前回の計測は未完了のため保存しませんでした。");
     }
-  }, []);
+  }, [isRecordingMode]);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = themePreference;
-    saveThemePreference(themePreference);
-  }, [themePreference]);
+    document.documentElement.dataset.theme = isRecordingMode ? "dark" : themePreference;
+
+    if (!isRecordingMode) {
+      saveThemePreference(themePreference);
+    }
+  }, [isRecordingMode, themePreference]);
 
   useEffect(() => {
+    document.documentElement.dataset.uiTrial = FIGMA_UI_TRIAL_ENABLED ? "figma" : "classic";
+    document.documentElement.dataset.recordingMode = isRecordingMode ? "true" : "false";
+    document.body.classList.toggle("recording-mode", isRecordingMode);
+    document.body.classList.toggle(
+      "recording-analyzer-page",
+      isRecordingMode && locationInfo.page === "analyzer",
+    );
+
+    return () => {
+      delete document.documentElement.dataset.uiTrial;
+      delete document.documentElement.dataset.recordingMode;
+      document.body.classList.remove("recording-mode");
+      document.body.classList.remove("recording-analyzer-page");
+    };
+  }, [isRecordingMode, locationInfo.page]);
+
+  useEffect(() => {
+    if (isRecordingMode) {
+      return;
+    }
+
     saveCurrentScramble(scramble);
-  }, [scramble]);
+  }, [isRecordingMode, scramble]);
+
+  useEffect(() => {
+    if (!isRecordingMode) {
+      return;
+    }
+
+    setScramble(RECORDING_DEMO_SCRAMBLE);
+    setIsNotificationCenterOpen(false);
+    setDraftMessage(null);
+    setShareStatus(null);
+    setAuthNotice(null);
+    setLastSavedSolveId(null);
+    setUndoState(null);
+    setFriendNotificationCount(0);
+    setChatUnreadCount(0);
+    setIsTutorialOpen(false);
+  }, [isRecordingMode]);
 
   useEffect(() => {
     document.body.classList.toggle("timing", timerState === "running");
@@ -1720,18 +1852,30 @@ export default function App() {
     };
   }, [timerState]);
 
+  useEffect(() => {
+    if (isAuthLoading || solveStorageUserId === targetSolveStorageUserId) {
+      return;
+    }
+
+    setSolves(loadSolves(targetSolveStorageUserId));
+    setLastSavedSolveId(null);
+    setUndoState(null);
+    setSolveStorageUserId(targetSolveStorageUserId);
+  }, [isAuthLoading, solveStorageUserId, targetSolveStorageUserId]);
+
   const persistAndSetSolves = useCallback((nextSolves: SolveRecord[]) => {
     setSolves(nextSolves);
-    saveSolves(nextSolves);
-  }, []);
+    saveSolves(nextSolves, solveStorageUserId);
+  }, [solveStorageUserId]);
 
   const syncAccountSolvesToLocal = useCallback(async (): Promise<CloudImportResult> => {
-    if (!authUser || !isAuthConfigured()) {
+    if (!authUser || !isAuthConfigured() || solveStorageUserId !== authUser.id) {
       return { total: 0, imported: 0, added: 0 };
     }
 
     const rows = await getMySolveSessions({ includeDeleted: false, limit: 10000 });
-    const cloudSolves = rows
+    const ownRows = rows.filter((row) => row.user_id === authUser.id);
+    const cloudSolves = ownRows
       .map(solveSessionRowToSolveRecord)
       .filter((solve): solve is SolveRecord => solve !== null);
     const mergedSolves = mergeSolvesById(solves, cloudSolves);
@@ -1742,29 +1886,35 @@ export default function App() {
     }
 
     return {
-      total: rows.length,
+      total: ownRows.length,
       imported: cloudSolves.length,
       added,
     };
-  }, [authUser, persistAndSetSolves, solves]);
+  }, [authUser, persistAndSetSolves, solveStorageUserId, solves]);
 
   const syncLocalSolvesToCloud = useCallback(
     async (candidateSolves = solves): Promise<CloudSyncResult> => {
       const localSolves = getActiveSolves(candidateSolves);
 
-      if (!authUser || !isAuthConfigured() || localSolves.length === 0) {
+      if (
+        !authUser ||
+        !isAuthConfigured() ||
+        solveStorageUserId !== authUser.id ||
+        localSolves.length === 0
+      ) {
         return { total: localSolves.length, uploaded: 0, skipped: 0 };
       }
 
       const existingRows = await getMySolveSessions({ includeDeleted: true, limit: 10000 });
-      const existingFingerprints = new Set(existingRows.map(getCloudRowFingerprint));
-      const existingLooseFingerprints = new Set(existingRows.map(getCloudRowLooseFingerprint));
+      const ownExistingRows = existingRows.filter((row) => row.user_id === authUser.id);
+      const existingFingerprints = new Set(ownExistingRows.map(getCloudRowFingerprint));
+      const existingLooseFingerprints = new Set(ownExistingRows.map(getCloudRowLooseFingerprint));
       let uploaded = 0;
       let skipped = 0;
 
       for (const solve of localSolves) {
         const input = buildCloudSolveSessionInput(solve);
-        const hasSameLocalId = existingRows.some((row) =>
+        const hasSameLocalId = ownExistingRows.some((row) =>
           row.notes?.includes(getLocalSyncNote(solve)),
         );
         const hasSameRecord =
@@ -1788,7 +1938,7 @@ export default function App() {
         skipped,
       };
     },
-    [authUser, solves],
+    [authUser, solveStorageUserId, solves],
   );
 
   const syncAccountHistory = useCallback(async (): Promise<AccountHistorySyncResult> => {
@@ -1810,6 +1960,7 @@ export default function App() {
     if (
       !authUser ||
       !isAuthConfigured() ||
+      solveStorageUserId !== authUser.id ||
       syncedAccountHistoryUserIdRef.current === authUser.id
     ) {
       return;
@@ -1842,11 +1993,11 @@ export default function App() {
       .catch(() => {
         setAuthNotice("履歴の自動同期に失敗しました。Account画面からもう一度同期できます。");
       });
-  }, [authUser, syncAccountHistory]);
+  }, [authUser, solveStorageUserId, syncAccountHistory]);
 
   const syncSolveToCloud = useCallback(
     (solve: SolveRecord) => {
-      if (!authUser || !isAuthConfigured()) {
+      if (!authUser || !isAuthConfigured() || solveStorageUserId !== authUser.id) {
         return;
       }
 
@@ -1867,15 +2018,31 @@ export default function App() {
       setElapsedMs(finalTime);
       setTimerStatus("finished");
       setSplitDrafts([]);
-      setScramble(generateScramble());
       clearCurrentSolveDraft();
+
+      if (isRecordingMode) {
+        setScramble(RECORDING_DEMO_SCRAMBLE);
+        setLastSavedSolveId(null);
+        setUndoState(null);
+        restoreTimerReturnScroll();
+        return;
+      }
+
+      setScramble(generateScramble());
       setLastSavedSolveId(solve.id);
       setUndoState(null);
       persistAndSetSolves([solve, ...solves]);
       syncSolveToCloud(solve);
       restoreTimerReturnScroll();
     },
-    [persistAndSetSolves, restoreTimerReturnScroll, setTimerStatus, solves, syncSolveToCloud],
+    [
+      isRecordingMode,
+      persistAndSetSolves,
+      restoreTimerReturnScroll,
+      setTimerStatus,
+      solves,
+      syncSolveToCloud,
+    ],
   );
 
   const startTimer = useCallback(() => {
@@ -1887,14 +2054,17 @@ export default function App() {
     setSplitDrafts([]);
     setTimerStatus("running");
     setDraftMessage(null);
-    saveCurrentSolveDraft({
-      status: "running",
-      mode: timerMode,
-      startTime,
-      scramble,
-      splits: [],
-    });
-  }, [rememberTimerReturnScroll, scramble, setTimerStatus, timerMode]);
+
+    if (!isRecordingMode) {
+      saveCurrentSolveDraft({
+        status: "running",
+        mode: timerMode,
+        startTime,
+        scramble,
+        splits: [],
+      });
+    }
+  }, [isRecordingMode, rememberTimerReturnScroll, scramble, setTimerStatus, timerMode]);
 
   const stopNormalTimer = useCallback(() => {
     if (startTimeRef.current === null) {
@@ -1939,13 +2109,17 @@ export default function App() {
     if (nextPhase.phase !== "pll") {
       setElapsedMs(totalTime);
       setSplitDrafts(nextSplits);
-      saveCurrentSolveDraft({
-        status: "running",
-        mode: "cfop_split",
-        startTime: startTimeRef.current,
-        scramble,
-        splits: nextSplits,
-      });
+
+      if (!isRecordingMode) {
+        saveCurrentSolveDraft({
+          status: "running",
+          mode: "cfop_split",
+          startTime: startTimeRef.current,
+          scramble,
+          splits: nextSplits,
+        });
+      }
+
       return;
     }
 
@@ -1964,7 +2138,7 @@ export default function App() {
     };
 
     finishSolve(solve, totalTime);
-  }, [finishSolve, scramble, splitDrafts]);
+  }, [finishSolve, isRecordingMode, scramble, splitDrafts]);
 
   const finishCrossPractice = useCallback(() => {
     if (startTimeRef.current === null) {
@@ -2031,13 +2205,17 @@ export default function App() {
     if (nextPhase.phase !== "pair4") {
       setElapsedMs(totalTime);
       setSplitDrafts(nextSplits);
-      saveCurrentSolveDraft({
-        status: "running",
-        mode: "f2l_pair_split",
-        startTime: startTimeRef.current,
-        scramble,
-        splits: nextSplits,
-      });
+
+      if (!isRecordingMode) {
+        saveCurrentSolveDraft({
+          status: "running",
+          mode: "f2l_pair_split",
+          startTime: startTimeRef.current,
+          scramble,
+          splits: nextSplits,
+        });
+      }
+
       return;
     }
 
@@ -2056,7 +2234,7 @@ export default function App() {
     };
 
     finishSolve(solve, totalTime);
-  }, [finishSolve, scramble, splitDrafts]);
+  }, [finishSolve, isRecordingMode, scramble, splitDrafts]);
 
   const handleRunningTimerInput = useCallback(() => {
     const now = performance.now();
@@ -2697,10 +2875,11 @@ const handleTimerPointerCancel = useCallback(
     const [pathname, inlineHash = ""] = path.split("#");
     const nextHash = hash || (inlineHash ? `#${inlineHash}` : "");
     const nextPath = pathname || "/";
-    const nextUrl = `${nextPath}${nextHash}`;
+    const nextUrl = withRecordingModeParam(`${nextPath}${nextHash}`, isRecordingMode);
 
     window.history.pushState(null, "", nextUrl);
     setLocationInfo(getLocationInfo());
+    setIsRecordingMode(isRecordingModeUrl());
 
     window.setTimeout(() => {
       if (!nextHash) {
@@ -2771,7 +2950,7 @@ const handleTimerPointerCancel = useCallback(
 
   const toggleNotificationCenter = useCallback(() => {
     setIsNotificationCenterOpen((currentValue) => !currentValue);
-  }, []);
+  }, [isRecordingMode]);
 
   const closeNotificationCenter = useCallback(() => {
     setIsNotificationCenterOpen(false);
@@ -2925,15 +3104,16 @@ const handleTimerPointerCancel = useCallback(
   const globalNav = (
     <GlobalAppNav
       activePage={locationInfo.page}
-      isAdmin={authProfile?.role === "admin"}
+      isAdmin={!isRecordingMode && authProfile?.role === "admin"}
+      isRecordingMode={isRecordingMode}
       onNavigate={navigateTo}
       onOpenLogin={openLogin}
       authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
       authAvatarSource={getAuthUserAvatarSource(authUser)}
-      isAuthLoading={isAuthLoading}
-      isSignedIn={Boolean(authUser)}
-      friendNotificationCount={friendNotificationCount}
-      chatUnreadCount={chatUnreadCount}
+      isAuthLoading={!isRecordingMode && isAuthLoading}
+      isSignedIn={!isRecordingMode && Boolean(authUser)}
+      friendNotificationCount={isRecordingMode ? 0 : friendNotificationCount}
+      chatUnreadCount={isRecordingMode ? 0 : chatUnreadCount}
     />
   );
 
@@ -3028,7 +3208,12 @@ const handleTimerPointerCancel = useCallback(
             </main>
           }
         >
-          <AnalyzerPage path={locationInfo.path} onNavigate={navigateTo} onOpenTimer={openTimer} />
+          <AnalyzerPage
+            path={locationInfo.path}
+            isRecordingMode={isRecordingMode}
+            onNavigate={navigateTo}
+            onOpenTimer={openTimer}
+          />
         </Suspense>
       </>
     );
@@ -3131,10 +3316,15 @@ const handleTimerPointerCancel = useCallback(
           isAdmin={authProfile?.role === "admin"}
           isLoading={isAuthLoading}
           isConfigured={isAuthConfigured()}
+          themePreference={themePreference}
+          friendNotificationCount={friendNotificationCount}
+          chatUnreadCount={chatUnreadCount}
           onBack={openTimer}
           onOpenTimer={openTimer}
           onOpenAdmin={openAdmin}
           onOpenSettings={openSettings}
+          onNavigate={navigateTo}
+          onThemePreferenceChange={setThemePreference}
           onSignedIn={(message) => {
             setAuthNotice(message);
             openTimer();
@@ -3166,10 +3356,15 @@ const handleTimerPointerCancel = useCallback(
           isAdmin={authProfile?.role === "admin"}
           isLoading={isAuthLoading}
           isConfigured={isAuthConfigured()}
-          onBack={openLogin}
+          themePreference={themePreference}
+          friendNotificationCount={friendNotificationCount}
+          chatUnreadCount={chatUnreadCount}
+          onBack={openTimer}
           onOpenTimer={openTimer}
           onOpenAdmin={openAdmin}
           onOpenSettings={openSettings}
+          onNavigate={navigateTo}
+          onThemePreferenceChange={setThemePreference}
           onSignedIn={(message) => {
             setAuthNotice(message);
             openSettings();
@@ -3222,7 +3417,7 @@ const handleTimerPointerCancel = useCallback(
     return (
       <>
         {globalNav}
-        <main className="app-shell">
+        <main className="app-shell" data-testid="recording-analysis-page">
           <header className="app-header">
             <div>
               <p className="eyebrow">Analysis</p>
@@ -3236,19 +3431,19 @@ const handleTimerPointerCancel = useCallback(
             </div>
           </header>
 
-          <section className="quick-stats" aria-label="Quick statistics">
+          <section className="quick-stats" aria-label="Quick statistics" data-testid="recording-analysis-quick-stats">
             <StatCard label="ao5" value={formatAverage(stats.ao5)} />
             <StatCard label="ao12" value={formatAverage(stats.ao12)} />
           </section>
 
-          <section className="stats-grid" aria-label="Statistics">
+          <section className="stats-grid" aria-label="Statistics" data-testid="recording-analysis-summary">
             <StatCard label="Solves" value={String(stats.count)} />
             <StatCard label="Average" value={formatAverage(stats.average)} />
             <StatCard label="Best" value={formatAverage(stats.best)} />
             <StatCard label="Worst" value={formatAverage(stats.worst)} />
           </section>
 
-          <section className="analysis-section" aria-label="Analysis">
+          <section className="analysis-section" aria-label="Analysis" data-testid="recording-analysis">
             <div className="section-heading">
               <div>
                 <p className="eyebrow">Session</p>
@@ -3307,7 +3502,7 @@ const handleTimerPointerCancel = useCallback(
     return (
       <>
         {globalNav}
-        <main className="app-shell">
+        <main className="app-shell" data-testid="recording-practice-page">
           <header className="app-header">
             <div>
               <p className="eyebrow">Practice</p>
@@ -3316,7 +3511,7 @@ const handleTimerPointerCancel = useCallback(
             <HelpButton label="Open practice help" onClick={() => openHelp("practice")} />
           </header>
 
-          <section className="practice-section" aria-label="Practice statistics">
+          <section className="practice-section" aria-label="Practice statistics" data-testid="recording-practice">
             <div className="practice-grid">
               <PracticeStatCard title="Cross Practice" stats={practiceStats.crossPractice} />
               <PracticeStatCard title="F2L Practice" stats={practiceStats.f2lPractice} />
@@ -3348,7 +3543,7 @@ const handleTimerPointerCancel = useCallback(
     return (
       <>
         {globalNav}
-        <main className="app-shell">
+        <main className="app-shell" data-testid="recording-history-page">
           <header className="app-header">
             <div>
               <p className="eyebrow">Latest 100</p>
@@ -3357,7 +3552,7 @@ const handleTimerPointerCancel = useCallback(
             <HelpButton label="Open history help" onClick={() => openHelp("penalty-delete")} />
           </header>
 
-          <section className="history-section" aria-label="History">
+          <section className="history-section" aria-label="History" data-testid="recording-history">
             {recentSolves.length === 0 ? (
               <div className="empty-state">
                 <p>No solves yet.</p>
@@ -3498,53 +3693,76 @@ const handleTimerPointerCancel = useCallback(
   return (
     <>
       {globalNav}
-      <main className="app-shell timer-page-shell">
-        <header className="app-header app-home-header">
+      <main
+        className={
+          FIGMA_UI_TRIAL_ENABLED
+            ? "app-shell timer-page-shell figma-trial-shell"
+            : "app-shell timer-page-shell"
+        }
+        data-testid="recording-timer-page"
+      >
+        <header
+          className={
+            FIGMA_UI_TRIAL_ENABLED
+              ? "app-header app-home-header figma-trial-home-header"
+              : "app-header app-home-header"
+          }
+        >
           <div>
-            <p className="eyebrow">Timer</p>
+            <p className="eyebrow">{FIGMA_UI_TRIAL_ENABLED ? "3x3 speedcubing timer" : "Timer"}</p>
             <h1>計測</h1>
             <p className="app-header-copy">
-              モードを選んで、スクランブルを確認したらすぐスタートできます。
+              {FIGMA_UI_TRIAL_ENABLED
+                ? "まずはスクランブルを見てタイマーを押すだけ。慣れたら解析や学習を開けます。"
+                : "モードを選んで、スクランブルを確認したらすぐスタートできます。"}
             </p>
           </div>
-          <div className="header-actions">
-            <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
-            <ImageIconButton
-              label="フレンドを開く"
-              source={FRIEND_ICON_SOURCE}
-              tone="friend"
-              onClick={openFriends}
-            />
-            <ImageIconButton
-              label="チャットを開く"
-              source={CHAT_ICON_SOURCE}
-              tone="chat"
-              badgeCount={chatUnreadCount}
-              onClick={openChat}
-            />
-            <ImageIconButton
-              label="通知センターを開く"
-              source={NOTIFICATION_ICON_SOURCE}
-              badgeCount={friendNotificationCount + chatUnreadCount}
-              isActive={isNotificationCenterOpen}
-              onClick={toggleNotificationCenter}
-            />
-            <div className="theme-control" aria-label="Theme setting">
-              <label htmlFor="theme-select">Theme</label>
-              <select
-                id="theme-select"
-                value={themePreference}
-                onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
-              >
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-                <option value="system">System</option>
-              </select>
+          {!isRecordingMode && (
+            <div className="header-actions">
+              <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
+              {!FIGMA_UI_TRIAL_ENABLED && (
+                <>
+                  <ImageIconButton
+                    label="フレンドを開く"
+                    source={FRIEND_ICON_SOURCE}
+                    tone="friend"
+                    onClick={openFriends}
+                  />
+                  <ImageIconButton
+                    label="チャットを開く"
+                    source={CHAT_ICON_SOURCE}
+                    tone="chat"
+                    badgeCount={chatUnreadCount}
+                    onClick={openChat}
+                  />
+                  <ImageIconButton
+                    label="通知センターを開く"
+                    source={NOTIFICATION_ICON_SOURCE}
+                    badgeCount={friendNotificationCount + chatUnreadCount}
+                    isActive={isNotificationCenterOpen}
+                    onClick={toggleNotificationCenter}
+                  />
+                </>
+              )}
+              {!FIGMA_UI_TRIAL_ENABLED && (
+                <div className="theme-control" aria-label="Theme setting">
+                  <label htmlFor="theme-select">Theme</label>
+                  <select
+                    id="theme-select"
+                    value={themePreference}
+                    onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
+                  >
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="system">System</option>
+                  </select>
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </header>
 
-      {isNotificationCenterOpen && (
+      {!isRecordingMode && isNotificationCenterOpen && (
         <NotificationCenter
           user={authUser}
           isConfigured={isAuthConfigured()}
@@ -3559,51 +3777,141 @@ const handleTimerPointerCancel = useCallback(
         />
       )}
 
-      {draftMessage && (
+      {!isRecordingMode && draftMessage && (
         <div className="notice" role="status">
           {draftMessage}
         </div>
       )}
 
-      {shareStatus && (
+      {!isRecordingMode && shareStatus && (
         <div className="notice share-notice" role="status">
           {shareStatus}
         </div>
       )}
 
-      {authNotice && (
+      {!isRecordingMode && authNotice && (
         <div className="notice auth-notice" role="status">
           {authNotice}
         </div>
       )}
 
       <section className="home-workspace" aria-label="Timer workspace">
-        <section className="timer-panel timer-focus-panel" id="timer" aria-label="Timer">
-          <div className="timer-panel-header">
-            <div>
-              <p className="eyebrow">Current mode</p>
-              <h2>{getModeLabel(timerMode)}</h2>
+        <section
+          className="timer-panel timer-focus-panel"
+          id="timer"
+          aria-label="Timer"
+          data-testid="recording-main-timer"
+        >
+          {!FIGMA_UI_TRIAL_ENABLED && (
+            <div className="timer-panel-header">
+              <div>
+                <p className="eyebrow">Current mode</p>
+                <h2>{getModeLabel(timerMode)}</h2>
+              </div>
+              <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
             </div>
-            <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
-          </div>
+          )}
 
-          <div className="mode-toggle" aria-label="Timer mode">
-            {TIMER_MODES.map((modeOption) => (
+          {FIGMA_UI_TRIAL_ENABLED ? (
+            <div className="figma-trial-mode-row" aria-label="Timer mode and primary actions">
+              <label className="figma-trial-mode-select" htmlFor="figma-trial-timer-mode">
+                <span>計測モード</span>
+                <select
+                  id="figma-trial-timer-mode"
+                  value={timerMode}
+                  onChange={(event) => {
+                    const nextMode = event.currentTarget.value;
+
+                    if (isSolveMode(nextMode)) {
+                      setTimerMode(nextMode);
+                    }
+                  }}
+                >
+                  {TIMER_MODES.map((modeOption) => (
+                    <option key={modeOption.mode} value={modeOption.mode}>
+                      {modeOption.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
-                key={modeOption.mode}
+                className="figma-trial-analyzer-link"
                 type="button"
-                aria-pressed={timerMode === modeOption.mode}
-                onClick={() => setTimerMode(modeOption.mode)}
+                data-testid="recording-open-analyzer-primary"
+                onClick={openCurrentScrambleInAnalyzer}
               >
-                {modeOption.label}
+                解析する
               </button>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="mode-toggle" aria-label="Timer mode">
+              {TIMER_MODES.map((modeOption) => (
+                <button
+                  key={modeOption.mode}
+                  type="button"
+                  aria-pressed={timerMode === modeOption.mode}
+                  onClick={() => setTimerMode(modeOption.mode)}
+                >
+                  {modeOption.label}
+                </button>
+              ))}
+            </div>
+          )}
 
-          <div className="scramble-card">
+          <div
+            className={FIGMA_UI_TRIAL_ENABLED ? "scramble-card figma-trial-scramble-card" : "scramble-card"}
+            data-testid="recording-scramble"
+          >
             <div className="scramble-row">
-              <p className="scramble-label">Scramble</p>
-              <div className="scramble-actions">
+              {FIGMA_UI_TRIAL_ENABLED ? (
+                <div className="figma-trial-scramble-heading">
+                  <span className="figma-trial-cube-tag">3x3</span>
+                  <p className="scramble-label">スクランブル</p>
+                </div>
+              ) : (
+                <p className="scramble-label">Scramble</p>
+              )}
+              {!FIGMA_UI_TRIAL_ENABLED && (
+                <div className="scramble-actions">
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void copyCurrentScramble()}
+                  >
+                    コピー
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={openCurrentScramblePreview}
+                  >
+                    確認
+                  </button>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    data-testid="recording-open-analyzer-from-scramble"
+                    onClick={openCurrentScrambleInAnalyzer}
+                  >
+                    解析
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="scramble-output-row">
+              <p className="scramble-text" data-testid="recording-scramble-text">{scramble}</p>
+              <button
+                className="scramble-refresh-button"
+                type="button"
+                aria-label="新しいスクランブル"
+                title="新しいスクランブル"
+                onClick={() => setScramble(generateScramble())}
+              >
+                <span aria-hidden="true">↻</span>
+              </button>
+            </div>
+            {FIGMA_UI_TRIAL_ENABLED && (
+              <div className="scramble-actions figma-trial-scramble-actions">
                 <button
                   className="ghost-button"
                   type="button"
@@ -3621,29 +3929,19 @@ const handleTimerPointerCancel = useCallback(
                 <button
                   className="ghost-button"
                   type="button"
+                  data-testid="recording-open-analyzer-from-scramble"
                   onClick={openCurrentScrambleInAnalyzer}
                 >
                   解析
                 </button>
               </div>
-            </div>
-            <div className="scramble-output-row">
-              <p className="scramble-text">{scramble}</p>
-              <button
-                className="scramble-refresh-button"
-                type="button"
-                aria-label="新しいスクランブル"
-                title="新しいスクランブル"
-                onClick={() => setScramble(generateScramble())}
-              >
-                <span aria-hidden="true">↻</span>
-              </button>
-            </div>
+            )}
           </div>
 
           <button
             className={timerButtonClassName}
             type="button"
+            data-testid="recording-timer-button"
             onPointerDown={handleTimerPointerDown}
             onPointerMove={handleTimerPointerMove}
             onPointerUp={handleTimerPointerUp}
@@ -3652,6 +3950,23 @@ const handleTimerPointerCancel = useCallback(
             <span className="timer-time">{timerDisplayText}</span>
             <span className="timer-hint">{timerButtonHint}</span>
           </button>
+
+          {FIGMA_UI_TRIAL_ENABLED && (
+            <div className="figma-trial-quick-stats" aria-label="Quick timer statistics" data-testid="recording-timer-stats">
+              <article>
+                <span>Today</span>
+                <strong>{stats.count}</strong>
+              </article>
+              <article>
+                <span>ao5</span>
+                <strong>{formatAverage(stats.ao5)}</strong>
+              </article>
+              <article>
+                <span>Best</span>
+                <strong>{formatAverage(stats.best)}</strong>
+              </article>
+            </div>
+          )}
         </section>
 
         <TimerSidePanel
@@ -3663,7 +3978,7 @@ const handleTimerPointerCancel = useCallback(
         />
       </section>
 
-      {lastSavedSolve && (
+      {!isRecordingMode && lastSavedSolve && (
         <section className="post-solve-actions" aria-label="Last solve actions">
           <div>
             <p className="post-solve-label">Saved</p>
@@ -3685,7 +4000,7 @@ const handleTimerPointerCancel = useCallback(
         </section>
       )}
 
-      {undoState && (
+      {!isRecordingMode && undoState && (
         <div className="undo-toast" role="status">
           <span>{undoState.message}</span>
           <button type="button" onClick={() => restoreSolve(undoState.solveId)}>
@@ -3694,7 +4009,7 @@ const handleTimerPointerCancel = useCallback(
         </div>
       )}
 
-      {isTutorialOpen && (
+      {!isRecordingMode && isTutorialOpen && (
         <TutorialDialog onClose={dismissTutorial} onOpenHelp={openHelpFromTutorial} />
       )}
       </main>
@@ -3801,11 +4116,16 @@ interface AuthPageProps {
   isAdmin: boolean;
   isLoading: boolean;
   isConfigured: boolean;
+  themePreference: ThemePreference;
+  friendNotificationCount: number;
+  chatUnreadCount: number;
   localSolveCount: number;
   onBack: () => void;
   onOpenTimer: () => void;
   onOpenAdmin: () => void;
   onOpenSettings: () => void;
+  onNavigate: (path: string) => void;
+  onThemePreferenceChange: (themePreference: ThemePreference) => void;
   onSignedIn: (message: string) => void;
   onSignedOut: () => void | Promise<void>;
   onExportLocalSolves: () => Promise<void>;
@@ -3830,11 +4150,16 @@ function AuthPage({
   isAdmin,
   isLoading,
   isConfigured,
+  themePreference,
+  friendNotificationCount,
+  chatUnreadCount,
   localSolveCount,
   onBack,
   onOpenTimer,
   onOpenAdmin,
   onOpenSettings,
+  onNavigate,
+  onThemePreferenceChange,
   onSignedIn,
   onSignedOut,
   onExportLocalSolves,
@@ -4234,18 +4559,99 @@ function AuthPage({
     <main className="app-shell auth-page">
       <header className="app-header auth-header">
         <div>
-          <p className="eyebrow">{isSettingsView ? "Settings" : "Account"}</p>
-          <h1>{isSettingsView ? "設定" : user ? "マイページ" : "ログイン"}</h1>
+          <p className="eyebrow">{isSettingsView ? "More" : "Account"}</p>
+          <h1>{isSettingsView ? "その他" : user ? "マイページ" : "ログイン"}</h1>
         </div>
-        <div className="header-actions">
-          <button className="ghost-button" type="button" onClick={onBack}>
-            戻る
-          </button>
-          <button className="primary-button" type="button" onClick={onOpenTimer}>
-            Timerへ戻る
-          </button>
-        </div>
+        {!(FIGMA_UI_TRIAL_ENABLED && isSettingsView) && (
+          <div className="header-actions">
+            <button className="ghost-button" type="button" onClick={onBack}>
+              戻る
+            </button>
+            <button className="primary-button" type="button" onClick={onOpenTimer}>
+              Timerへ戻る
+            </button>
+          </div>
+        )}
       </header>
+
+      {isSettingsView && (
+        <section
+          className="auth-card figma-trial-more-hub"
+          aria-label="その他メニュー"
+          data-testid="recording-more-page"
+        >
+          <div className="figma-trial-more-profile">
+            <img src={profileAvatarOption.source} alt="" aria-hidden="true" decoding="async" />
+            <div>
+              <p className="eyebrow">Profile</p>
+              <h2>{user ? profileDisplayName.trim() || getAuthUserLabel(user) : "ゲスト"}</h2>
+              <span>{user ? `ログイン中 / ${localSolveCount} solves` : "ログインすると履歴を同期できます"}</span>
+            </div>
+            <button className="ghost-button" type="button" onClick={() => onNavigate("/login")}>
+              {user ? "編集" : "ログイン"}
+            </button>
+          </div>
+
+          <div className="figma-trial-more-theme" data-testid="recording-theme-settings">
+            <div>
+              <p className="eyebrow">Theme</p>
+              <h3>テーマ</h3>
+              <p>Light / Dark / System</p>
+            </div>
+            <select
+              aria-label="テーマ"
+              value={themePreference}
+              onChange={(event) => onThemePreferenceChange(event.currentTarget.value as ThemePreference)}
+            >
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+              <option value="system">System</option>
+            </select>
+          </div>
+
+          <div className="figma-trial-more-list">
+            {[
+              { label: "履歴", description: "全ソルブを確認・削除", path: "/history", badgeCount: 0 },
+              { label: "統計・分析", description: "ao5 / ao12 / グラフ", path: "/analysis", badgeCount: 0 },
+              { label: "練習", description: "Cross・F2L練習", path: "/practice", badgeCount: 0 },
+              {
+                label: "フレンド",
+                description: "共有・ランキング",
+                path: "/friends",
+                badgeCount: friendNotificationCount,
+              },
+              {
+                label: "チャット",
+                description: "友だちとやり取り",
+                path: "/chat",
+                badgeCount: chatUnreadCount,
+              },
+              { label: "ヘルプ", description: "使い方とFAQ", path: "/help", badgeCount: 0 },
+              { label: "フィードバック", description: "要望を送る", path: "/feedback", badgeCount: 0 },
+              ...(isAdmin ? [{ label: "Admin", description: "管理者画面", path: "/admin", badgeCount: 0 }] : []),
+            ].map((item) => {
+              const badgeCount = item.badgeCount ?? 0;
+
+              return (
+                <button type="button" key={item.path} onClick={() => onNavigate(item.path)}>
+                  <span>
+                    <strong>{item.label}</strong>
+                    <small>{item.description}</small>
+                  </span>
+                  <span className="figma-trial-more-list-end">
+                    {badgeCount > 0 && (
+                      <span className="nav-notification-badge" aria-label={`未読通知 ${badgeCount}件`}>
+                        {formatBadgeCount(badgeCount)}
+                      </span>
+                    )}
+                    <b aria-hidden="true">›</b>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {!isConfigured ? (
         <section className="auth-card" aria-label="Supabase setup">
@@ -5929,7 +6335,7 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
   };
 
   return (
-    <main className="app-shell feedback-page">
+    <main className="app-shell feedback-page" data-testid="recording-feedback-page">
       <header className="app-header feedback-header">
         <div>
           <p className="eyebrow">Feedback</p>
@@ -5945,7 +6351,7 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
         </div>
       </header>
 
-      <section className="feedback-card" aria-label="Feedback form">
+      <section className="feedback-card" aria-label="Feedback form" data-testid="recording-feedback">
         <div>
           <p className="eyebrow">Report</p>
           <h2>バグや直してほしいところを送る</h2>
@@ -6114,7 +6520,11 @@ function TimerSidePanel({
   stats,
 }: TimerSidePanelProps) {
   return (
-    <aside className="home-side-panel timer-insight-panel" aria-label="Timer insights">
+    <aside
+      className="home-side-panel timer-insight-panel"
+      aria-label="Timer insights"
+      data-testid="recording-split-panel"
+    >
       <div className="timer-insight-tabs" role="tablist" aria-label="Timer insight tabs">
         <button
           type="button"
@@ -6153,7 +6563,12 @@ function TimerHistoryPanel({ recentSolves, stats }: TimerHistoryPanelProps) {
   const visibleSolves = recentSolves.slice(0, 12);
 
   return (
-    <section className="timer-insight-content" role="tabpanel" aria-label="Recent history">
+    <section
+      className="timer-insight-content"
+      role="tabpanel"
+      aria-label="Recent history"
+      data-testid="recording-history"
+    >
       {visibleSolves.length === 0 ? (
         <p className="timer-insight-empty">まだ履歴がありません。</p>
       ) : (
@@ -6185,7 +6600,12 @@ interface TimerStatsPanelProps {
 
 function TimerStatsPanel({ recentChartSolves, stats }: TimerStatsPanelProps) {
   return (
-    <section className="timer-insight-content timer-stats-panel" role="tabpanel" aria-label="Timer stats">
+    <section
+      className="timer-insight-content timer-stats-panel"
+      role="tabpanel"
+      aria-label="Timer stats"
+      data-testid="recording-stats"
+    >
       <TimerTrendChart solves={recentChartSolves} />
       <div className="timer-stat-grid" aria-label="Session statistics">
         <TimerMiniStat label="Best single" value={formatAverage(stats.best)} featured />

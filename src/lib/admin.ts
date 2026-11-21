@@ -135,6 +135,25 @@ export async function getAdminSolveSessions(
   return data ?? [];
 }
 
+export async function updateAdminSolveSessionDeleted(
+  solveId: string,
+  isDeleted: boolean,
+): Promise<SolveSessionRow> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from("solve_sessions")
+    .update({ is_deleted: isDeleted })
+    .eq("id", solveId)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export async function sendUserPasswordResetEmail(email: string): Promise<void> {
   await requestPasswordResetEmail(email);
 }

@@ -13,7 +13,6 @@ import type {
 } from "../types";
 import {
   LEARNING_CASES,
-  LEARNING_ASSET_FOLDERS,
   LEARNING_CATEGORIES,
   LEARNING_CATEGORY_DESCRIPTIONS,
   LEARNING_CATEGORY_LABELS,
@@ -378,7 +377,7 @@ export default function LearnPage({ path, onNavigate, onOpenTimer }: LearnPagePr
   const route = getLearnRoute(path);
   const section = route.section;
   const shouldShowLandscapeHint =
-    section === "home" || section === "f2lCandidates" || isLearningCategory(section);
+    section === "f2lCandidates" || isLearningCategory(section);
   const [progress, setProgress] = useState<LearningProgressMap>(() => loadLearningProgress());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [practiceCategory, setPracticeCategory] = useState<PracticeCategory>("all");
@@ -446,11 +445,11 @@ export default function LearnPage({ path, onNavigate, onOpenTimer }: LearnPagePr
   );
 
   return (
-    <main className="app-shell learn-page">
+    <main className="app-shell learn-page" data-testid="recording-learn">
       <header className="app-header learn-header">
         <div>
           <p className="eyebrow">Learn</p>
-          <h1>手順学習</h1>
+          <h1>学ぶ</h1>
         </div>
         <div className="header-actions">
           <button className="ghost-button" type="button" onClick={onOpenTimer}>
@@ -600,17 +599,16 @@ interface LearnTabsProps {
 
 function LearnTabs({ currentSection, onNavigate }: LearnTabsProps) {
   const tabs: Array<{ section: LearnSection; label: string; path: string }> = [
-    { section: "home", label: "Top", path: "/learn" },
+    { section: "home", label: "はじめに", path: "/learn" },
     { section: "f2l", label: "F2L", path: "/learn/f2l" },
     { section: "oll", label: "OLL", path: "/learn/oll" },
     { section: "pll", label: "PLL", path: "/learn/pll" },
-    { section: "f2lCandidates", label: "F2L候補", path: "/learn/f2l-candidates" },
     { section: "notation", label: "回転記号", path: "/learn/notation" },
-    { section: "practice", label: "Practice", path: "/learn/practice" },
+    { section: "practice", label: "練習", path: "/learn/practice" },
   ];
 
   return (
-    <nav className="learn-tabs" aria-label="Learn navigation">
+    <nav className="learn-tabs" aria-label="Learn navigation" data-testid="recording-learn-tabs">
       {tabs.map((tab) => (
         <button
           aria-pressed={currentSection === tab.section}
@@ -635,13 +633,13 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
 
   return (
     <>
-      <section className="learn-hero" aria-label="Learn overview">
+      <section className="learn-hero" aria-label="Learn overview" data-testid="recording-learn-hero">
         <div>
-          <p className="eyebrow">F2L / OLL / PLL</p>
-          <h2>形を見て、手順と進捗をまとめて管理します。</h2>
+          <p className="eyebrow">まずはここから</p>
+          <h2>覚えたいことを1つ選ぶだけで始められます。</h2>
           <p>
-            進捗はこの端末のlocalStorageに保存されます。タイマー画面とは分離しているので、
-            計測中に学習データは読み込みません。
+            はじめてなら回転記号、タイムを縮めたいならF2L、最後の手順を覚えたいならOLL / PLLへ進みます。
+            進捗はこの端末に保存されます。
           </p>
         </div>
         <div className="learn-total-progress" aria-label="Total learning progress">
@@ -652,7 +650,25 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
         </div>
       </section>
 
-      <section className="learn-category-grid" aria-label="Learning categories">
+      <section className="learn-start-paths" aria-label="Recommended learning path">
+        <button type="button" onClick={() => onNavigate("/learn/notation")}>
+          <span>1</span>
+          <strong>記号を確認</strong>
+          <small>U / R / F などの回し方を3Dで見る</small>
+        </button>
+        <button type="button" onClick={() => onNavigate("/learn/f2l")}>
+          <span>2</span>
+          <strong>F2Lから始める</strong>
+          <small>最初に伸びやすい41パターンだけ見る</small>
+        </button>
+        <button type="button" onClick={() => onNavigate("/learn/practice")}>
+          <span>3</span>
+          <strong>覚えたら練習</strong>
+          <small>ランダム出題で思い出せるか確認</small>
+        </button>
+      </section>
+
+      <section className="learn-category-grid" aria-label="Learning categories" data-testid="recording-learn-categories">
         {LEARNING_CATEGORIES.map((category) => {
           const cases = getLearningCasesByCategory(category);
           const summary = summarizeProgress(cases, progress);
@@ -661,7 +677,7 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
             <article className="learn-category-card" key={category}>
               <div>
                 <p className="eyebrow">{LEARNING_CATEGORY_LABELS[category]}</p>
-                <h2>{LEARNING_CATEGORY_LABELS[category]} cases</h2>
+                <h2>{LEARNING_CATEGORY_LABELS[category]}を覚える</h2>
                 <p>{LEARNING_CATEGORY_DESCRIPTIONS[category]}</p>
               </div>
               <div className="learn-progress-row">
@@ -709,9 +725,9 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
 
       <section className="learn-practice-entry" aria-label="F2L candidate review entry">
         <div>
-          <p className="eyebrow">Review queue</p>
-          <h2>追加F2L候補を確認する</h2>
-          <p>基本41とは別枠で、追加F2L・裏F2L・インサート違いの候補を3Dで確認します。正式DBにはまだ入りません。</p>
+          <p className="eyebrow">Advanced</p>
+          <h2>上級者向けの追加F2L候補</h2>
+          <p>基本41とは別枠で、追加F2L・裏F2L・インサート違いの候補を3Dで確認します。</p>
         </div>
         <button className="ghost-button" type="button" onClick={() => onNavigate("/learn/f2l-candidates")}>
           候補を見る
@@ -753,11 +769,14 @@ function LearnCategoryPage({
     (caseItem) =>
       statusFilter === "all" || getCaseStatus(caseItem.id, progress) === statusFilter,
   );
-  const assetFolder = LEARNING_ASSET_FOLDERS[category];
 
   return (
     <>
-      <section className="learn-section-heading" aria-label={`${category} overview`}>
+      <section
+        className="learn-section-heading"
+        aria-label={`${category} overview`}
+        data-testid={`recording-${category}`}
+      >
         <div>
           <p className="eyebrow">{LEARNING_CATEGORY_LABELS[category]}</p>
           <h2>{LEARNING_CATEGORY_LABELS[category]}一覧</h2>
@@ -784,11 +803,15 @@ function LearnCategoryPage({
         ))}
       </div>
 
-      <section className="learn-case-list" aria-label={`${category} learning case list`}>
+      <section
+        className="learn-case-list"
+        aria-label={`${category} learning case list`}
+        data-testid={`recording-${category}-case-list`}
+      >
         {cases.length === 0 ? (
           <div className="empty-state">
             <p>まだ画像がありません。</p>
-            <span>{assetFolder} に画像を追加してください。</span>
+            <span>このカテゴリーの学習ケースはまだ登録されていません。</span>
           </div>
         ) : visibleCases.length === 0 ? (
           <div className="empty-state">
@@ -875,7 +898,11 @@ function LearnCaseDetailPage({
   }
 
   return (
-    <section className="learn-detail-page" aria-label={`${caseItem.title} detail`}>
+    <section
+      className="learn-detail-page"
+      aria-label={`${caseItem.title} detail`}
+      data-testid="recording-learn-detail"
+    >
       <div className="learn-section-heading learn-detail-page-heading">
         <div>
           <p className="eyebrow">{LEARNING_CATEGORY_LABELS[category]} Detail</p>
@@ -1031,7 +1058,11 @@ function F2lCandidateReviewPage() {
 
   return (
     <>
-      <section className="learn-section-heading" aria-label="F2L candidate review overview">
+      <section
+        className="learn-section-heading"
+        aria-label="F2L candidate review overview"
+        data-testid="recording-f2l-candidates"
+      >
         <div>
           <p className="eyebrow">Review queue</p>
           <h2>追加F2L候補リスト</h2>
@@ -1047,7 +1078,11 @@ function F2lCandidateReviewPage() {
         </div>
       </section>
 
-      <section className="f2l-candidate-layout" aria-label="F2L candidate review">
+      <section
+        className="f2l-candidate-layout"
+        aria-label="F2L candidate review"
+        data-testid="recording-f2l-candidate-review"
+      >
         <div className="f2l-candidate-list" aria-label="F2L candidate list">
           {F2L_CANDIDATES.map((candidate) => {
             const validation = validateF2lCandidate(candidate);
@@ -1188,7 +1223,11 @@ function NotationPage() {
 
   return (
     <>
-      <section className="learn-section-heading notation-hero" aria-label="Notation overview">
+      <section
+        className="learn-section-heading notation-hero"
+        aria-label="Notation overview"
+        data-testid="recording-notation"
+      >
         <div>
           <p className="eyebrow">Notation</p>
           <h2>回転記号を1手ずつ確認する</h2>
@@ -1212,23 +1251,7 @@ function NotationPage() {
         ))}
       </div>
 
-      <section className="notation-layout" aria-label="Notation moves">
-        <div className="notation-move-list">
-          {activeGroupMoves.map((move) => (
-            <button
-              aria-pressed={selectedNotationMove.move === move.move}
-              className="notation-move-card"
-              key={move.move}
-              type="button"
-              onClick={() => setSelectedMove(move.move)}
-            >
-              <span className="notation-symbol">{move.move}</span>
-              <span>{move.direction}</span>
-              <em>{move.supported ? "対応済み" : "未対応"}</em>
-            </button>
-          ))}
-        </div>
-
+      <section className="notation-layout" aria-label="Notation moves" data-testid="recording-notation-player">
         <article className="notation-detail-card">
           <div className="notation-detail-head">
             <div>
@@ -1240,6 +1263,22 @@ function NotationPage() {
               {selectedNotationMove.supported ? "アニメーション対応" : "説明のみ"}
             </span>
           </div>
+
+          <Suspense
+            fallback={
+              <div className="algorithm-player algorithm-player-loading" role="status">
+                回転記号プレイヤーを読み込んでいます。
+              </div>
+            }
+          >
+            <AlgorithmPlayer
+              caseItem={notationCase}
+              headingLabel="Notation Animation"
+              headingTitle={`${selectedNotationMove.move} 単体再生`}
+              showFocusLegend={false}
+              startMode="solved"
+            />
+          </Suspense>
 
           <dl className="notation-info-grid">
             <div>
@@ -1261,22 +1300,6 @@ function NotationPage() {
             <p>`'` は逆向き、`2` は180度です。時計回りは画面基準ではなく、回す面を正面から見た向きです。</p>
           </div>
 
-          <Suspense
-            fallback={
-              <div className="algorithm-player algorithm-player-loading" role="status">
-                回転記号プレイヤーを読み込んでいます。
-              </div>
-            }
-          >
-            <AlgorithmPlayer
-              caseItem={notationCase}
-              headingLabel="Notation Animation"
-              headingTitle={`${selectedNotationMove.move} 単体再生`}
-              showFocusLegend={false}
-              startMode="solved"
-            />
-          </Suspense>
-
           <div className="notation-supported-box">
             <strong>現在のmove parser対応</strong>
             <ul>
@@ -1286,6 +1309,22 @@ function NotationPage() {
             </ul>
           </div>
         </article>
+
+        <div className="notation-move-list">
+          {activeGroupMoves.map((move) => (
+            <button
+              aria-pressed={selectedNotationMove.move === move.move}
+              className="notation-move-card"
+              key={move.move}
+              type="button"
+              onClick={() => setSelectedMove(move.move)}
+            >
+              <span className="notation-symbol">{move.move}</span>
+              <span>{move.direction}</span>
+              <em>{move.supported ? "対応済み" : "未対応"}</em>
+            </button>
+          ))}
+        </div>
       </section>
     </>
   );
@@ -1302,6 +1341,7 @@ function CaseListButton({ caseItem, status, onOpen }: CaseListButtonProps) {
     <button
       className="learn-case-button"
       type="button"
+      data-testid="recording-learn-case-button"
       onClick={onOpen}
     >
       <CasePreview caseItem={caseItem} size="card" />
@@ -1361,7 +1401,7 @@ function CaseDetail({ caseItem, status, onSetStatus }: CaseDetailProps) {
   };
 
   return (
-    <article className="learn-detail-card">
+    <article className="learn-detail-card" data-testid="recording-learn-case">
       <div className="learn-detail-head">
         <CasePreview caseItem={caseItem} size="detail" />
         <div>
@@ -1440,7 +1480,7 @@ function LearnPracticePage({
   const status = getCaseStatus(caseItem.id, progress);
 
   return (
-    <section className="learn-practice-page" aria-label="Random practice">
+    <section className="learn-practice-page" aria-label="Random practice" data-testid="recording-learn-practice">
       <div className="learn-section-heading">
         <div>
           <p className="eyebrow">Practice</p>
@@ -1515,9 +1555,7 @@ function LearnPracticeEmpty() {
     <section className="learn-practice-page" aria-label="Random practice empty state">
       <div className="empty-state">
         <p>まだ練習できる画像がありません。</p>
-        <span>
-          src/assets/learn/f2l、src/assets/learn/oll、src/assets/learn/pll のいずれかに画像を追加してください。
-        </span>
+        <span>F2L、OLL、PLLの学習ケースが登録されると練習できます。</span>
       </div>
     </section>
   );
@@ -1590,10 +1628,21 @@ function AssetCasePreview({
   caseItem: LearningCase;
   className: string;
 }) {
+  const isGeneratedF2lImage =
+    caseItem.image.kind === "asset" &&
+    caseItem.image.category === "f2l" &&
+    caseItem.tags.includes("仮生成画像");
+  const isGeneratedOllImage =
+    caseItem.image.kind === "asset" &&
+    caseItem.image.category === "oll" &&
+    caseItem.tags.includes("自動生成図");
+
   return (
     <span
       aria-label={`${caseItem.name} image`}
-      className={`${className} case-preview-image-shell`}
+      className={`${className} case-preview-image-shell${
+        isGeneratedF2lImage ? " case-preview-image-shell-generated-f2l" : ""
+      }${isGeneratedOllImage ? " case-preview-image-shell-generated-oll" : ""}`}
       role="img"
     >
       <img alt="" className="case-preview-image" src={caseItem.imageUrl} />

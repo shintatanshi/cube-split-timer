@@ -1,0 +1,556 @@
+{
+  "siteName": "Cube Split Timer",
+  "baseUrl": "https://cube-split-timer.vercel.app/",
+  "recordingModeParam": "recording=1",
+  "defaultViewport": {
+    "width": 1080,
+    "height": 1920,
+    "deviceScaleFactor": 1
+  },
+  "mobileFallbackViewport": {
+    "width": 430,
+    "height": 932,
+    "deviceScaleFactor": 2
+  },
+  "safety": {
+    "avoidPages": [
+      "/login",
+      "/friends",
+      "/chat",
+      "/admin",
+      "/reset-password"
+    ],
+    "notes": [
+      "Do not record logged-in personal data.",
+      "Use recording=1 for fixed demo data.",
+      "Prefer direct URL navigation over clicking through menus."
+    ]
+  },
+  "tutorialFlows": [
+    {
+      "flowId": "timer-scramble-to-analyzer-phase-playback",
+      "title": "タイマーのスクランブルをAnalyzerで見て工程を再生する",
+      "purpose": "タイマー画面のスクランブルから解析へ移動し、同じスクランブルがAnalyzerに渡され、Cross/F2L/OLL/PLLの工程別再生に進めることを見せる",
+      "recommendedViewport": {
+        "width": 1080,
+        "height": 1920,
+        "deviceScaleFactor": 1
+      },
+      "startUrl": "https://cube-split-timer.vercel.app/?recording=1",
+      "recordingModeRequired": true,
+      "estimatedDurationSec": 14,
+      "preconditions": [
+        "recording=1 を付けるとデモ用スクランブルが固定される",
+        "Timerのスクランブルカード内にある解析ボタンを押す",
+        "AnalyzerではURLのscrambleパラメータから同じスクランブルを読み込む",
+        "Analyzerの工程別bestボタンでCross/F2L/OLL/PLLの再生に進める"
+      ],
+      "steps": [
+        {
+          "stepId": "open-timer-recording",
+          "title": "タイマー画面を開く",
+          "instructionForAutomation": "録画モードのタイマー画面をURL直開きする",
+          "action": {
+            "type": "openUrl",
+            "url": "https://cube-split-timer.vercel.app/?recording=1"
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-main-timer']",
+            "fallbackText": [
+              "計測",
+              "スクランブル"
+            ],
+            "timeoutMs": 8000
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-scramble']",
+            "description": "スクランブルカードと解析ボタンを画面内に入れる"
+          },
+          "narrationHint": "まずタイマー画面でスクランブルを確認します。"
+        },
+        {
+          "stepId": "read-current-scramble",
+          "title": "スクランブルを取得する",
+          "instructionForAutomation": "画面上のスクランブル文字列を読み、後でAnalyzer URLに反映されたか確認する",
+          "action": {
+            "type": "readText",
+            "selector": "[data-testid='recording-scramble-text']",
+            "saveTo": "timerScramble"
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-scramble-text']",
+            "timeoutMs": 5000
+          },
+          "expected": {
+            "textNotEmpty": true
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-scramble-text']",
+            "description": "3x3スクランブルの記号列を見せる"
+          },
+          "narrationHint": "このスクランブルをそのまま解析に送ります。"
+        },
+        {
+          "stepId": "click-analyze-from-scramble",
+          "title": "スクランブルカードの解析ボタンを押す",
+          "instructionForAutomation": "スクランブル欄の解析ボタンをクリックしてAnalyzerへ移動する",
+          "action": {
+            "type": "click",
+            "selector": "[data-testid='recording-open-analyzer-from-scramble']"
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-analyzer-player']",
+            "fallbackText": [
+              "3D再生",
+              "工程別best"
+            ],
+            "timeoutMs": 10000
+          },
+          "expected": {
+            "urlIncludes": [
+              "/analyzer",
+              "recording=1",
+              "scramble="
+            ],
+            "scrambleParamShouldMatchSavedText": "timerScramble"
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-analyzer-player']",
+            "description": "Analyzerの3Dキューブが上部に表示される"
+          },
+          "narrationHint": "解析を押すと、同じスクランブルがAnalyzerに入った状態で開きます。"
+        },
+        {
+          "stepId": "show-analyzer-cube",
+          "title": "Analyzerで崩れた状態を見る",
+          "instructionForAutomation": "Analyzerの3Dキャンバスが描画されるまで待つ",
+          "action": {
+            "type": "waitFor",
+            "selector": "[data-testid='recording-analyzer-canvas']",
+            "timeoutMs": 8000
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-analyzer-canvas'] canvas",
+            "timeoutMs": 8000
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-analyzer-canvas']",
+            "description": "崩れたキューブの3D表示を大きめに見せる"
+          },
+          "narrationHint": "ここでスクランブル後の状態を3Dで確認できます。"
+        },
+        {
+          "stepId": "play-next-recommended-phase",
+          "title": "次のおすすめ工程を再生する",
+          "instructionForAutomation": "工程別bestの大きいボタンを押して、現在進める工程を3D再生する",
+          "action": {
+            "type": "click",
+            "selector": "[data-testid='recording-analyzer-phase-primary']",
+            "optional": true
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-analyzer-phase-panel']",
+            "timeoutMs": 8000
+          },
+          "expected": {
+            "statusMayChange": true,
+            "moveListMayPopulate": true
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-analyzer-phase-panel']",
+            "description": "工程別bestと次のおすすめボタンを見せる"
+          },
+          "narrationHint": "次のおすすめを押すと、CrossやF2Lなど今できる工程を再生できます。"
+        },
+        {
+          "stepId": "play-cross-phase-directly",
+          "title": "Cross工程を直接再生する",
+          "instructionForAutomation": "Crossボタンが押せる場合は押してCross bestを再生する",
+          "action": {
+            "type": "click",
+            "selector": "[data-testid='recording-analyzer-phase-cross']",
+            "optional": true
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-analyzer-playback-controls']",
+            "timeoutMs": 8000
+          },
+          "visualFocus": {
+            "selector": "[data-testid='recording-analyzer-playback-controls']",
+            "description": "再生、1手戻る、1手進むボタンを見せる"
+          },
+          "narrationHint": "工程ボタンからCross、F2L、OLL、PLLを個別に確認できます。"
+        },
+        {
+          "stepId": "use-transport-controls",
+          "title": "再生操作を見せる",
+          "instructionForAutomation": "再生ボタンが押せる場合は押し、少し待ってから1手進む/戻るUIを見せる",
+          "action": {
+            "type": "click",
+            "selector": "[data-testid='recording-analyzer-playback-controls'] button[aria-label='再生']",
+            "optional": true
+          },
+          "waitFor": {
+            "selector": "[data-testid='recording-analyzer-playback-controls']",
+            "timeoutMs": 5000
+          },
+          "postActionWaitMs": 1800,
+          "visualFocus": {
+            "selector": "[data-testid='recording-analyzer-player']",
+            "description": "3Dキューブと再生コントロールをまとめて見せる"
+          },
+          "narrationHint": "再生ボタンや1手ずつ進める操作で、手順を確認できます。"
+        }
+      ],
+      "phasePlaybackGuide": [
+        {
+          "phase": "Cross",
+          "selector": "[data-testid='recording-analyzer-phase-cross']",
+          "whatItDoes": "スクランブル状態からCross bestを3Dで再生する",
+          "whenToUse": "最初にクロスの作り方を見せたい時",
+          "fallback": "押せない場合は [data-testid='recording-analyzer-phase-primary'] を押す"
+        },
+        {
+          "phase": "F2L",
+          "selector": "[data-testid='recording-analyzer-phase-f2l']",
+          "whatItDoes": "Cross後状態からF2L bestまたは次のF2Lを再生する",
+          "whenToUse": "ペアを入れる工程やF2L強調を見せたい時",
+          "fallback": "先にCrossを再生、またはAnalyzer F2L URLを開く"
+        },
+        {
+          "phase": "OLL",
+          "selector": "[data-testid='recording-analyzer-phase-oll']",
+          "whatItDoes": "F2L完成後のOLL候補を3Dで再生する",
+          "whenToUse": "最後層の向き合わせを見せたい時",
+          "fallback": "F2L bestが未作成なら [data-testid='recording-analyzer-phase-primary'] を先に押す"
+        },
+        {
+          "phase": "PLL",
+          "selector": "[data-testid='recording-analyzer-phase-pll']",
+          "whatItDoes": "OLL後のPLL候補を3Dで再生する",
+          "whenToUse": "最後の並べ替えまで見せたい時",
+          "fallback": "OLLが未準備ならOLL工程を先に再生する"
+        }
+      ],
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/analyzer?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-analyzer-player']",
+          "fallbackText": [
+            "3D再生",
+            "工程別best"
+          ]
+        },
+        "instruction": "クリック遷移が失敗した場合はAnalyzerを直接開き、3D再生パネルだけを見せる"
+      }
+    }
+  ],
+  "shots": [
+    {
+      "shotId": "shot-01",
+      "role": "hook",
+      "title": "アプリ全体紹介",
+      "useInVideo": {
+        "start": 0,
+        "end": 2
+      },
+      "recording": {
+        "durationSec": 4,
+        "url": "https://cube-split-timer.vercel.app/?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-main-timer']",
+          "fallbackText": [
+            "計測",
+            "スクランブル",
+            "0.000"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 1000
+          }
+        ],
+        "saveAs": "shot-01-main-timer.mp4"
+      },
+      "visualPurpose": "最初の2秒でルービックキューブ練習アプリだと伝える",
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/learn?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-learn']",
+          "fallbackText": [
+            "学ぶ",
+            "F2L",
+            "OLL",
+            "PLL"
+          ]
+        },
+        "saveAs": "shot-01-fallback-learn.mp4"
+      }
+    },
+    {
+      "shotId": "shot-02",
+      "role": "timer-demo",
+      "title": "タイマー操作",
+      "useInVideo": {
+        "start": 2,
+        "end": 8
+      },
+      "recording": {
+        "durationSec": 7,
+        "url": "https://cube-split-timer.vercel.app/?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-timer-button']",
+          "fallbackText": [
+            "Hold Space",
+            "0.000",
+            "スクランブル"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 800
+          },
+          {
+            "type": "press",
+            "key": "Space",
+            "durationMs": 700
+          },
+          {
+            "type": "wait",
+            "ms": 1800
+          },
+          {
+            "type": "press",
+            "key": "Space"
+          },
+          {
+            "type": "wait",
+            "ms": 800
+          }
+        ],
+        "saveAs": "shot-02-timer-run.mp4"
+      },
+      "visualPurpose": "大きなタイマーが動くことで計測アプリだと伝える",
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-main-timer']",
+          "fallbackText": [
+            "計測",
+            "0.000"
+          ]
+        },
+        "saveAs": "shot-02-fallback-timer-idle.mp4"
+      }
+    },
+    {
+      "shotId": "shot-03",
+      "role": "proof",
+      "title": "記録分析",
+      "useInVideo": {
+        "start": 8,
+        "end": 18
+      },
+      "recording": {
+        "durationSec": 8,
+        "url": "https://cube-split-timer.vercel.app/analysis?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-analysis']",
+          "fallbackText": [
+            "記録分析",
+            "Session Overview",
+            "Phase Stats"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 1200
+          },
+          {
+            "type": "scroll",
+            "x": 0,
+            "y": 520,
+            "durationMs": 1200
+          },
+          {
+            "type": "wait",
+            "ms": 1200
+          }
+        ],
+        "saveAs": "shot-03-analysis-stats.mp4"
+      },
+      "visualPurpose": "記録が貯まり、ao5やフェーズ統計で振り返れることを見せる",
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/history?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-history-page']",
+          "fallbackText": [
+            "履歴",
+            "Latest 100"
+          ]
+        },
+        "saveAs": "shot-03-fallback-history.mp4"
+      }
+    },
+    {
+      "shotId": "shot-04",
+      "role": "learning",
+      "title": "F2L学習",
+      "useInVideo": {
+        "start": 18,
+        "end": 25
+      },
+      "recording": {
+        "durationSec": 7,
+        "url": "https://cube-split-timer.vercel.app/learn/f2l?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-f2l-case-list']",
+          "fallbackText": [
+            "F2L",
+            "F2L一覧"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 800
+          },
+          {
+            "type": "click",
+            "selector": "[data-testid='recording-learn-case-button']"
+          },
+          {
+            "type": "waitFor",
+            "selector": "[data-testid='recording-algorithm-player']",
+            "timeoutMs": 5000
+          },
+          {
+            "type": "wait",
+            "ms": 2500
+          }
+        ],
+        "saveAs": "shot-04-learn-f2l.mp4"
+      },
+      "visualPurpose": "F2Lケースを見ながら手順と3Dで学べることを見せる",
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/learn/notation?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-notation-player']",
+          "fallbackText": [
+            "Notation",
+            "回転記号"
+          ]
+        },
+        "saveAs": "shot-04-fallback-notation.mp4"
+      }
+    },
+    {
+      "shotId": "shot-05",
+      "role": "analyzer",
+      "title": "Analyzer 3D再生",
+      "useInVideo": {
+        "start": 25,
+        "end": 30
+      },
+      "recording": {
+        "durationSec": 6,
+        "url": "https://cube-split-timer.vercel.app/analyzer?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-analyzer-player']",
+          "fallbackText": [
+            "3D再生",
+            "F2L強調",
+            "工程別best"
+          ]
+        },
+        "actions": [
+          {
+            "type": "waitFor",
+            "selector": "[data-testid='recording-analyzer-canvas']",
+            "timeoutMs": 5000
+          },
+          {
+            "type": "wait",
+            "ms": 1000
+          },
+          {
+            "type": "click",
+            "selector": "[data-testid='recording-analyzer-playback-controls'] button[aria-label='再生']",
+            "optional": true
+          },
+          {
+            "type": "wait",
+            "ms": 3000
+          }
+        ],
+        "saveAs": "shot-05-analyzer-3d.mp4"
+      },
+      "visualPurpose": "3Dキューブと工程別bestで、上達支援アプリとして印象づける",
+      "fallback": {
+        "url": "https://cube-split-timer.vercel.app/analyzer/f2l?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-f2l']",
+          "fallbackText": [
+            "F2L Analyzer",
+            "F2L"
+          ]
+        },
+        "saveAs": "shot-05-fallback-analyzer-f2l.mp4"
+      }
+    }
+  ],
+  "optionalShots": [
+    {
+      "shotId": "shot-optional-notation",
+      "role": "beginner-learning",
+      "title": "回転記号学習",
+      "recording": {
+        "durationSec": 5,
+        "url": "https://cube-split-timer.vercel.app/learn/notation?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-notation-player']",
+          "fallbackText": [
+            "Notation",
+            "回転記号"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 2000
+          }
+        ],
+        "saveAs": "shot-optional-notation.mp4"
+      },
+      "visualPurpose": "初心者にも使える学習機能を見せる"
+    },
+    {
+      "shotId": "shot-optional-more",
+      "role": "navigation",
+      "title": "その他メニュー",
+      "recording": {
+        "durationSec": 4,
+        "url": "https://cube-split-timer.vercel.app/settings?recording=1",
+        "waitFor": {
+          "selector": "[data-testid='recording-more-page']",
+          "fallbackText": [
+            "その他",
+            "テーマ",
+            "履歴"
+          ]
+        },
+        "actions": [
+          {
+            "type": "wait",
+            "ms": 1000
+          }
+        ],
+        "saveAs": "shot-optional-more.mp4"
+      },
+      "visualPurpose": "機能が整理されていることを見せる"
+    }
+  ]
+}

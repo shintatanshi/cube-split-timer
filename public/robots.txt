@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://cube-split-timer.vercel.app/sitemap.xml

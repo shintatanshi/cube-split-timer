@@ -266,6 +266,45 @@ function inferF2lTargetSlot(moves: string[]): F2lSlotSpec | null {
   return scoredSlots[0]?.score ? scoredSlots[0].slot : null;
 }
 
+function inferF2lTargetSlotFromNotation(moves: string[]): F2lSlotSpec | null {
+  const firstSideMove = moves.find((move) => {
+    const face = move[0]?.toUpperCase();
+    return face === "L" || face === "R";
+  });
+  const side = firstSideMove?.[0]?.toUpperCase();
+
+  if (side === "L") {
+    return F2L_SLOT_BY_NAME.get("FL") ?? null;
+  }
+
+  if (side === "R") {
+    return F2L_SLOT_BY_NAME.get("FR") ?? null;
+  }
+
+  const counts = moves.reduce(
+    (acc, move) => {
+      const face = move[0]?.toUpperCase();
+
+      if (face === "L" || face === "R") {
+        acc[face] += 1;
+      }
+
+      return acc;
+    },
+    { L: 0, R: 0 },
+  );
+
+  if (counts.L > counts.R) {
+    return F2L_SLOT_BY_NAME.get("FL") ?? null;
+  }
+
+  if (counts.R > counts.L) {
+    return F2L_SLOT_BY_NAME.get("FR") ?? null;
+  }
+
+  return null;
+}
+
 function normalizeManualCubieId(value: string | undefined, role: F2lTargetRole): string | null {
   if (!value) {
     return null;
@@ -298,7 +337,10 @@ function resolveF2lFocus(
 
   const config = caseItem.highlightConfig;
   const manualSlot = config.targetSlot !== "auto" ? F2L_SLOT_BY_NAME.get(config.targetSlot) : null;
-  const autoSlot = startMode === "inverse" ? inferF2lTargetSlot(moves) : null;
+  const autoSlot =
+    startMode === "inverse"
+      ? inferF2lTargetSlot(moves) ?? inferF2lTargetSlotFromNotation(moves)
+      : null;
   const legacySlot = getSlotFromCoords(config.targetCorner, config.targetEdge);
   const slot = manualSlot ?? autoSlot ?? legacySlot ?? F2L_SLOT_BY_NAME.get("FR") ?? F2L_SLOT_SPECS[0];
   const manualCornerId =
@@ -1088,6 +1130,7 @@ export default function AlgorithmPlayer({
   return (
     <section
       className={`algorithm-player ${isFullscreen ? "is-fullscreen" : ""}`}
+      data-testid="recording-algorithm-player"
       ref={playerRef}
       aria-label={`${caseItem.title} algorithm animation`}
     >

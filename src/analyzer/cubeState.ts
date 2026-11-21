@@ -413,7 +413,7 @@ export const CROSS_SEARCH_NODE_LIMIT = 1_200_000;
 const CROSS_PRUNING_TABLES = new Map<TargetFace, CrossPruningTable>();
 const MOVE_DESCRIPTOR_CACHE = new Map<string, ReturnType<typeof getMoveDescriptor>>();
 
-function getCrossSideFaces(targetFace: TargetFace): FaceName[] {
+export function getCrossSideFaces(targetFace: TargetFace): FaceName[] {
   return CROSS_SIDE_FACE_ORDER[targetFace];
 }
 

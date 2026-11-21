@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "f2l:studio": "node scripts/f2l-image-studio.mjs",
+    "oll:compare": "node scripts/oll-image-compare.mjs",
+    "recording:manifest:check": "node scripts/check-recording-manifest.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

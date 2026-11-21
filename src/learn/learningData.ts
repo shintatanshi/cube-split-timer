@@ -1,4 +1,5 @@
 import type {
+  CubeFaceName,
   F2lCase,
   F2lCaseImage,
   F2lHighlightConfig,
@@ -9,6 +10,7 @@ import type {
   LearningSticker,
 } from "../types";
 import { APPROVED_F2L_CASES } from "./f2lCaseData";
+import { createGeneratedOllPreview } from "./ollGeneratedPreview";
 
 type ImageModuleMap = Record<string, string>;
 
@@ -27,9 +29,9 @@ export const LEARNING_CATEGORY_LABELS: Record<LearningCategory, string> = {
 };
 
 export const LEARNING_CATEGORY_DESCRIPTIONS: Record<LearningCategory, string> = {
-  f2l: "src/assets/learn/f2l のF2L41ケースだけを表示します。",
-  oll: "src/assets/learn/oll に入れた画像から自動でケースを読み込みます。",
-  pll: "src/assets/learn/pll に入れた画像から自動でケースを読み込みます。",
+  f2l: "F2Lの基本41パターンを、形と手順を見ながら覚えます。",
+  oll: "上面をそろえるOLLを、画像と3D再生で確認します。",
+  pll: "最後の入れ替えPLLを、形ごとに見比べながら覚えます。",
 };
 
 export const LEARNING_ASSET_FOLDERS: Record<LearningCategory, string> = {
@@ -55,6 +57,22 @@ const LEARN_IMAGE_MODULES = {
     query: "?url",
   }),
 } satisfies Record<LearningCategory, ImageModuleMap>;
+
+const F2L_GENERATED_IMAGE_MODULES = import.meta.glob<string>(
+  "../assets/learn/f2l-generated/*.{png,jpg,jpeg,webp,svg}",
+  {
+    eager: true,
+    import: "default",
+    query: "?url",
+  },
+);
+
+const F2L_GENERATED_IMAGE_URL_BY_FILE_NAME = new Map(
+  Object.entries(F2L_GENERATED_IMAGE_MODULES).map(([path, imageUrl]) => [
+    getFileName(path),
+    imageUrl,
+  ]),
+);
 
 const F2L_CASE_OVERRIDES: Record<string, F2lCaseOverride> = {
   // Example:
@@ -262,31 +280,55 @@ function createLearningCaseFromImage(
 ): LearningCase {
   const fileName = getFileName(path);
   const baseName = removeExtension(fileName);
+  const generatedImageUrl =
+    category === "f2l" ? F2L_GENERATED_IMAGE_URL_BY_FILE_NAME.get(fileName) : undefined;
   const algorithm = fileBaseNameToAlgorithm(baseName);
+  const generatedOllPreview =
+    category === "oll" ? createGeneratedOllPreview(algorithm) : null;
+  const displayImageUrl = generatedOllPreview?.imageUrl ?? generatedImageUrl ?? imageUrl;
   const label = LEARNING_CATEGORY_LABELS[category];
-  const highlightConfig = applyF2lCaseOverride(createDefaultHighlightConfig(category), baseName);
+  const highlightConfig =
+    generatedOllPreview && category === "oll"
+      ? {
+        kind: "oll" as const,
+        yellowPattern: generatedOllPreview.top,
+        sidePattern: generatedOllPreview.side,
+        focusFaces: ["U", "F", "R"] satisfies CubeFaceName[],
+      }
+      : applyF2lCaseOverride(createDefaultHighlightConfig(category), baseName);
+  const moveCount = algorithm.split(/\s+/).filter(Boolean).length;
+  const description =
+    category === "f2l"
+      ? "画像のペア位置を見て、手順を再生しながらF2Lの入れ方を覚えます。"
+      : category === "oll"
+        ? "上面の形を見て、黄色面をそろえる手順を確認します。"
+        : "ピースの入れ替わり方を見て、最後のPLL手順を確認します。";
 
   return {
     id: makeCaseId(category, baseName),
     type: category,
     category,
-    name: `${label}: ${algorithm}`,
-    title: `${label}: ${algorithm}`,
-    subtitle: fileName,
+    name: label,
+    title: algorithm,
+    subtitle: `${moveCount} moves`,
     algorithm,
-    description: `${LEARNING_ASSET_FOLDERS[category]} から自動読み込みしたケースです。`,
+    description,
     image: {
       kind: "asset",
       category,
-      url: imageUrl,
+      url: displayImageUrl,
       fileName,
       baseName,
       path,
     },
-    imageUrl,
+    imageUrl: displayImageUrl,
     highlightConfig,
     shape: repeatSticker("empty", 9),
-    tags: [label],
+    tags: generatedOllPreview
+      ? [label, "自動生成図", `${moveCount} moves`]
+      : generatedImageUrl
+        ? [label, "仮生成画像", `${moveCount} moves`]
+        : [label, `${moveCount} moves`],
   };
 }
 

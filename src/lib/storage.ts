@@ -19,6 +19,10 @@ export interface SolvesBackup {
   solves: SolveRecord[];
 }
 
+function getSolvesStorageKey(userId?: string | null): string {
+  return userId ? `${STORAGE_KEY}.user.${userId}` : STORAGE_KEY;
+}
+
 function isPenalty(value: unknown): boolean {
   return value === "none" || value === "+2" || value === "DNF";
 }
@@ -94,9 +98,9 @@ export function isSolveRecord(value: unknown): value is SolveRecord {
   return false;
 }
 
-export function loadSolves(): SolveRecord[] {
+export function loadSolves(userId?: string | null): SolveRecord[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(getSolvesStorageKey(userId));
 
     if (!raw) {
       return [];
@@ -114,8 +118,8 @@ export function loadSolves(): SolveRecord[] {
   }
 }
 
-export function saveSolves(solves: SolveRecord[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(solves));
+export function saveSolves(solves: SolveRecord[], userId?: string | null): void {
+  localStorage.setItem(getSolvesStorageKey(userId), JSON.stringify(solves));
 }
 
 export function createSolvesBackup(solves: SolveRecord[]): SolvesBackup {

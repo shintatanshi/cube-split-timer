@@ -72,11 +72,12 @@ export async function getMySolveSessions(
   options: GetMySolveSessionsOptions = {},
 ): Promise<SolveSessionRow[]> {
   const supabase = getSupabaseClient();
-  await getSignedInUserId();
+  const userId = await getSignedInUserId();
 
   let query = supabase
     .from("solve_sessions")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (!options.includeDeleted) {
@@ -98,12 +99,13 @@ export async function getMySolveSessions(
 
 export async function softDeleteSolveSession(id: string): Promise<void> {
   const supabase = getSupabaseClient();
-  await getSignedInUserId();
+  const userId = await getSignedInUserId();
 
   const { error } = await supabase
     .from("solve_sessions")
     .update({ is_deleted: true })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", userId);
 
   if (error) {
     throw error;

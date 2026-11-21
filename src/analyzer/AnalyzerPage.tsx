@@ -16,6 +16,11 @@ import {
   saveCubeTurnSoundVolume,
 } from "../lib/turnSounds";
 import {
+  RECORDING_ANALYZER_SPEED,
+  RECORDING_DEMO_SCRAMBLE,
+  isRecordingModeUrl,
+} from "../lib/recordingMode";
+import {
   enterLandscapeFullscreen,
   exitLandscapeFullscreen,
 } from "../lib/landscapeFullscreen";
@@ -35,6 +40,7 @@ import {
   createSolvedStickerColorGrid,
   cubeStateToStickerColorGrid,
   getColorJapanese,
+  getCrossSideFaces,
   getF2lPairCandidates,
 } from "./cubeState";
 import {
@@ -135,6 +141,7 @@ interface F2lRecommendation {
 
 interface AnalyzerPageProps {
   path: string;
+  isRecordingMode?: boolean;
   onNavigate: (path: string, hash?: string) => void;
   onOpenTimer: () => void;
 }
@@ -143,6 +150,12 @@ interface Cubie {
   group: THREE.Group;
   coord: THREE.Vector3;
   stickerColors: CubeColorName[];
+}
+
+interface PieceHighlightTarget {
+  id: string;
+  colors: CubeColorName[];
+  color: number;
 }
 
 interface SceneState {
@@ -164,6 +177,7 @@ interface DragState {
   startY: number;
   startRotationX: number;
   startRotationY: number;
+  isPseudoLandscapeFullscreen: boolean;
 }
 
 interface StoredAnalyzerState {
@@ -528,6 +542,25 @@ function saveAnalyzerCubeScale(scale: AnalyzerCubeScale): void {
   }
 }
 
+function shouldUsePseudoLandscapeFullscreen(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(max-width: 860px) and (orientation: portrait) and (pointer: coarse)").matches
+  );
+}
+
+function getAnalyzerDragPoint(
+  clientX: number,
+  clientY: number,
+  isPseudoLandscapeFullscreen: boolean,
+): { x: number; y: number } {
+  if (!isPseudoLandscapeFullscreen) {
+    return { x: clientX, y: clientY };
+  }
+
+  return { x: clientY, y: -clientX };
+}
+
 function copyTextWithFallback(text: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     return navigator.clipboard.writeText(text);
@@ -797,7 +830,7 @@ function hasSameColorSet(actualColors: CubeColorName[], targetColors: CubeColorN
   );
 }
 
-function clearF2lPairHighlights(cubies: Cubie[]) {
+function clearPieceHighlights(cubies: Cubie[]) {
   cubies.forEach((cubie) => {
     cubie.group.scale.setScalar(1);
     cubie.group.children
@@ -809,7 +842,7 @@ function clearF2lPairHighlights(cubies: Cubie[]) {
   });
 }
 
-function addF2lPairHighlight(cubie: Cubie, color: number) {
+function addPieceHighlight(cubie: Cubie, color: number) {
   const highlight = new THREE.LineSegments(
     new THREE.EdgesGeometry(new THREE.BoxGeometry(1.08, 1.08, 1.08)),
     new THREE.LineBasicMaterial({
@@ -824,43 +857,80 @@ function addF2lPairHighlight(cubie: Cubie, color: number) {
   cubie.group.scale.setScalar(1.07);
 }
 
-function syncF2lPairHighlight(
+function getF2lPieceHighlightTargets(candidate: F2lPairCandidate | null): PieceHighlightTarget[] {
+  if (!candidate) {
+    return [];
+  }
+
+  return [
+    {
+      id: `${candidate.id}:corner`,
+      colors: candidate.cornerColors,
+      color: 0xf2b84b,
+    },
+    {
+      id: `${candidate.id}:edge`,
+      colors: candidate.edgeColors,
+      color: 0x4fd1b0,
+    },
+  ];
+}
+
+function getCrossPieceHighlightTargets(solution: CrossSolution | null): PieceHighlightTarget[] {
+  if (!solution) {
+    return [];
+  }
+
+  return getCrossSideFaces(solution.targetFace)
+    .map((sideFace) => {
+      const sideColor = solution.stateAfterCross.faceColorMap[sideFace];
+
+      return sideColor
+        ? {
+            id: `${solution.id}:cross:${sideFace}:${sideColor}`,
+            colors: [solution.color, sideColor],
+            color: 0x22d3ee,
+          }
+        : null;
+    })
+    .filter((target): target is PieceHighlightTarget => Boolean(target));
+}
+
+function syncPieceHighlights(
   state: SceneState,
-  candidate: F2lPairCandidate | null,
+  targets: PieceHighlightTarget[],
   isEnabled: boolean,
 ) {
   const signature =
-    isEnabled && candidate
-      ? `${candidate.id}:${getColorSetSignature(candidate.cornerColors)}:${getColorSetSignature(
-          candidate.edgeColors,
-        )}`
+    isEnabled && targets.length > 0
+      ? targets
+          .map(
+            (target) =>
+              `${target.id}:${getColorSetSignature(target.colors)}:${target.color.toString(16)}`,
+          )
+          .join("||")
       : "off";
 
   if (state.pairHighlightSignature === signature) {
     return;
   }
 
-  clearF2lPairHighlights(state.cubies);
+  clearPieceHighlights(state.cubies);
   state.pairHighlightSignature = signature;
 
-  if (!isEnabled || !candidate) {
+  if (!isEnabled || targets.length === 0) {
     return;
   }
 
-  const cornerCubie = state.cubies.find((cubie) =>
-    hasSameColorSet(cubie.stickerColors, candidate.cornerColors),
-  );
-  const edgeCubie = state.cubies.find((cubie) =>
-    hasSameColorSet(cubie.stickerColors, candidate.edgeColors),
-  );
+  targets.forEach((target) => {
+    const cubie = state.cubies.find((candidateCubie) =>
+      hasSameColorSet(candidateCubie.stickerColors, target.colors),
+    );
 
-  if (cornerCubie) {
-    addF2lPairHighlight(cornerCubie, 0xf2b84b);
-  }
-
-  if (edgeCubie) {
-    addF2lPairHighlight(edgeCubie, 0x4fd1b0);
-  }
+    if (cubie) {
+      addPieceHighlight(cubie, target.color);
+    }
+  });
 }
 
 function markSceneCubiesChanged(state: SceneState) {
@@ -1556,11 +1626,17 @@ function buildCrossCandidates(
   }));
 }
 
-export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: AnalyzerPageProps) {
+export default function AnalyzerPage({
+  path,
+  isRecordingMode: isRecordingModeProp,
+  onNavigate,
+  onOpenTimer,
+}: AnalyzerPageProps) {
+  const isRecordingMode = isRecordingModeProp ?? isRecordingModeUrl();
   const activeWorkspacePage = getAnalyzerWorkspacePage(path);
   const [initialAnalyzerState] = useState(() => {
     const savedState = loadAnalyzerState();
-    const incomingScramble = getIncomingScrambleFromUrl();
+    const incomingScramble = getIncomingScrambleFromUrl() ?? (isRecordingMode ? RECORDING_DEMO_SCRAMBLE : null);
 
     if (!incomingScramble) {
       return savedState;
@@ -1606,7 +1682,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   const lastRestoredSceneIdRef = useRef(0);
   const skipNextSettingsSaveCountRef = useRef(0);
   const skipNextAnalyzerStateSaveCountRef = useRef(0);
-  const selectedF2lPairRef = useRef<F2lPairCandidate | null>(null);
+  const currentPieceHighlightTargetsRef = useRef<PieceHighlightTarget[]>([]);
   const isF2lPairHighlightEnabledRef = useRef(
     initialAnalyzerState?.isF2lPairHighlightEnabled ?? true,
   );
@@ -1641,9 +1717,15 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   );
   const [currentIndex, setCurrentIndex] = useState(() => initialAnalyzerState?.currentIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() => loadAnalyzerSpeed());
-  const [cubeScale, setCubeScale] = useState<AnalyzerCubeScale>(() => loadAnalyzerCubeScale());
-  const [turnSoundVolume, setTurnSoundVolume] = useState(() => loadCubeTurnSoundVolume());
+  const [animationSpeed, setAnimationSpeed] = useState<AnimationSpeed>(() =>
+    isRecordingMode ? RECORDING_ANALYZER_SPEED : loadAnalyzerSpeed(),
+  );
+  const [cubeScale, setCubeScale] = useState<AnalyzerCubeScale>(() =>
+    isRecordingMode ? 1 : loadAnalyzerCubeScale(),
+  );
+  const [turnSoundVolume, setTurnSoundVolume] = useState(() =>
+    isRecordingMode ? 0 : loadCubeTurnSoundVolume(),
+  );
   const [isAnalyzerFullscreen, setIsAnalyzerFullscreen] = useState(false);
   const [manualMoveHistory, setManualMoveHistory] = useState<string[]>([]);
   const [isManualMoveAnimating, setIsManualMoveAnimating] = useState(false);
@@ -1953,7 +2035,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     }
 
     isAnimatingRef.current = true;
-    playRandomCubeTurnSound();
+
+    if (!isRecordingMode) {
+      playRandomCubeTurnSound();
+    }
+
     const animationRun = animationRunRef.current;
     const selectedCubies = state.cubies.filter((cubie) =>
       descriptor.layers.includes(roundCoord(cubie.coord[descriptor.axis])),
@@ -1972,7 +2058,8 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
           return;
         }
 
-        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / animationSpeed));
+        const speed = isRecordingMode ? RECORDING_ANALYZER_SPEED : animationSpeed;
+        const ratio = Math.min(1, (now - start) / (TURN_DURATION_MS / speed));
         pivot.rotation[descriptor.axis] = descriptor.angle * easeInOut(ratio);
 
         if (ratio < 1) {
@@ -2013,7 +2100,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     state.cubeGroup.remove(pivot);
     isAnimatingRef.current = false;
     return true;
-  }, [animationSpeed]);
+  }, [animationSpeed, isRecordingMode]);
 
   const animateMove = useCallback(
     async (move: string, reverse = false) =>
@@ -2177,9 +2264,9 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     const render = (now: number) => {
       const elapsed = now - state.animationStart;
       state.cubeGroup.position.y = Math.sin(elapsed / 980) * 0.03;
-      syncF2lPairHighlight(
+      syncPieceHighlights(
         state,
-        selectedF2lPairRef.current,
+        currentPieceHighlightTargetsRef.current,
         isF2lPairHighlightEnabledRef.current,
       );
       state.renderer.render(state.scene, state.camera);
@@ -2275,20 +2362,30 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   }, [analyzerStartStateSignature]);
 
   useEffect(() => {
+    if (isRecordingMode) {
+      return;
+    }
+
     if (skipNextSettingsSaveCountRef.current > 0) {
       skipNextSettingsSaveCountRef.current -= 1;
       return;
     }
 
     saveAnalyzerSettings(settings);
-  }, [settings]);
+  }, [isRecordingMode, settings]);
 
   useEffect(() => {
+    if (isRecordingMode) {
+      return;
+    }
+
     saveAnalyzerSpeed(animationSpeed);
-  }, [animationSpeed]);
+  }, [animationSpeed, isRecordingMode]);
 
   useEffect(() => {
-    saveAnalyzerCubeScale(cubeScale);
+    if (!isRecordingMode) {
+      saveAnalyzerCubeScale(cubeScale);
+    }
 
     const state = sceneStateRef.current;
     const canvas = canvasRef.current;
@@ -2299,7 +2396,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
 
     state.cubeScale = cubeScale;
     resizeRenderer(state, canvas);
-  }, [cubeScale]);
+  }, [cubeScale, isRecordingMode]);
 
   useEffect(() => {
     setStickerColorGrid((currentGrid) => {
@@ -2323,6 +2420,10 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
 
   const enterAnalyzerFullscreen = useCallback(() => {
     setIsAnalyzerFullscreen(true);
+
+    if (shouldUsePseudoLandscapeFullscreen()) {
+      return;
+    }
 
     void enterLandscapeFullscreen(playerPanelRef.current);
   }, []);
@@ -2377,6 +2478,10 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   }, [copyStatus]);
 
   useEffect(() => {
+    if (isRecordingMode) {
+      return;
+    }
+
     if (skipNextAnalyzerStateSaveCountRef.current > 0) {
       skipNextAnalyzerStateSaveCountRef.current -= 1;
       return;
@@ -2413,6 +2518,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     currentIndex,
     helperCaseId,
     inputMode,
+    isRecordingMode,
     isF2lPairHighlightEnabled,
     playbackMode,
     playbackScrambleInput,
@@ -2724,12 +2830,21 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     }
 
     event.currentTarget.setPointerCapture(event.pointerId);
+    const isPseudoLandscapeFullscreen =
+      isAnalyzerFullscreen && shouldUsePseudoLandscapeFullscreen();
+    const startPoint = getAnalyzerDragPoint(
+      event.clientX,
+      event.clientY,
+      isPseudoLandscapeFullscreen,
+    );
+
     dragStateRef.current = {
       pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
+      startX: startPoint.x,
+      startY: startPoint.y,
       startRotationX: state.cubeGroup.rotation.x,
       startRotationY: state.cubeGroup.rotation.y,
+      isPseudoLandscapeFullscreen,
     };
   };
 
@@ -2741,8 +2856,13 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       return;
     }
 
-    const deltaX = event.clientX - dragState.startX;
-    const deltaY = event.clientY - dragState.startY;
+    const point = getAnalyzerDragPoint(
+      event.clientX,
+      event.clientY,
+      dragState.isPseudoLandscapeFullscreen,
+    );
+    const deltaX = point.x - dragState.startX;
+    const deltaY = point.y - dragState.startY;
     state.cubeGroup.rotation.y = dragState.startRotationY + deltaX * 0.008;
     state.cubeGroup.rotation.x = Math.max(
       -1.2,
@@ -2895,17 +3015,43 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
     selectedF2lPair,
     selectedF2lPairId,
   ]);
+  const isCrossPieceHighlightActive = useMemo(() => {
+    if (!selectedCrossSolution) {
+      return false;
+    }
+
+    if (currentPracticeStep?.phase === "cross") {
+      return true;
+    }
+
+    if (!movesStartWith(activeMoves, selectedCrossSolution.moves)) {
+      return false;
+    }
+
+    if (movesEqual(activeMoves, selectedCrossSolution.moves)) {
+      return currentIndex <= selectedCrossSolution.moves.length;
+    }
+
+    return currentIndex < selectedCrossSolution.moves.length;
+  }, [activeMoves, currentIndex, currentPracticeStep?.phase, selectedCrossSolution]);
+  const currentPieceHighlightTargets = useMemo(
+    () =>
+      isCrossPieceHighlightActive
+        ? getCrossPieceHighlightTargets(selectedCrossSolution)
+        : getF2lPieceHighlightTargets(currentF2lHighlightPair),
+    [currentF2lHighlightPair, isCrossPieceHighlightActive, selectedCrossSolution],
+  );
 
   useEffect(() => {
-    selectedF2lPairRef.current = currentF2lHighlightPair;
+    currentPieceHighlightTargetsRef.current = currentPieceHighlightTargets;
     isF2lPairHighlightEnabledRef.current = isF2lPairHighlightEnabled;
 
     const state = sceneStateRef.current;
 
     if (state) {
-      syncF2lPairHighlight(state, currentF2lHighlightPair, isF2lPairHighlightEnabled);
+      syncPieceHighlights(state, currentPieceHighlightTargets, isF2lPairHighlightEnabled);
     }
-  }, [currentF2lHighlightPair, isF2lPairHighlightEnabled]);
+  }, [currentPieceHighlightTargets, isF2lPairHighlightEnabled]);
 
   const selectedF2lRecommendation = useMemo(() => {
     if (!selectedF2lPair || f2lLearningCases.length === 0) {
@@ -3356,6 +3502,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         pendingQuickPhaseRef.current = null;
         pendingQuickPlayRef.current = false;
         selectCrossSolution(bestSolution, { play: shouldPlay, scroll: false });
+        setCurrentPracticeStep({ phase: "cross" });
         setQuickPlaybackStatus(
           shouldPlay
             ? `Cross bestを再生します。${bestSolution.moveCount} moves`
@@ -4434,7 +4581,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
   ];
 
   return (
-    <main className="app-shell analyzer-page">
+    <main className="app-shell analyzer-page" data-testid="recording-analyzer">
       <header className="app-header">
         <div>
           <p className="eyebrow">Virtual cube checker</p>
@@ -4481,7 +4628,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
         })}
       </nav>
 
-      <section className="analyzer-command-bar" aria-label="Analyzer quick actions">
+      <section className="analyzer-command-bar" aria-label="Analyzer quick actions" data-testid="recording-analyzer-actions">
         <div className="analyzer-command-status" aria-label="Analyzer status">
           <span>{startInputLabel} {startInputCount}</span>
           <span>Active {activeMoves.length}</span>
@@ -4516,7 +4663,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
       </section>
 
       <div className="analyzer-layout">
-        <section className="analyzer-panel analyzer-input-panel" aria-label="Analyzer inputs">
+        <section
+          className="analyzer-panel analyzer-input-panel"
+          aria-label="Analyzer inputs"
+          data-testid="recording-analyzer-input"
+        >
           <details className="analyzer-detail-disclosure">
             <summary>
               <span>詳細を見る</span>
@@ -4878,6 +5029,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             id="analyzer-cross-section"
             aria-label="Cross candidates"
             hidden={activeWorkspacePage !== "cross"}
+            data-testid="recording-analyzer-cross"
           >
             <div className="analyzer-subheading">
               <div>
@@ -5093,6 +5245,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             id="analyzer-f2l-section"
             aria-label="F2L Analyzer"
             hidden={activeWorkspacePage !== "f2l"}
+            data-testid="recording-f2l"
           >
             <div className="analyzer-subheading">
               <div>
@@ -5391,7 +5544,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                             setIsF2lPairHighlightEnabled(event.currentTarget.checked)
                           }
                         />
-                        <span>F2L中のペアを強調</span>
+                        <span>現在のパーツを強調</span>
                       </label>
                     </div>
                     <p>{selectedF2lPair.note}</p>
@@ -5469,6 +5622,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             id="analyzer-oll-section"
             aria-label="OLL candidate preview"
             hidden={activeWorkspacePage !== "oll"}
+            data-testid="recording-oll-pll"
           >
             <div className="analyzer-subheading">
               <div>
@@ -5556,6 +5710,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             id="analyzer-pll-section"
             aria-label="PLL candidate preview"
             hidden={activeWorkspacePage !== "pll"}
+            data-testid="recording-pll"
           >
             <div className="analyzer-subheading">
               <div>
@@ -5651,18 +5806,21 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             .filter(Boolean)
             .join(" ")}
           aria-label="Virtual cube"
+          data-testid="recording-analyzer-player"
         >
           <div className="analyzer-player-header">
             <div>
               <p className="eyebrow">3D Cube</p>
               <h2>3D再生</h2>
             </div>
-            <div className="analyzer-player-actions">
+            <div className="analyzer-player-actions" data-testid="recording-analyzer-player-actions">
               <label className="analyzer-speed-control">
                 <span>Speed</span>
                 <select
-                  value={animationSpeed}
+                  value={isRecordingMode ? RECORDING_ANALYZER_SPEED : animationSpeed}
+                  disabled={isRecordingMode}
                   onChange={(event) =>
+                    !isRecordingMode &&
                     setAnimationSpeed(Number(event.target.value) as AnimationSpeed)
                   }
                 >
@@ -5677,7 +5835,12 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                 <span>Size</span>
                 <select
                   value={cubeScale}
+                  disabled={isRecordingMode}
                   onChange={(event) => {
+                    if (isRecordingMode) {
+                      return;
+                    }
+
                     const nextScale = Number(event.target.value);
 
                     if (isAnalyzerCubeScale(nextScale)) {
@@ -5700,7 +5863,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                     setIsF2lPairHighlightEnabled(event.currentTarget.checked)
                   }
                 />
-                <span>F2L強調</span>
+                <span>パーツ強調</span>
               </label>
               <label className="analyzer-sound-control">
                 <span>音量</span>
@@ -5709,16 +5872,21 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                   min="0"
                   max="100"
                   step="5"
-                  value={turnSoundVolumePercent}
+                  value={isRecordingMode ? 0 : turnSoundVolumePercent}
+                  disabled={isRecordingMode}
                   aria-label="回転音の音量"
                   onChange={(event) => {
+                    if (isRecordingMode) {
+                      return;
+                    }
+
                     const nextVolume = Number(event.currentTarget.value) / 100;
 
                     setTurnSoundVolume(nextVolume);
                     saveCubeTurnSoundVolume(nextVolume);
                   }}
                 />
-                <strong>{turnSoundVolumePercent}%</strong>
+                <strong>{isRecordingMode ? 0 : turnSoundVolumePercent}%</strong>
               </label>
               <div className="analyzer-step">
                 Step: {currentIndex} / {activeMoves.length}
@@ -5754,6 +5922,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
           <div className="analyzer-player-body">
             <div
               className="analyzer-canvas-frame"
+              data-testid="recording-analyzer-canvas"
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -5763,7 +5932,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
             </div>
 
             <aside className="analyzer-control-panel" aria-label="Animation controls">
-              <div className="analyzer-phase-replay-panel" aria-label="Phase best playback">
+              <div
+                className="analyzer-phase-replay-panel"
+                aria-label="Phase best playback"
+                data-testid="recording-analyzer-phase-panel"
+              >
                 <div className="analyzer-phase-replay-head">
                   <div>
                     <p className="eyebrow">Best Playback</p>
@@ -5776,6 +5949,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                   <button
                     className="analyzer-phase-primary-action"
                     type="button"
+                    data-testid="recording-analyzer-phase-primary"
                     onClick={mainPhasePlaybackAction.onClick}
                     disabled={mainPhasePlaybackAction.disabled}
                   >
@@ -5789,6 +5963,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                       className={`is-${phase.state}`}
                       key={phase.key}
                       type="button"
+                      data-testid={`recording-analyzer-phase-${phase.key}`}
                       onClick={phase.onClick}
                       disabled={phase.disabled}
                     >
@@ -5800,6 +5975,7 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                   <button
                     className="analyzer-previous-step-action"
                     type="button"
+                    data-testid="recording-analyzer-previous-step"
                     onClick={preparePreviousPracticeStep}
                     disabled={!canPlayPreviousPracticeStep}
                   >
@@ -5824,7 +6000,11 @@ export default function AnalyzerPage({ path, onNavigate, onOpenTimer }: Analyzer
                 </div>
               </div>
 
-              <div className="analyzer-controls analyzer-playback-controls" aria-label="Playback controls">
+              <div
+                className="analyzer-controls analyzer-playback-controls"
+                aria-label="Playback controls"
+                data-testid="recording-analyzer-playback-controls"
+              >
                 <button
                   type="button"
                   className="analyzer-transport-button"

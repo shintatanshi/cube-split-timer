@@ -5,6 +5,7 @@ import {
   getAdminSolveSessions,
   getMyProfile,
   sendUserPasswordResetEmail,
+  updateAdminSolveSessionDeleted,
   updateProfileRole,
   type ProfileRow,
 } from "../lib/admin";
@@ -55,12 +56,18 @@ export default function AdminPage({ user, onOpenLogin, onOpenTimer }: AdminPageP
   const [actionStatus, setActionStatus] = useState<AdminStatus>("idle");
   const [actionMessage, setActionMessage] = useState("");
   const [busyProfileId, setBusyProfileId] = useState<string | null>(null);
+  const [busySolveId, setBusySolveId] = useState<string | null>(null);
 
   const profileById = useMemo(
     () => new Map(profiles.map((profile) => [profile.id, profile])),
     [profiles],
   );
   const solveCountByUser = useMemo(() => getSolveCountByUser(solves), [solves]);
+  const activeSolveCount = useMemo(
+    () => solves.filter((solve) => !solve.is_deleted).length,
+    [solves],
+  );
+  const deletedSolveCount = solves.length - activeSolveCount;
   const filteredSolves = useMemo(
     () =>
       selectedUserId === "all"
@@ -174,6 +181,39 @@ export default function AdminPage({ user, onOpenLogin, onOpenTimer }: AdminPageP
       setActionMessage("再設定メールを送信できませんでした。Supabase Auth設定を確認してください。");
     } finally {
       setBusyProfileId(null);
+    }
+  };
+
+  const handleSolveDeletedChange = async (solve: SolveSessionRow, isDeleted: boolean) => {
+    const profile = profileById.get(solve.user_id);
+    const userLabel = getProfileLabel(profile);
+    const actionLabel = isDeleted ? "削除済みにする" : "削除から戻す";
+    const confirmed = window.confirm(
+      `${userLabel} の ${getSolveDisplayTime(solve)} の記録を「${actionLabel}」にしますか？`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusySolveId(solve.id);
+    setActionStatus("loading");
+    setActionMessage("履歴を更新しています。");
+
+    try {
+      const updatedSolve = await updateAdminSolveSessionDeleted(solve.id, isDeleted);
+      setSolves((currentSolves) =>
+        currentSolves.map((currentSolve) =>
+          currentSolve.id === updatedSolve.id ? updatedSolve : currentSolve,
+        ),
+      );
+      setActionStatus("success");
+      setActionMessage(`${userLabel} の記録を${isDeleted ? "削除済みにしました。" : "表示に戻しました。"}`);
+    } catch {
+      setActionStatus("error");
+      setActionMessage("履歴を更新できませんでした。管理者権限とRLSを確認してください。");
+    } finally {
+      setBusySolveId(null);
     }
   };
 
@@ -352,6 +392,9 @@ export default function AdminPage({ user, onOpenLogin, onOpenTimer }: AdminPageP
               表示されるのはSupabaseに保存済みの履歴です。各端末だけに残っているローカル履歴は、
               そのユーザーがAccount画面またはログイン時にアップロードすると表示されます。
             </p>
+            <p className="admin-help-text">
+              表示中: {activeSolveCount}件 / 削除済み: {deletedSolveCount}件。削除はsoft deleteなので、戻すことができます。
+            </p>
 
             {filteredSolves.length === 0 ? (
               <div className="empty-state">
@@ -364,7 +407,10 @@ export default function AdminPage({ user, onOpenLogin, onOpenTimer }: AdminPageP
                   const profile = profileById.get(solve.user_id);
 
                   return (
-                    <li className="admin-solve-item" key={solve.id}>
+                    <li
+                      className={solve.is_deleted ? "admin-solve-item admin-solve-item-deleted" : "admin-solve-item"}
+                      key={solve.id}
+                    >
                       <div className="admin-solve-main">
                         <div>
                           <p className="history-time">
@@ -390,6 +436,17 @@ export default function AdminPage({ user, onOpenLogin, onOpenTimer }: AdminPageP
                         {solve.oll_ms !== null && <span>OLL {formatTime(solve.oll_ms)}</span>}
                         {solve.pll_ms !== null && <span>PLL {formatTime(solve.pll_ms)}</span>}
                         {solve.notes && <span>{solve.notes}</span>}
+                      </div>
+
+                      <div className="admin-solve-actions">
+                        <button
+                          className={solve.is_deleted ? "primary-button" : "ghost-button admin-danger-button"}
+                          type="button"
+                          disabled={busySolveId === solve.id}
+                          onClick={() => void handleSolveDeletedChange(solve, !solve.is_deleted)}
+                        >
+                          {solve.is_deleted ? "削除から戻す" : "削除にする"}
+                        </button>
                       </div>
                     </li>
                   );

@@ -12062,32 +12062,6 @@ textarea:focus,
 }
 
 .figma-trial-more-list button:hover {
-
-/* WCA 15s Inspection */
-.timer-options-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.inspection-toggle-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--panel-muted) 80%, transparent);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 850;
-}
-
-.inspection-toggle-button:hover {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
   background: color-mix(in srgb, var(--accent) 12%, var(--panel-muted));
 }
@@ -13033,6 +13007,39 @@ textarea:focus,
   :root[data-recording-mode="true"] .analyzer-player-panel.is-fullscreen .analyzer-player-actions {
     grid-template-columns: 78px 58px 58px;
   }
+}
+
+
+
+/* WCA 15s Inspection */
+.timer-options-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inspection-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 80%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 850;
+}
+
+.inspection-toggle-button:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel-muted));
+}
+
 .inspection-toggle-button strong {
   padding: 2px 8px;
   border-radius: 999px;

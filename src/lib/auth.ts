@@ -1,4 +1,4 @@
-import type { User, UserIdentity } from "@supabase/supabase-js";
+import { isAuthSessionMissingError, type User, type UserIdentity } from "@supabase/supabase-js";
 import { getSupabaseClient, isSupabaseConfigured } from "./supabase";
 
 export type AuthUser = User;
@@ -13,9 +13,22 @@ export async function getCurrentAuthUser(): Promise<AuthUser | null> {
     return null;
   }
 
-  const { data, error } = await getSupabaseClient().auth.getUser();
+  const client = getSupabaseClient();
+  // Logged-out visitors have no session; getUser() reports that as an error,
+  // which used to surface as a "check Supabase settings" warning for everyone.
+  const { data: sessionData } = await client.auth.getSession();
+
+  if (!sessionData.session) {
+    return null;
+  }
+
+  const { data, error } = await client.auth.getUser();
 
   if (error) {
+    if (isAuthSessionMissingError(error)) {
+      return null;
+    }
+
     throw error;
   }
 

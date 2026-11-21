@@ -55,6 +55,7 @@ import { generateScramble } from "./lib/scramble";
 import {
   getMySolveSessions,
   saveSolveSession,
+  updateSolveSessionForLocalSolve,
   type SaveSolveSessionInput,
   type SolveSessionRow,
 } from "./lib/solveSessions";
@@ -1323,6 +1324,8 @@ export default function App() {
   const restoreTimerScrollFrameRef = useRef<number | null>(null);
   const postStopInputGuardRef = useRef<PostStopInputGuard | null>(null);
   const syncedAccountHistoryUserIdRef = useRef<string | null>(null);
+  // Cloud inserts still in flight, by local solve id, so later edits wait for them.
+  const pendingCloudInsertsRef = useRef(new Map<string, Promise<unknown>>());
 
   const displaySolves = useMemo(
     () => (isRecordingMode ? RECORDING_DEMO_SOLVES : solves),
@@ -1873,20 +1876,37 @@ export default function App() {
       return { total: 0, imported: 0, added: 0 };
     }
 
-    const rows = await getMySolveSessions({ includeDeleted: false, limit: 10000 });
-    const ownRows = rows.filter((row) => row.user_id === authUser.id);
-    const cloudSolves = ownRows
+    // Admins can read every user's rows, so keep only this user's.
+    const allRows = (await getMySolveSessions({ includeDeleted: true, limit: 10000 })).filter(
+      (row) => row.user_id === authUser.id,
+    );
+    const rows = allRows.filter((row) => !row.is_deleted);
+    const cloudSolves = rows
       .map(solveSessionRowToSolveRecord)
       .filter((solve): solve is SolveRecord => solve !== null);
-    const mergedSolves = mergeSolvesById(solves, cloudSolves);
+    // Solves deleted on another device are deleted here too.
+    const cloudDeletedIds = new Set(
+      allRows
+        .filter((row) => row.is_deleted)
+        .map((row) => getCloudLocalSolveId(row) ?? `cloud-${row.id}`),
+    );
+    const localWithCloudDeletions = solves.map((solve) =>
+      solve.deletedAt === null && cloudDeletedIds.has(solve.id)
+        ? { ...solve, deletedAt: new Date().toISOString() }
+        : solve,
+    );
+    const deletedFromCloud = localWithCloudDeletions.filter(
+      (solve, index) => solve !== solves[index],
+    ).length;
+    const mergedSolves = mergeSolvesById(localWithCloudDeletions, cloudSolves);
     const added = Math.max(0, mergedSolves.length - solves.length);
 
-    if (cloudSolves.length > 0) {
+    if (cloudSolves.length > 0 || deletedFromCloud > 0) {
       persistAndSetSolves(mergedSolves);
     }
 
     return {
-      total: ownRows.length,
+      total: rows.length,
       imported: cloudSolves.length,
       added,
     };
@@ -2001,12 +2021,43 @@ export default function App() {
         return;
       }
 
-      void saveSolveSession(buildCloudSolveSessionInput(solve))
+      const insert = saveSolveSession(buildCloudSolveSessionInput(solve))
         .then(() => {
           setAuthNotice("記録をクラウドにも保存しました。");
         })
         .catch(() => {
           setAuthNotice("ローカル保存は完了しましたが、クラウド保存に失敗しました。");
+        })
+        .finally(() => {
+          pendingCloudInsertsRef.current.delete(solve.id);
+        });
+
+      pendingCloudInsertsRef.current.set(solve.id, insert);
+    },
+    [authUser],
+  );
+
+  // Mirrors a local delete / restore / penalty change onto the solve's cloud row.
+  const syncSolveChangeToCloud = useCallback(
+    (solve: SolveRecord) => {
+      if (!authUser || !isAuthConfigured()) {
+        return;
+      }
+
+      const input = buildCloudSolveSessionInput(solve);
+      const pendingInsert = pendingCloudInsertsRef.current.get(solve.id) ?? Promise.resolve();
+
+      void pendingInsert
+        .then(() =>
+          updateSolveSessionForLocalSolve(solve.id, {
+            totalMs: input.totalMs,
+            isDnf: input.isDnf,
+            notes: input.notes,
+            isDeleted: solve.deletedAt !== null,
+          }),
+        )
+        .catch(() => {
+          setAuthNotice("この端末では変更しましたが、クラウドへの反映に失敗しました。");
         });
     },
     [authUser],
@@ -2712,6 +2763,11 @@ const handleTimerPointerCancel = useCallback(
     );
 
     persistAndSetSolves(nextSolves);
+    const changedSolve = nextSolves.find((solve) => solve.id === id);
+
+    if (changedSolve) {
+      syncSolveChangeToCloud(changedSolve);
+    }
   };
 
   const softDeleteSolve = (id: string, message = "記録を削除しました。") => {
@@ -2729,6 +2785,7 @@ const handleTimerPointerCancel = useCallback(
     setLastSavedSolveId((currentId) => (currentId === id ? null : currentId));
     setUndoState({ solveId: id, message });
     persistAndSetSolves(nextSolves);
+    syncSolveChangeToCloud({ ...targetSolve, deletedAt });
   };
 
   const restoreSolve = (id: string) => {
@@ -2738,6 +2795,11 @@ const handleTimerPointerCancel = useCallback(
 
     setUndoState(null);
     persistAndSetSolves(nextSolves);
+    const restoredSolve = nextSolves.find((solve) => solve.id === id);
+
+    if (restoredSolve) {
+      syncSolveChangeToCloud(restoredSolve);
+    }
   };
 
   const shareText = useCallback(async (text: string, title = "Cube Split Timer") => {

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "f2l:studio": "node scripts/f2l-image-studio.mjs",
     "oll:compare": "node scripts/oll-image-compare.mjs",
-    "recording:manifest:check": "node scripts/check-recording-manifest.mjs"
+    "recording:manifest:check": "node scripts/check-recording-manifest.mjs",
+    "test": "vitest run"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
@@ -23,6 +24,7 @@
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.0.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^3.2.7"
   }
 }

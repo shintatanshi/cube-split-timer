@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Building the pruning tables takes ~3s; parallel test files can push that past
+// the 5s default, so give the whole file more time (assertions are unchanged).
+vi.setConfig({ testTimeout: 20000 });
 import {
   ALL_FACES,
   applyMoves,

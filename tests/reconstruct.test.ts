@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Building the pruning tables takes ~3s; parallel test files can push that past
+// the 5s default, so give the whole file more time (assertions are unchanged).
+vi.setConfig({ testTimeout: 20000 });
 import { type Face } from "../src/analyzer/solver/cubie";
 import { solveCross } from "../src/analyzer/solver/search";
 import { analyzeSolve, type PhaseAnalysis } from "../src/analyzer/solver/reconstruct";
@@ -101,7 +105,12 @@ describe("solver/reconstruct analyzeSolve", () => {
     expect(cross.htm).toBe(0);
     expect(cross.optimal?.length).toBe(0);
 
-    const pair1 = getPhase(res.phases, "pair1");
+    // FL, BL and BR are already solved when the cross completes, so they are the
+    // 0-move pairs 1-3 and the FR pair the user actually inserted is pair4.
+    for (const name of ["pair1", "pair2", "pair3"] as const) {
+      expect(getPhase(res.phases, name).htm).toBe(0);
+    }
+    const pair1 = getPhase(res.phases, "pair4");
     expect(pair1.reached).toBe(true);
     expect(pair1.slot).toBe("FR");
     expect(pair1.htm).toBe(3);
@@ -110,14 +119,37 @@ describe("solver/reconstruct analyzeSolve", () => {
     expect(pair1.optimal?.length).toBe(3);
     expect(pair1.optimal?.truncated).toBe(false);
 
-    expect(res.xcross?.slot).toBe("FR");
-    expect(res.xcross?.length).toBe(3);
+    // The X-cross comparison uses the first pair, here the pre-solved FL (0 moves).
+    expect(res.xcross?.slot).toBe(getPhase(res.phases, "pair1").slot);
+    expect(res.xcross?.length).toBe(0);
 
-    for (const name of ["pair2", "pair3", "pair4", "oll", "pll"] as const) {
+    for (const name of ["oll", "pll"] as const) {
       const p = getPhase(res.phases, name);
       expect(p.reached).toBe(true);
       expect(p.htm).toBe(0);
     }
+  });
+
+  // Regression (2026-11-22, found in the browser): a pair solved together with the
+  // cross (X-cross) was reported as "not reached".
+  it("counts a pair solved together with the cross as a 0-move pair", () => {
+    const scramble = "F2 D2 L2 F U2 L D' L2 D2 R' L2 R2 B2 L' R L2 R2 B' F B2 R2 D' F' R2 U";
+    const res = analyzeSolve(scramble, "R R' F U B U F2 R' D", { compare: true });
+    if ("error" in res && res.error) {
+      throw new Error(res.error);
+    }
+
+    const cross = getPhase(res.phases, "cross");
+    expect(cross.reached).toBe(true);
+    expect(cross.htm).toBe(9);
+    expect(cross.optimal?.length).toBe(6);
+    const pair1 = getPhase(res.phases, "pair1");
+    expect(pair1.reached).toBe(true);
+    expect(pair1.slot).toBe("BL");
+    expect(pair1.htm).toBe(0);
+    expect(res.xcross?.slot).toBe("BL");
+    expect(res.xcross?.length).toBe(7);
+    expect(getPhase(res.phases, "pair2").reached).toBe(false);
   });
 
   it("handles rotations (y2 L U' L' -> pair1 FR, HTM 3, STM 3)", () => {
@@ -131,7 +163,12 @@ describe("solver/reconstruct analyzeSolve", () => {
     expect(res.crossFace).toBe("D");
     expect(res.solvedAtEnd).toBe(true);
 
-    const pair1 = getPhase(res.phases, "pair1");
+    // FL, BL and BR are already solved when the cross completes, so they are the
+    // 0-move pairs 1-3 and the FR pair the user actually inserted is pair4.
+    for (const name of ["pair1", "pair2", "pair3"] as const) {
+      expect(getPhase(res.phases, name).htm).toBe(0);
+    }
+    const pair1 = getPhase(res.phases, "pair4");
     expect(pair1.reached).toBe(true);
     expect(pair1.slot).toBe("FR");
     expect(pair1.htm).toBe(3);

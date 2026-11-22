@@ -300,6 +300,15 @@ export function analyzeSolve(
       }
       f2lEnd = crossEnd;
     } else {
+      // Pairs already solved when the cross completes (e.g. an X-cross) count as
+      // 0-move pairs right after the cross; the cross phase holds their moves.
+      for (const slot of baseSolvedSlots) {
+        assignedSlots.add(slot);
+        pairPhases.push(
+          makePhase(`pair${pairPhases.length + 1}` as PhaseName, true, crossEnd, crossEnd, solutionTokens, slot),
+        );
+      }
+
       let prevSolvedCount = baseSolvedSlots.length;
       for (let k = crossEnd + 1; k <= n; k += 1) {
         if (!isSolvedCross(states[k])) {

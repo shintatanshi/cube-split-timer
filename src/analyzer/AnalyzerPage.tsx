@@ -71,10 +71,11 @@ import type {
   OllCaseImage,
   PllCaseImage,
 } from "../types";
+import SolveComparePanel, { type SolveCompareSplits } from "./SolveComparePanel";
 
 type PlaybackMode = "scramble" | "scramble-solve";
 type AnalyzerInputMode = "scramble" | "color";
-type AnalyzerWorkspacePage = "input" | "cross" | "f2l" | "oll" | "pll";
+type AnalyzerWorkspacePage = "input" | "cross" | "f2l" | "oll" | "pll" | "compare";
 type AnalyzerStepKey = "scramble" | "cross" | "f2l1" | "f2l2" | "f2l3" | "f2l4" | "oll" | "pll" | "complete";
 type AnalyzerCubeScale = 0.7 | 0.85 | 1 | 1.15 | 1.3;
 type AnalyzerQuickPhase = "cross" | "f2l" | "nextF2l" | "oll" | "pll";
@@ -262,7 +263,7 @@ const COLOR_OPTIONS: Array<{ value: CubeColorName; label: string; shortLabel: st
   { value: "red", label: "Red", shortLabel: "R" },
   { value: "orange", label: "Orange", shortLabel: "O" },
 ];
-const ANALYZER_WORKSPACE_PAGES: AnalyzerWorkspacePage[] = ["input", "cross", "f2l", "oll", "pll"];
+const ANALYZER_WORKSPACE_PAGES: AnalyzerWorkspacePage[] = ["input", "cross", "f2l", "oll", "pll", "compare"];
 const COLOR_FACE_ORDER: FaceName[] = ["U", "L", "F", "R", "B", "D"];
 const STICKER_CENTER_INDEX = 4;
 const COLOR_HEX: Record<CubeColorName, number> = {
@@ -591,6 +592,34 @@ function getIncomingScrambleFromUrl(): string | null {
     return decodedScramble || null;
   } catch {
     return null;
+  }
+}
+
+function getIncomingSplitsFromUrl(): SolveCompareSplits | undefined {
+  try {
+    const rawSplits = new URLSearchParams(window.location.search).get("splits");
+
+    if (!rawSplits) {
+      return undefined;
+    }
+
+    const parts = rawSplits.split(",").map((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) {
+        return null;
+      }
+      const value = Number(trimmed);
+      return Number.isFinite(value) && value > 0 ? value : null;
+    });
+    const [crossMs = null, f2lMs = null, ollMs = null, pllMs = null] = parts;
+
+    if (crossMs === null && f2lMs === null && ollMs === null && pllMs === null) {
+      return undefined;
+    }
+
+    return { crossMs, f2lMs, ollMs, pllMs };
+  } catch {
+    return undefined;
   }
 }
 
@@ -1634,6 +1663,7 @@ export default function AnalyzerPage({
 }: AnalyzerPageProps) {
   const isRecordingMode = isRecordingModeProp ?? isRecordingModeUrl();
   const activeWorkspacePage = getAnalyzerWorkspacePage(path);
+  const incomingSplits = useMemo(() => getIncomingSplitsFromUrl(), [path]);
   const [initialAnalyzerState] = useState(() => {
     const savedState = loadAnalyzerState();
     const incomingScramble = getIncomingScrambleFromUrl() ?? (isRecordingMode ? RECORDING_DEMO_SCRAMBLE : null);
@@ -2784,6 +2814,23 @@ export default function AnalyzerPage({
     applyStartStateInstant();
     setCurrentIndex(0);
   };
+
+  const handleComparePlay = useCallback(
+    (algorithm: string) => {
+      if (!canUseStartState) {
+        return;
+      }
+
+      setPlaybackScrambleInput("");
+      setPlaybackSolveInput(algorithm);
+      setPlaybackMode("scramble-solve");
+      setIsPlaying(false);
+      setManualMoveHistory([]);
+      applyStartStateInstant();
+      setCurrentIndex(0);
+    },
+    [applyStartStateInstant, canUseStartState],
+  );
 
   const playCombined = () => {
     if (
@@ -4578,6 +4625,13 @@ export default function AnalyzerPage({
       status: pllRecognition?.ok ? pllRecognition.recognition.caseTitle : "待機",
       path: "/analyzer/pll",
     },
+    {
+      key: "compare",
+      label: "比較",
+      description: "最短と自分の手順",
+      status: solveInput.trim() ? `${parsedSolve.moves.length}手` : "待機",
+      path: "/analyzer/compare",
+    },
   ];
 
   return (
@@ -5791,6 +5845,21 @@ export default function AnalyzerPage({
                 )}
               </div>
             </details>
+          </section>
+
+          <section
+            className="analyzer-cross-card analyzer-route-section solve-compare-section"
+            id="analyzer-compare-section"
+            aria-label="Solve comparison"
+            hidden={activeWorkspacePage !== "compare"}
+          >
+            <SolveComparePanel
+              scramble={scrambleInput}
+              solution={solveInput}
+              faceColorMap={faceColorMap}
+              splits={incomingSplits}
+              onPlay={handleComparePlay}
+            />
           </section>
           </div>
             </div>

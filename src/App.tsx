@@ -174,44 +174,44 @@ const BRAND_LOGO_CANDIDATE_SOURCES = [
 ] as const;
 const DEFAULT_PROFILE_AVATAR_ID = "timer-dash";
 const PROFILE_AVATAR_OPTIONS = [
-  { id: "timer-dash", label: "Timer", source: getOptimizedProfileAvatarSource("timer-dash") },
-  { id: "cube-simple", label: "Cube", source: getOptimizedProfileAvatarSource("cube-simple") },
-  { id: "lightning-bolt", label: "Bolt", source: getOptimizedProfileAvatarSource("lightning-bolt") },
-  { id: "robot-blue", label: "Robot", source: getOptimizedProfileAvatarSource("robot-blue") },
-  { id: "gamepad", label: "Game", source: getOptimizedProfileAvatarSource("gamepad") },
-  { id: "star-smile", label: "Star", source: getOptimizedProfileAvatarSource("star-smile") },
-  { id: "cube-cat", label: "Cube Cat", source: getOptimizedProfileAvatarSource("cube-cat") },
-  { id: "cat-soft", label: "Cat", source: getOptimizedProfileAvatarSource("cat-soft") },
-  { id: "panda", label: "Panda", source: getOptimizedProfileAvatarSource("panda") },
-  { id: "fox", label: "Fox", source: getOptimizedProfileAvatarSource("fox") },
-  { id: "owl", label: "Owl", source: getOptimizedProfileAvatarSource("owl") },
-  { id: "shark", label: "Shark", source: getOptimizedProfileAvatarSource("shark") },
-  { id: "mountain-sun", label: "Summit", source: getOptimizedProfileAvatarSource("mountain-sun") },
-  { id: "rocket-moon", label: "Rocket", source: getOptimizedProfileAvatarSource("rocket-moon") },
-  { id: "coffee", label: "Coffee", source: getOptimizedProfileAvatarSource("coffee") },
-  { id: "basketball", label: "Hoop", source: getOptimizedProfileAvatarSource("basketball") },
-  { id: "ninja", label: "Ninja", source: getOptimizedProfileAvatarSource("ninja") },
-  { id: "crystal", label: "Crystal", source: getOptimizedProfileAvatarSource("crystal") },
-  { id: "crown", label: "Crown", source: getOptimizedProfileAvatarSource("crown") },
-  { id: "donut", label: "Donut", source: getOptimizedProfileAvatarSource("donut") },
-  { id: "music-note", label: "Music", source: getOptimizedProfileAvatarSource("music-note") },
-  { id: "ramen", label: "Ramen", source: getOptimizedProfileAvatarSource("ramen") },
-  { id: "space-bunny", label: "Bunny", source: getOptimizedProfileAvatarSource("space-bunny") },
-  { id: "pixel-ghost", label: "Ghost", source: getOptimizedProfileAvatarSource("pixel-ghost") },
-  { id: "firebird", label: "Flame", source: getOptimizedProfileAvatarSource("firebird") },
-  { id: "magic-slime", label: "Slime", source: getOptimizedProfileAvatarSource("magic-slime") },
-  { id: "daruma", label: "Daruma", source: getOptimizedProfileAvatarSource("daruma") },
-  { id: "ice-wolf", label: "Ice Wolf", source: getOptimizedProfileAvatarSource("ice-wolf") },
-  { id: "dj-penguin", label: "DJ", source: getOptimizedProfileAvatarSource("dj-penguin") },
-  { id: "samurai-cat", label: "Samurai", source: getOptimizedProfileAvatarSource("samurai-cat") },
-  { id: "nebula-jellyfish", label: "Nebula", source: getOptimizedProfileAvatarSource("nebula-jellyfish") },
-  { id: "treasure-chest", label: "Treasure", source: getOptimizedProfileAvatarSource("treasure-chest") },
-  { id: "strawberry-dragon", label: "Berry", source: getOptimizedProfileAvatarSource("strawberry-dragon") },
-  { id: "gamer-frog", label: "Gamer", source: getOptimizedProfileAvatarSource("gamer-frog") },
-  { id: "bubble-tea", label: "Boba", source: getOptimizedProfileAvatarSource("bubble-tea") },
-  { id: "steampunk-octopus", label: "Octo", source: getOptimizedProfileAvatarSource("steampunk-octopus") },
-  { id: "thunder-wolf", label: "Thunder", source: getOptimizedProfileAvatarSource("thunder-wolf") },
-  { id: "sleepy-sheep", label: "Sleepy", source: getOptimizedProfileAvatarSource("sleepy-sheep") },
+  { id: "timer-dash", label: "タイマー", source: getOptimizedProfileAvatarSource("timer-dash") },
+  { id: "cube-simple", label: "キューブ", source: getOptimizedProfileAvatarSource("cube-simple") },
+  { id: "lightning-bolt", label: "いなずま", source: getOptimizedProfileAvatarSource("lightning-bolt") },
+  { id: "robot-blue", label: "ロボ", source: getOptimizedProfileAvatarSource("robot-blue") },
+  { id: "gamepad", label: "ゲーム", source: getOptimizedProfileAvatarSource("gamepad") },
+  { id: "star-smile", label: "スター", source: getOptimizedProfileAvatarSource("star-smile") },
+  { id: "cube-cat", label: "キューブ猫", source: getOptimizedProfileAvatarSource("cube-cat") },
+  { id: "cat-soft", label: "ねこ", source: getOptimizedProfileAvatarSource("cat-soft") },
+  { id: "panda", label: "パンダ", source: getOptimizedProfileAvatarSource("panda") },
+  { id: "fox", label: "きつね", source: getOptimizedProfileAvatarSource("fox") },
+  { id: "owl", label: "ふくろう", source: getOptimizedProfileAvatarSource("owl") },
+  { id: "shark", label: "サメ", source: getOptimizedProfileAvatarSource("shark") },
+  { id: "mountain-sun", label: "やま", source: getOptimizedProfileAvatarSource("mountain-sun") },
+  { id: "rocket-moon", label: "ロケット", source: getOptimizedProfileAvatarSource("rocket-moon") },
+  { id: "coffee", label: "コーヒー", source: getOptimizedProfileAvatarSource("coffee") },
+  { id: "basketball", label: "バスケ", source: getOptimizedProfileAvatarSource("basketball") },
+  { id: "ninja", label: "にんじゃ", source: getOptimizedProfileAvatarSource("ninja") },
+  { id: "crystal", label: "クリスタル", source: getOptimizedProfileAvatarSource("crystal") },
+  { id: "crown", label: "おうかん", source: getOptimizedProfileAvatarSource("crown") },
+  { id: "donut", label: "ドーナツ", source: getOptimizedProfileAvatarSource("donut") },
+  { id: "music-note", label: "おんぷ", source: getOptimizedProfileAvatarSource("music-note") },
+  { id: "ramen", label: "ラーメン", source: getOptimizedProfileAvatarSource("ramen") },
+  { id: "space-bunny", label: "うさぎ", source: getOptimizedProfileAvatarSource("space-bunny") },
+  { id: "pixel-ghost", label: "おばけ", source: getOptimizedProfileAvatarSource("pixel-ghost") },
+  { id: "firebird", label: "ほのお", source: getOptimizedProfileAvatarSource("firebird") },
+  { id: "magic-slime", label: "スライム", source: getOptimizedProfileAvatarSource("magic-slime") },
+  { id: "daruma", label: "だるま", source: getOptimizedProfileAvatarSource("daruma") },
+  { id: "ice-wolf", label: "こおり狼", source: getOptimizedProfileAvatarSource("ice-wolf") },
+  { id: "dj-penguin", label: "ペンギン", source: getOptimizedProfileAvatarSource("dj-penguin") },
+  { id: "samurai-cat", label: "さむらい", source: getOptimizedProfileAvatarSource("samurai-cat") },
+  { id: "nebula-jellyfish", label: "くらげ", source: getOptimizedProfileAvatarSource("nebula-jellyfish") },
+  { id: "treasure-chest", label: "たからばこ", source: getOptimizedProfileAvatarSource("treasure-chest") },
+  { id: "strawberry-dragon", label: "いちご竜", source: getOptimizedProfileAvatarSource("strawberry-dragon") },
+  { id: "gamer-frog", label: "かえる", source: getOptimizedProfileAvatarSource("gamer-frog") },
+  { id: "bubble-tea", label: "タピオカ", source: getOptimizedProfileAvatarSource("bubble-tea") },
+  { id: "steampunk-octopus", label: "タコ", source: getOptimizedProfileAvatarSource("steampunk-octopus") },
+  { id: "thunder-wolf", label: "かみなり狼", source: getOptimizedProfileAvatarSource("thunder-wolf") },
+  { id: "sleepy-sheep", label: "ひつじ", source: getOptimizedProfileAvatarSource("sleepy-sheep") },
 ] as const;
 type ProfileAvatarId = (typeof PROFILE_AVATAR_OPTIONS)[number]["id"];
 const LearnPage = lazy(() => import("./learn/LearnPage"));
@@ -252,18 +252,18 @@ const CFOP_PHASES: Array<{ phase: CfopPhase; label: string }> = [
 ];
 
 const F2L_PAIR_PHASES: Array<{ phase: F2lPairPhase; label: string }> = [
-  { phase: "pair1", label: "Pair 1" },
-  { phase: "pair2", label: "Pair 2" },
-  { phase: "pair3", label: "Pair 3" },
-  { phase: "pair4", label: "Pair 4" },
+  { phase: "pair1", label: "ペア1" },
+  { phase: "pair2", label: "ペア2" },
+  { phase: "pair3", label: "ペア3" },
+  { phase: "pair4", label: "ペア4" },
 ];
 
 const TIMER_MODES: Array<{ mode: SolveMode; label: string }> = [
-  { mode: "normal", label: "Normal" },
+  { mode: "normal", label: "通常" },
   { mode: "cfop_split", label: "CFOP Split" },
   { mode: "cross_practice", label: "Cross" },
   { mode: "f2l_practice", label: "F2L" },
-  { mode: "f2l_pair_split", label: "F2L Pair" },
+  { mode: "f2l_pair_split", label: "F2L ペア" },
 ];
 
 function createId(): string {
@@ -289,7 +289,7 @@ function getSplitTime(splits: SplitDraft[], phase: SplitPhase): number {
 function getModeLabel(mode: SolveMode): string {
   switch (mode) {
     case "normal":
-      return "Normal";
+      return "通常";
     case "cfop_split":
       return "CFOP Split";
     case "cross_practice":
@@ -308,6 +308,25 @@ function getPhaseLabel(phase: SplitPhase): string {
   );
 }
 
+function formatCrossColorLabel(color: string): string {
+  switch (color.toLowerCase()) {
+    case "white":
+      return "白";
+    case "yellow":
+      return "黄";
+    case "blue":
+      return "青";
+    case "green":
+      return "緑";
+    case "red":
+      return "赤";
+    case "orange":
+      return "橙";
+    default:
+      return color;
+  }
+}
+
 function getSavedSplits(solve: SolveRecord): Array<{ key: string; label: string; time: number }> {
   switch (solve.mode) {
     case "cfop_split":
@@ -318,15 +337,15 @@ function getSavedSplits(solve: SolveRecord): Array<{ key: string; label: string;
         { key: "pll", label: "PLL", time: solve.pllTime },
       ];
     case "cross_practice":
-      return [{ key: "cross", label: `Cross ${solve.crossColor}`, time: solve.crossTime }];
+      return [{ key: "cross", label: `Cross ${formatCrossColorLabel(solve.crossColor)}`, time: solve.crossTime }];
     case "f2l_practice":
       return [{ key: "f2l", label: "F2L", time: solve.f2lTime }];
     case "f2l_pair_split":
       return [
-        { key: "pair1", label: "Pair 1", time: solve.pair1Time },
-        { key: "pair2", label: "Pair 2", time: solve.pair2Time },
-        { key: "pair3", label: "Pair 3", time: solve.pair3Time },
-        { key: "pair4", label: "Pair 4", time: solve.pair4Time },
+        { key: "pair1", label: "ペア1", time: solve.pair1Time },
+        { key: "pair2", label: "ペア2", time: solve.pair2Time },
+        { key: "pair3", label: "ペア3", time: solve.pair3Time },
+        { key: "pair4", label: "ペア4", time: solve.pair4Time },
       ];
     case "normal":
       return [];
@@ -342,20 +361,20 @@ function formatClockTime(isoDate: string): string {
 
 function getIdleHint(mode: SolveMode, inspectionEnabled = false): string {
   if (inspectionEnabled) {
-    return "Tap timer or press & release Space for 15s inspection";
+    return "タイマーかスペースキーを押して離すと15秒インスペクション開始";
   }
 
   switch (mode) {
     case "normal":
-      return "Hold Space or press timer, release on green";
+      return "スペースか画面を長押し → 緑で離してスタート";
     case "cfop_split":
-      return "Hold to start, then tap / Space for Cross, F2L, OLL, PLL";
+      return "長押しでスタート → タップかスペースで Cross・F2L・OLL・PLL を記録";
     case "cross_practice":
-      return "Hold to start, then tap / Space to finish Cross";
+      return "長押しでスタート → Cross が終わったらタップかスペース";
     case "f2l_practice":
-      return "Hold to start, then tap / Space to finish F2L";
+      return "長押しでスタート → F2L が終わったらタップかスペース";
     case "f2l_pair_split":
-      return "Hold to start, then tap / Space for Pair 1-4";
+      return "長押しでスタート → タップかスペースでペア1〜4を記録";
   }
 }
 
@@ -377,15 +396,15 @@ function getTimerPrepareHint(
   inspectionEnabled: boolean,
 ): string {
   if (timerState === "holding") {
-    return "Hold...";
+    return "そのまま長押し…";
   }
 
   if (timerState === "ready") {
-    return "Ready - release to start";
+    return "離してスタート";
   }
 
   if (timerState === "inspecting") {
-    return "Hold Space or screen, release on green to start";
+    return "スペースか画面を長押し → 緑で離してスタート";
   }
 
   return getIdleHint(mode, inspectionEnabled);
@@ -697,14 +716,14 @@ function getPhaseShareTime(solve: SolveRecord, phase: CfopPhase): string {
 function buildSolveShareText(solve: SolveRecord, stats: TimerStats): string {
   return [
     "Cube Split Timer",
-    `Mode: ${getModeLabel(solve.mode)}`,
-    `Total: ${formatSolveTime(solve)}`,
+    `モード: ${getModeLabel(solve.mode)}`,
+    `合計: ${formatSolveTime(solve)}`,
     `Cross: ${getPhaseShareTime(solve, "cross")}`,
     `F2L: ${getPhaseShareTime(solve, "f2l")}`,
     `OLL: ${getPhaseShareTime(solve, "oll")}`,
     `PLL: ${getPhaseShareTime(solve, "pll")}`,
-    `Scramble: ${solve.scramble}`,
-    `Penalty: ${solve.penalty}`,
+    `スクランブル: ${solve.scramble}`,
+    `ペナルティ: ${solve.penalty === "none" ? "なし" : solve.penalty}`,
     `ao5: ${formatAverage(stats.ao5)}`,
     `ao12: ${formatAverage(stats.ao12)}`,
   ].join("\n");
@@ -730,13 +749,13 @@ function buildTodaySummaryShareText(todaySolves: SolveRecord[], todayStats: Time
   return [
     "Cube Split Timer 今日のまとめ",
     dateLabel,
-    `Solves: ${todayStats.count}`,
-    `Average: ${formatAverage(todayStats.average)}`,
-    `Best: ${formatAverage(todayStats.best)}`,
-    `Worst: ${formatAverage(todayStats.worst)}`,
+    `回数: ${todayStats.count}`,
+    `平均: ${formatAverage(todayStats.average)}`,
+    `ベスト: ${formatAverage(todayStats.best)}`,
+    `ワースト: ${formatAverage(todayStats.worst)}`,
     `ao5: ${formatAverage(todayStats.ao5)}`,
     `ao12: ${formatAverage(todayStats.ao12)}`,
-    todaySolves[0] ? `Latest: ${formatSolveTime(todaySolves[0])}` : "Latest: --",
+    todaySolves[0] ? `最新: ${formatSolveTime(todaySolves[0])}` : "最新: --",
   ].join("\n");
 }
 
@@ -1115,17 +1134,17 @@ function GlobalAppNav({
     ? baseDesktopItems.filter((item) => ["timer", "analyzer", "learn"].includes(item.key))
     : baseDesktopItems;
   const desktopItems = isAdmin && !isRecordingMode
-    ? [...visibleBaseDesktopItems, { key: "admin" as const, label: "Admin", path: "/admin" }]
+    ? [...visibleBaseDesktopItems, { key: "admin" as const, label: "管理", path: "/admin" }]
     : visibleBaseDesktopItems;
   const visibleMobilePrimaryItems = isRecordingMode
     ? MOBILE_PRIMARY_NAV_ITEMS.filter((item) => item.key !== "more")
     : MOBILE_PRIMARY_NAV_ITEMS;
   const mobileMoreItems = isAdmin && !isRecordingMode
-    ? [...MOBILE_MORE_NAV_ITEMS, { key: "admin" as const, label: "Admin", path: "/admin" }]
+    ? [...MOBILE_MORE_NAV_ITEMS, { key: "admin" as const, label: "管理", path: "/admin" }]
     : MOBILE_MORE_NAV_ITEMS;
   const mobileActiveKey = getMobilePrimaryNavKey(activePage);
   const mobileHiddenNotificationCount = isRecordingMode ? 0 : friendNotificationCount + chatUnreadCount;
-  const accountLabel = isAuthLoading ? "Account" : isSignedIn ? authLabel : "ログイン";
+  const accountLabel = isAuthLoading ? "アカウント" : isSignedIn ? authLabel : "ログイン";
 
   useEffect(() => {
     setIsMobileMoreOpen(false);
@@ -1168,7 +1187,7 @@ function GlobalAppNav({
 
   return (
     <>
-      <nav className="global-app-nav" aria-label="Primary navigation">
+      <nav className="global-app-nav" aria-label="メインメニュー">
         <button className="global-brand" type="button" onClick={() => handleNavigate("/")}>
           <img src={brandLogoSource} alt="" aria-hidden="true" />
           <span>Cube Split Timer</span>
@@ -1232,7 +1251,7 @@ function GlobalAppNav({
         )}
       </header>
 
-      <nav className="mobile-tab-nav" aria-label="Mobile primary navigation">
+      <nav className="mobile-tab-nav" aria-label="モバイルメニュー">
         {visibleMobilePrimaryItems.map((item) => {
           const isCurrent = mobileActiveKey === item.key;
           const isMore = item.key === "more";
@@ -1284,7 +1303,7 @@ function GlobalAppNav({
           <section className="mobile-more-sheet" aria-label="その他メニュー">
             <div className="mobile-more-head">
               <div>
-                <p className="eyebrow">Menu</p>
+                <p className="eyebrow">メニュー</p>
                 <h2>その他</h2>
               </div>
               <button
@@ -1658,7 +1677,7 @@ export default function App() {
       })
       .catch(() => {
         if (!isDisposed) {
-          setAuthNotice("ログイン状態を確認できませんでした。Supabase設定を確認してください。");
+          setAuthNotice("ログイン状態を確認できませんでした。通信環境を確認してください。");
         }
       })
       .finally(() => {
@@ -2192,7 +2211,7 @@ export default function App() {
         }
       })
       .catch(() => {
-        setAuthNotice("履歴の自動同期に失敗しました。Account画面からもう一度同期できます。");
+        setAuthNotice("履歴の自動同期に失敗しました。アカウント画面からもう一度同期できます。");
       });
   }, [authUser, solveStorageUserId, syncAccountHistory]);
 
@@ -2207,7 +2226,7 @@ export default function App() {
           setAuthNotice("記録をクラウドにも保存しました。");
         })
         .catch(() => {
-          setAuthNotice("ローカル保存は完了しましたが、クラウド保存に失敗しました。");
+          setAuthNotice("この端末への保存は完了しましたが、クラウドへの保存に失敗しました。");
         })
         .finally(() => {
           pendingCloudInsertsRef.current.delete(solve.id);
@@ -3218,7 +3237,7 @@ const handleTimerPointerCancel = useCallback(
 
       if (!isAuthConfigured()) {
         setFriendShareStatus("error");
-        setFriendShareMessage("Supabase設定後にフレンドへ共有できます。");
+        setFriendShareMessage("この機能は今は使えません。");
         return;
       }
 
@@ -3546,7 +3565,7 @@ const handleTimerPointerCancel = useCallback(
         : formatTime(elapsedMs);
   const timerButtonHint =
     timerState === "finished" && finishedPenalty !== "none"
-      ? `${finishedPenalty} (Inspection) · ${getTimerPrepareHint(timerState, timerMode, inspectionEnabled)}`
+      ? `${finishedPenalty} (インスペクション) · ${getTimerPrepareHint(timerState, timerMode, inspectionEnabled)}`
       : getTimerPrepareHint(timerState, timerMode, inspectionEnabled);
   const globalNav = (
     <GlobalAppNav
@@ -3555,7 +3574,7 @@ const handleTimerPointerCancel = useCallback(
       isRecordingMode={isRecordingMode}
       onNavigate={navigateTo}
       onOpenLogin={openLogin}
-      authLabel={authUser ? getAuthUserLabel(authUser) : "Login"}
+      authLabel={authUser ? getAuthUserLabel(authUser) : "ログイン"}
       authAvatarSource={getAuthUserAvatarSource(authUser)}
       isAuthLoading={!isRecordingMode && isAuthLoading}
       isSignedIn={!isRecordingMode && Boolean(authUser)}
@@ -3578,20 +3597,20 @@ const handleTimerPointerCancel = useCallback(
       .join(" ");
     const inspectionLabel =
       inspectionStage === "dnf"
-        ? "Inspection · DNF"
+        ? "インスペクション · DNF"
         : inspectionStage === "plus2"
-          ? "Inspection · +2"
+          ? "インスペクション · +2"
           : inspectionStage === "warn12"
-            ? "Inspection · 12s"
+            ? "インスペクション · 12秒"
             : inspectionStage === "warn8"
-              ? "Inspection · 8s"
-              : "Inspection";
+              ? "インスペクション · 8秒"
+              : "インスペクション";
     const inspectionHint =
       timerState === "ready"
-        ? "Ready - release to start"
+        ? "離してスタート"
         : timerState === "holding"
-          ? "Hold..."
-          : "Hold Space or screen, release on green to start";
+          ? "そのまま長押し…"
+          : "スペースか画面を長押し → 緑で離してスタート";
 
     return (
       <main
@@ -3599,7 +3618,7 @@ const handleTimerPointerCancel = useCallback(
         onPointerDown={handleTimerPointerDown}
         onPointerUp={handleTimerPointerUp}
         onPointerCancel={handleTimerPointerCancel}
-        aria-label="Inspection"
+        aria-label="インスペクション"
       >
         <p className="timer-screen-label">{inspectionLabel}</p>
         <div className="timer-screen-time">{inspectionDisplayText}</div>
@@ -3632,28 +3651,28 @@ const handleTimerPointerCancel = useCallback(
         ? "Cross Practice"
         : timerMode === "f2l_practice"
           ? "F2L Practice"
-          : "Timing");
+          : "計測中");
     const timerHint =
       timerMode === "cfop_split"
         ? currentCfopPhase?.phase === "pll"
-          ? "Tap or Space to finish PLL"
-          : `Tap or Space when ${currentCfopPhase?.label ?? "phase"} is done`
+          ? "タップかスペースで PLL を完了"
+          : `${currentCfopPhase?.label ?? "段階"} が終わったらタップかスペース`
         : timerMode === "cross_practice"
-          ? "Tap or Space when Cross is done"
+          ? "Cross が終わったらタップかスペース"
           : timerMode === "f2l_practice"
-            ? "Tap or Space when F2L is done"
+            ? "F2L が終わったらタップかスペース"
             : timerMode === "f2l_pair_split"
               ? currentPairPhase?.phase === "pair4"
-                ? "Tap or Space to finish Pair 4"
-                : `Tap or Space when ${currentPairPhase?.label ?? "pair"} is done`
-              : "Tap or Space to stop";
+                ? "タップかスペースでペア4を完了"
+                : `${currentPairPhase?.label ?? "ペア"} が終わったらタップかスペース`
+              : "タップかスペースで止める";
 
     return (
-      <main className="timer-screen" onPointerDown={handleTimerPointerDown} aria-label="Timing">
+      <main className="timer-screen" onPointerDown={handleTimerPointerDown} aria-label="計測中">
         <p className="timer-screen-label">{screenLabel}</p>
         <div className="timer-screen-time">{formatTime(elapsedMs)}</div>
         {splitDrafts.length > 0 && (
-          <div className="running-splits" aria-label="Recorded splits">
+          <div className="running-splits" aria-label="記録した段階">
             {splitDrafts.map((split) => (
               <span key={split.phase}>
                 {getPhaseLabel(split.phase)} {formatTime(split.time)}
@@ -3687,7 +3706,7 @@ const handleTimerPointerCancel = useCallback(
           fallback={
             <main className="app-shell learn-page">
               <div className="notice" role="status">
-                Learnページを読み込んでいます。
+                学ぶページを読み込んでいます。
               </div>
             </main>
           }
@@ -3706,7 +3725,7 @@ const handleTimerPointerCancel = useCallback(
           fallback={
             <main className="app-shell analyzer-page">
               <div className="notice" role="status">
-                Analyzerページを読み込んでいます。
+                解析ページを読み込んでいます。
               </div>
             </main>
           }
@@ -3927,42 +3946,42 @@ const handleTimerPointerCancel = useCallback(
         <main className="app-shell" data-testid="recording-analysis-page">
           <header className="app-header">
             <div>
-              <p className="eyebrow">Analysis</p>
+              <p className="eyebrow">分析</p>
               <h1>記録分析</h1>
             </div>
             <div className="header-actions">
               <button className="ghost-button" type="button" onClick={shareTodaySummary}>
                 今日のまとめ共有
               </button>
-              <HelpButton label="Open analysis help" onClick={() => openHelp("cfop")} />
+              <HelpButton label="ヘルプを開く" onClick={() => openHelp("cfop")} />
             </div>
           </header>
 
-          <section className="quick-stats" aria-label="Quick statistics" data-testid="recording-analysis-quick-stats">
+          <section className="quick-stats" aria-label="主要統計" data-testid="recording-analysis-quick-stats">
             <StatCard label="ao5" value={formatAverage(stats.ao5)} />
             <StatCard label="ao12" value={formatAverage(stats.ao12)} />
           </section>
 
-          <section className="stats-grid" aria-label="Statistics" data-testid="recording-analysis-summary">
-            <StatCard label="Solves" value={String(stats.count)} />
-            <StatCard label="Average" value={formatAverage(stats.average)} />
-            <StatCard label="Best" value={formatAverage(stats.best)} />
-            <StatCard label="Worst" value={formatAverage(stats.worst)} />
+          <section className="stats-grid" aria-label="統計" data-testid="recording-analysis-summary">
+            <StatCard label="回数" value={String(stats.count)} />
+            <StatCard label="平均" value={formatAverage(stats.average)} />
+            <StatCard label="ベスト" value={formatAverage(stats.best)} />
+            <StatCard label="ワースト" value={formatAverage(stats.worst)} />
           </section>
 
-          <section className="analysis-section" aria-label="Analysis" data-testid="recording-analysis">
+          <section className="analysis-section" aria-label="分析" data-testid="recording-analysis">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Session</p>
-                <h2>Session Overview</h2>
+                <p className="eyebrow">セッション</p>
+                <h2>今日のまとめ</h2>
               </div>
             </div>
 
             <div className="analysis-grid">
-              <StatCard label="Solves" value={String(stats.count)} />
-              <StatCard label="Average" value={formatAverage(stats.average)} />
-              <StatCard label="Best" value={formatAverage(stats.best)} />
-              <StatCard label="Worst" value={formatAverage(stats.worst)} />
+              <StatCard label="回数" value={String(stats.count)} />
+              <StatCard label="平均" value={formatAverage(stats.average)} />
+              <StatCard label="ベスト" value={formatAverage(stats.best)} />
+              <StatCard label="ワースト" value={formatAverage(stats.worst)} />
               <StatCard label="ao5" value={formatAverage(stats.ao5)} />
               <StatCard label="ao12" value={formatAverage(stats.ao12)} />
               <StatCard label="ao50" value={formatAverage(stats.ao50)} />
@@ -3971,8 +3990,8 @@ const handleTimerPointerCancel = useCallback(
 
             <article className="weak-phase-card">
               <div>
-                <p className="eyebrow">Weak Phase</p>
-                <h3>苦手フェーズ</h3>
+                <p className="eyebrow">苦手な段階</p>
+                <h3>苦手な段階</h3>
               </div>
               {weakPhase ? (
                 <div className="weak-phase-result">
@@ -3980,7 +3999,7 @@ const handleTimerPointerCancel = useCallback(
                   <span>
                     平均 {formatTime(weakPhase.average)}
                     {weakPhase.delta > 0 &&
-                      ` / フェーズ平均より ${formatTime(weakPhase.delta)} 遅め`}
+                      ` / 段階平均より ${formatTime(weakPhase.delta)} 遅め`}
                   </span>
                 </div>
               ) : (
@@ -3990,7 +4009,7 @@ const handleTimerPointerCancel = useCallback(
 
             <div className="analysis-subheading">
               <p className="eyebrow">CFOP Split</p>
-              <h3>Phase Stats</h3>
+              <h3>段階ごとの統計</h3>
             </div>
             <div className="phase-grid">
               {CFOP_PHASES.map(({ phase, label }) => (
@@ -4012,13 +4031,13 @@ const handleTimerPointerCancel = useCallback(
         <main className="app-shell" data-testid="recording-practice-page">
           <header className="app-header">
             <div>
-              <p className="eyebrow">Practice</p>
+              <p className="eyebrow">練習</p>
               <h1>練習モード</h1>
             </div>
-            <HelpButton label="Open practice help" onClick={() => openHelp("practice")} />
+            <HelpButton label="ヘルプを開く" onClick={() => openHelp("practice")} />
           </header>
 
-          <section className="practice-section" aria-label="Practice statistics" data-testid="recording-practice">
+          <section className="practice-section" aria-label="練習統計" data-testid="recording-practice">
             <div className="practice-grid">
               <PracticeStatCard title="Cross Practice" stats={practiceStats.crossPractice} />
               <PracticeStatCard title="F2L Practice" stats={practiceStats.f2lPractice} />
@@ -4027,18 +4046,18 @@ const handleTimerPointerCancel = useCallback(
 
             <div className="analysis-subheading">
               <p className="eyebrow">F2L Pair Split</p>
-              <h3>Pair Stats</h3>
+              <h3>ペアごとの統計</h3>
             </div>
-            <div className="phase-grid pair-grid" aria-label="F2L pair statistics">
+            <div className="phase-grid pair-grid" aria-label="F2Lペアごとの統計">
               {F2L_PAIR_PHASES.map(({ phase, label }) => (
                 <PhaseStatCard key={phase} label={label} stat={practiceStats.pairs[phase]} />
               ))}
             </div>
 
             <div className="practice-history-grid">
-              <PracticeHistory title="Cross History" solves={crossPracticeHistory} />
-              <PracticeHistory title="F2L History" solves={f2lPracticeHistory} />
-              <PracticeHistory title="F2L Pair History" solves={f2lPairHistory} />
+              <PracticeHistory title="Cross の履歴" solves={crossPracticeHistory} />
+              <PracticeHistory title="F2L の履歴" solves={f2lPracticeHistory} />
+              <PracticeHistory title="F2L ペアの履歴" solves={f2lPairHistory} />
             </div>
           </section>
         </main>
@@ -4053,17 +4072,17 @@ const handleTimerPointerCancel = useCallback(
         <main className="app-shell" data-testid="recording-history-page">
           <header className="app-header">
             <div>
-              <p className="eyebrow">Latest 100</p>
+              <p className="eyebrow">最新100件</p>
               <h1>履歴</h1>
             </div>
-            <HelpButton label="Open history help" onClick={() => openHelp("penalty-delete")} />
+            <HelpButton label="ヘルプを開く" onClick={() => openHelp("penalty-delete")} />
           </header>
 
-          <section className="history-section" aria-label="History" data-testid="recording-history">
+          <section className="history-section" aria-label="履歴" data-testid="recording-history">
             {recentSolves.length === 0 ? (
               <div className="empty-state">
-                <p>No solves yet.</p>
-                <span>Start the timer to save your first local record.</span>
+                <p>まだ記録がありません。</p>
+                <span>タイマーを動かすと、最初の記録がこの端末に保存されます。</span>
               </div>
             ) : (
               <ol className="history-list">
@@ -4082,7 +4101,7 @@ const handleTimerPointerCancel = useCallback(
                       </div>
                       <p className="history-scramble">{solve.scramble}</p>
                       {getSavedSplits(solve).length > 0 && (
-                        <div className="history-splits" aria-label="Saved splits">
+                        <div className="history-splits" aria-label="記録した段階">
                           {getSavedSplits(solve).map((split) => (
                             <span key={split.key}>
                               {split.label} {formatTime(split.time)}
@@ -4097,19 +4116,19 @@ const handleTimerPointerCancel = useCallback(
                         解析
                       </button>
                       <button type="button" onClick={() => shareSolve(solve)}>
-                        Share
+                        共有
                       </button>
                       <button type="button" onClick={() => void openFriendShareDialog(solve)}>
                         フレンド
                       </button>
                       <button type="button" onClick={() => updatePenalty(solve.id, "+2")}>
-                        {solve.penalty === "+2" ? "Clear +2" : "+2"}
+                        {solve.penalty === "+2" ? "+2 を外す" : "+2"}
                       </button>
                       <button type="button" onClick={() => updatePenalty(solve.id, "DNF")}>
-                        {solve.penalty === "DNF" ? "Clear DNF" : "DNF"}
+                        {solve.penalty === "DNF" ? "DNF を外す" : "DNF"}
                       </button>
                       <button type="button" onClick={() => softDeleteSolve(solve.id)}>
-                        Delete
+                        削除
                       </button>
                     </div>
                   </li>
@@ -4128,7 +4147,7 @@ const handleTimerPointerCancel = useCallback(
               >
                 <div className="friend-share-head">
                   <div>
-                    <p className="eyebrow">Share to chat</p>
+                    <p className="eyebrow">チャットで共有</p>
                     <h2 id="friend-share-title">フレンドへ共有</h2>
                   </div>
                   <button className="ghost-button" type="button" onClick={closeFriendShareDialog}>
@@ -4219,7 +4238,7 @@ const handleTimerPointerCancel = useCallback(
           }
         >
           <div>
-            <p className="eyebrow">{FIGMA_UI_TRIAL_ENABLED ? "3x3 speedcubing timer" : "Timer"}</p>
+            <p className="eyebrow">{FIGMA_UI_TRIAL_ENABLED ? "3x3 スピードキューブタイマー" : "計測"}</p>
             <h1>計測</h1>
             <p className="app-header-copy">
               {FIGMA_UI_TRIAL_ENABLED
@@ -4229,7 +4248,7 @@ const handleTimerPointerCancel = useCallback(
           </div>
           {!isRecordingMode && (
             <div className="header-actions">
-              <HelpButton label="Open general help" onClick={() => openHelp("overview")} />
+              <HelpButton label="ヘルプを開く" onClick={() => openHelp("overview")} />
               {!FIGMA_UI_TRIAL_ENABLED && (
                 <>
                   <ImageIconButton
@@ -4255,16 +4274,16 @@ const handleTimerPointerCancel = useCallback(
                 </>
               )}
               {!FIGMA_UI_TRIAL_ENABLED && (
-                <div className="theme-control" aria-label="Theme setting">
-                  <label htmlFor="theme-select">Theme</label>
+                <div className="theme-control" aria-label="テーマ設定">
+                  <label htmlFor="theme-select">テーマ</label>
                   <select
                     id="theme-select"
                     value={themePreference}
                     onChange={(event) => setThemePreference(event.target.value as ThemePreference)}
                   >
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                    <option value="system">System</option>
+                    <option value="dark">ダーク</option>
+                    <option value="light">ライト</option>
+                    <option value="system">端末に合わせる</option>
                   </select>
                 </div>
               )}
@@ -4305,25 +4324,25 @@ const handleTimerPointerCancel = useCallback(
         </div>
       )}
 
-      <section className="home-workspace" aria-label="Timer workspace">
+      <section className="home-workspace" aria-label="タイマー画面">
         <section
           className="timer-panel timer-focus-panel"
           id="timer"
-          aria-label="Timer"
+          aria-label="タイマー"
           data-testid="recording-main-timer"
         >
           {!FIGMA_UI_TRIAL_ENABLED && (
             <div className="timer-panel-header">
               <div>
-                <p className="eyebrow">Current mode</p>
+                <p className="eyebrow">現在のモード</p>
                 <h2>{getModeLabel(timerMode)}</h2>
               </div>
-              <HelpButton label="Open timer help" onClick={() => openHelp("normal")} />
+              <HelpButton label="ヘルプを開く" onClick={() => openHelp("normal")} />
             </div>
           )}
 
           {FIGMA_UI_TRIAL_ENABLED ? (
-            <div className="figma-trial-mode-row" aria-label="Timer mode and primary actions">
+            <div className="figma-trial-mode-row" aria-label="計測モードと主な操作">
               <label className="figma-trial-mode-select" htmlFor="figma-trial-timer-mode">
                 <span>計測モード</span>
                 <select
@@ -4354,7 +4373,7 @@ const handleTimerPointerCancel = useCallback(
               </button>
             </div>
           ) : (
-            <div className="mode-toggle" aria-label="Timer mode">
+            <div className="mode-toggle" aria-label="計測モード">
               {TIMER_MODES.map((modeOption) => (
                 <button
                   key={modeOption.mode}
@@ -4376,7 +4395,7 @@ const handleTimerPointerCancel = useCallback(
               onClick={toggleInspectionEnabled}
             >
               <span>インスペクション 15秒 (WCA)</span>
-              <strong>{inspectionEnabled ? "ON" : "OFF"}</strong>
+              <strong>{inspectionEnabled ? "オン" : "オフ"}</strong>
             </button>
           </div>
 
@@ -4391,7 +4410,7 @@ const handleTimerPointerCancel = useCallback(
                   <p className="scramble-label">スクランブル</p>
                 </div>
               ) : (
-                <p className="scramble-label">Scramble</p>
+                <p className="scramble-label">スクランブル</p>
               )}
               {!FIGMA_UI_TRIAL_ENABLED && (
                 <div className="scramble-actions">
@@ -4474,9 +4493,9 @@ const handleTimerPointerCancel = useCallback(
           </button>
 
           {FIGMA_UI_TRIAL_ENABLED && (
-            <div className="figma-trial-quick-stats" aria-label="Quick timer statistics" data-testid="recording-timer-stats">
+            <div className="figma-trial-quick-stats" aria-label="簡易統計" data-testid="recording-timer-stats">
               <article>
-                <span>Today</span>
+                <span>今日</span>
                 <strong>{stats.count}</strong>
               </article>
               <article>
@@ -4484,7 +4503,7 @@ const handleTimerPointerCancel = useCallback(
                 <strong>{formatAverage(stats.ao5)}</strong>
               </article>
               <article>
-                <span>Best</span>
+                <span>ベスト</span>
                 <strong>{formatAverage(stats.best)}</strong>
               </article>
             </div>
@@ -4501,15 +4520,15 @@ const handleTimerPointerCancel = useCallback(
       </section>
 
       {!isRecordingMode && lastSavedSolve && (
-        <section className="post-solve-actions" aria-label="Last solve actions">
+        <section className="post-solve-actions" aria-label="直前の記録の操作">
           <div className="post-solve-top">
             <div>
-              <p className="post-solve-label">Saved</p>
+              <p className="post-solve-label">保存しました</p>
               <strong>{formatSolveTime(lastSavedSolve)}</strong>
             </div>
             <div className="post-solve-buttons">
               <button type="button" onClick={() => shareSolve(lastSavedSolve)}>
-                Share
+                共有
               </button>
               <button
                 type="button"
@@ -4627,7 +4646,7 @@ function TutorialDialog({ onClose, onOpenHelp }: TutorialDialogProps) {
         aria-modal="true"
         aria-labelledby="tutorial-title"
       >
-        <p className="eyebrow">First Start</p>
+        <p className="eyebrow">はじめての方へ</p>
         <h2 id="tutorial-title">最初の使い方</h2>
         <ol className="tutorial-list">
           {TUTORIAL_STEPS.map((step) => (
@@ -4682,7 +4701,7 @@ function getAuthErrorMessage(error: unknown): string {
     return error.message;
   }
 
-  return "認証に失敗しました。入力内容とSupabase設定を確認してください。";
+  return "認証に失敗しました。入力内容をご確認ください。";
 }
 
 function AuthPage({
@@ -5036,7 +5055,7 @@ function AuthPage({
       );
     } catch {
       setDataStatus("error");
-      setDataStatusMessage("アカウントへアップロードできませんでした。ログイン状態とSupabase設定を確認してください。");
+      setDataStatusMessage("アカウントへアップロードできませんでした。ログイン状態を確認してください。");
     } finally {
       setIsUploadingLocalSolves(false);
     }
@@ -5056,7 +5075,7 @@ function AuthPage({
       );
     } catch {
       setDataStatus("error");
-      setDataStatusMessage("履歴を同期できませんでした。ログイン状態とSupabase設定を確認してください。");
+      setDataStatusMessage("履歴を同期できませんでした。ログイン状態を確認してください。");
     } finally {
       setIsImportingAccountSolves(false);
     }
@@ -5071,7 +5090,7 @@ function AuthPage({
       await copyTextWithFallback(NETLIFY_MIGRATION_BOOKMARKLET);
       setDataStatus("success");
       setDataStatusMessage(
-        "Netlify版で実行する移行コードをコピーしました。スマホではブックマークのURL欄へ貼り付けて使えます。",
+        "旧版で実行する移行コードをコピーしました。スマホではブックマークのURL欄へ貼り付けて使えます。",
       );
     } catch {
       setDataStatus("error");
@@ -5086,7 +5105,7 @@ function AuthPage({
 
     if (!trimmedUrl) {
       setDataStatus("error");
-      setDataStatusMessage("Netlify版のURLを入力してください。");
+      setDataStatusMessage("旧版のURLを入力してください。");
       return;
     }
 
@@ -5095,7 +5114,7 @@ function AuthPage({
       window.open(url.href, "_blank", "noopener,noreferrer");
     } catch {
       setDataStatus("error");
-      setDataStatusMessage("Netlify版のURLを https:// から入力してください。");
+      setDataStatusMessage("旧版のURLを https:// から入力してください。");
     }
   };
 
@@ -5103,7 +5122,7 @@ function AuthPage({
     <main className="app-shell auth-page">
       <header className="app-header auth-header">
         <div>
-          <p className="eyebrow">{isSettingsView ? "More" : "Account"}</p>
+          <p className="eyebrow">{isSettingsView ? "その他" : "アカウント"}</p>
           <h1>{isSettingsView ? "その他" : user ? "マイページ" : "ログイン"}</h1>
         </div>
         {!(FIGMA_UI_TRIAL_ENABLED && isSettingsView) && (
@@ -5112,7 +5131,7 @@ function AuthPage({
               戻る
             </button>
             <button className="primary-button" type="button" onClick={onOpenTimer}>
-              Timerへ戻る
+              計測へ戻る
             </button>
           </div>
         )}
@@ -5127,9 +5146,9 @@ function AuthPage({
           <div className="figma-trial-more-profile">
             <img src={profileAvatarOption.source} alt="" aria-hidden="true" decoding="async" />
             <div>
-              <p className="eyebrow">Profile</p>
+              <p className="eyebrow">プロフィール</p>
               <h2>{user ? profileDisplayName.trim() || getAuthUserLabel(user) : "ゲスト"}</h2>
-              <span>{user ? `ログイン中 / ${localSolveCount} solves` : "ログインすると履歴を同期できます"}</span>
+              <span>{user ? `ログイン中 / ${localSolveCount}回` : "ログインすると履歴を同期できます"}</span>
             </div>
             <button className="ghost-button" type="button" onClick={() => onNavigate("/login")}>
               {user ? "編集" : "ログイン"}
@@ -5138,24 +5157,24 @@ function AuthPage({
 
           <div className="figma-trial-more-theme" data-testid="recording-theme-settings">
             <div>
-              <p className="eyebrow">Theme</p>
+              <p className="eyebrow">テーマ</p>
               <h3>テーマ</h3>
-              <p>Light / Dark / System</p>
+              <p>ライト / ダーク / 端末に合わせる</p>
             </div>
             <select
               aria-label="テーマ"
               value={themePreference}
               onChange={(event) => onThemePreferenceChange(event.currentTarget.value as ThemePreference)}
             >
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="system">System</option>
+              <option value="dark">ダーク</option>
+              <option value="light">ライト</option>
+              <option value="system">端末に合わせる</option>
             </select>
           </div>
 
           <div className="figma-trial-more-theme" data-testid="inspection-settings">
             <div>
-              <p className="eyebrow">Timer</p>
+              <p className="eyebrow">計測</p>
               <h3>WCA インスペクション（15秒）</h3>
               <p>15秒超〜17秒で+2、17秒超でDNF</p>
             </div>
@@ -5165,7 +5184,7 @@ function AuthPage({
               aria-pressed={inspectionEnabled}
               onClick={onToggleInspection}
             >
-              <strong>{inspectionEnabled ? "ON" : "OFF"}</strong>
+              <strong>{inspectionEnabled ? "オン" : "オフ"}</strong>
             </button>
           </div>
 
@@ -5187,8 +5206,8 @@ function AuthPage({
                 badgeCount: chatUnreadCount,
               },
               { label: "ヘルプ", description: "使い方とFAQ", path: "/help", badgeCount: 0 },
-              { label: "フィードバック", description: "要望を送る", path: "/feedback", badgeCount: 0 },
-              ...(isAdmin ? [{ label: "Admin", description: "管理者画面", path: "/admin", badgeCount: 0 }] : []),
+              { label: "ご意見", description: "要望を送る", path: "/feedback", badgeCount: 0 },
+              ...(isAdmin ? [{ label: "管理", description: "管理者画面", path: "/admin", badgeCount: 0 }] : []),
             ].map((item) => {
               const badgeCount = item.badgeCount ?? 0;
 
@@ -5228,9 +5247,9 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
         </section>
       ) : user ? (
         isSettingsView ? (
-          <section className="auth-card" aria-label="Account settings">
+          <section className="auth-card" aria-label="アカウント設定">
             <div>
-              <p className="eyebrow">Account Settings</p>
+              <p className="eyebrow">アカウント設定</p>
               <h2>アカウント設定</h2>
               <p className="auth-lead">
                 ログイン方法の連携、履歴の移行、ログアウトはここでまとめて管理します。
@@ -5245,7 +5264,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
 
             <div className="auth-link-panel">
               <div>
-                <p className="eyebrow">Login methods</p>
+                <p className="eyebrow">ログイン方法</p>
                 <h3>Googleアカウント連携</h3>
                 <p>
                   連携済み:{" "}
@@ -5276,7 +5295,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
 
             <div className="feedback-actions">
               <button className="primary-button" type="button" onClick={onOpenTimer}>
-                Timerへ戻る
+                計測へ戻る
               </button>
               <button className="ghost-button" type="button" onClick={onBack}>
                 マイページへ
@@ -5292,14 +5311,14 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             </div>
           </section>
         ) : (
-        <section className="auth-card" aria-label="Current account">
-          <p className="eyebrow">Signed in</p>
+        <section className="auth-card" aria-label="現在のアカウント">
+          <p className="eyebrow">ログイン中</p>
           <h2>{getAuthUserLabel(user)}</h2>
-          <section className="auth-profile-editor" aria-label="My page editor">
+          <section className="auth-profile-editor" aria-label="マイページ編集">
             <div className="auth-profile-preview">
               <img src={profileAvatarOption.source} alt="" aria-hidden="true" decoding="async" />
               <div>
-                <p className="eyebrow">My Page</p>
+                <p className="eyebrow">マイページ</p>
                 <h3>{profileDisplayName.trim() || getAuthUserLabel(user)}</h3>
                 <span>{profileAvatarOption.label}</span>
                 {normalizedProfilePublicId && (
@@ -5319,7 +5338,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
               <input
                 maxLength={40}
                 value={profileDisplayName}
-                placeholder="例: shinta"
+                placeholder="例: しんた"
                 onChange={(event) => setProfileDisplayName(event.currentTarget.value)}
               />
             </label>
@@ -5372,15 +5391,15 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </section>
           <div className="auth-account-panel">
             <p>
-              <span>Public ID</span>
+              <span>ユーザーID</span>
               <strong>{profile?.public_id ? `@${profile.public_id}` : "未設定"}</strong>
             </p>
             <p>
-              <span>Email</span>
+              <span>メールアドレス</span>
               <strong>{user.email ?? "未設定"}</strong>
             </p>
             <p>
-              <span>Internal ID</span>
+              <span>管理ID</span>
               <strong>{user.id}</strong>
             </p>
           </div>
@@ -5390,7 +5409,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </p>
           <div className="feedback-actions">
             <button className="primary-button" type="button" onClick={onOpenTimer}>
-              Timerへ戻る
+              計測へ戻る
             </button>
             <button className="ghost-button" type="button" onClick={onOpenSettings}>
               設定を開く
@@ -5404,9 +5423,9 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
         </section>
         )
       ) : (
-        <section className="auth-card" aria-label="Login form">
+        <section className="auth-card" aria-label="ログインフォーム">
           <div>
-            <p className="eyebrow">Supabase Auth</p>
+            <p className="eyebrow">アカウント</p>
             <h2>{mode === "signIn" ? "メールでログイン" : "新規アカウント作成"}</h2>
             <p className="auth-lead">
               未ログインでもタイマーは今まで通り使えます。ログインすると、新しい記録をクラウドにも保存します。
@@ -5425,7 +5444,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             </div>
           )}
 
-          <div className="auth-mode-toggle" aria-label="Auth mode">
+          <div className="auth-mode-toggle" aria-label="ログイン切り替え">
             <button
               type="button"
               aria-pressed={mode === "signIn"}
@@ -5442,7 +5461,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             </button>
           </div>
 
-          <div className="auth-provider-actions" aria-label="External login">
+          <div className="auth-provider-actions" aria-label="外部ログイン">
             <button
               className="auth-provider-button"
               type="button"
@@ -5468,7 +5487,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
                   autoComplete="nickname"
                   maxLength={80}
                   value={displayName}
-                  placeholder="例: Shinta"
+                  placeholder="例: しんた"
                   onChange={(event) => setDisplayName(event.target.value)}
                 />
               </label>
@@ -5528,12 +5547,12 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
       )}
 
       {isSettingsView && (
-      <section className="auth-card auth-data-card" aria-label="Local data transfer">
+      <section className="auth-card auth-data-card" aria-label="端末データの移動">
         <div>
-          <p className="eyebrow">Data Transfer</p>
+          <p className="eyebrow">データの移動</p>
           <h2>端末の履歴を移す</h2>
           <p className="auth-lead">
-            この端末のローカル履歴は {localSolveCount} 件です。ログイン中は自動でアカウントと同期します。
+            この端末の履歴は {localSolveCount} 件です。ログイン中は自動でアカウントと同期します。
             書き出し/読み込みは、別端末へ手動で移したいときに使えます。
           </p>
         </div>
@@ -5571,12 +5590,12 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
           </button>
         </div>
 
-        <section className="auth-migration-panel" aria-label="Netlify history migration">
+        <section className="auth-migration-panel" aria-label="旧版からの履歴移行">
           <div>
-            <p className="eyebrow">Netlify Migration</p>
-            <h3>Netlify版の履歴を取り出す</h3>
+            <p className="eyebrow">旧版（Netlify）からの引っ越し</p>
+            <h3>旧版の履歴を取り出す</h3>
             <p>
-              Netlify版を更新できなくても、同じスマホ/PCでNetlify版を開ければ履歴をコピーできます。
+              旧版を更新できなくても、同じスマホ/PCで旧版を開ければ履歴をコピーできます。
               コピー後、この画面の貼り付け欄へ入れて読み込んでください。
             </p>
           </div>
@@ -5584,8 +5603,8 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             <p className="eyebrow">やること</p>
             <ol>
               <li>この画面で「移行コードをコピー」を押します。</li>
-              <li>「旧Netlify版を開く」で昔のページを開きます。</li>
-              <li>Netlify版で移行コードを実行して、履歴データをコピーします。</li>
+              <li>「旧版を開く」で昔のページを開きます。</li>
+              <li>旧版で移行コードを実行して、履歴データをコピーします。</li>
               <li>この画面へ戻り、「別端末の履歴データを貼り付け」へ貼ります。</li>
               <li>「貼り付けた履歴を読み込む」を押すと、ログイン中ならアカウントにも保存されます。</li>
             </ol>
@@ -5600,7 +5619,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
               {isCopyingMigrationCode ? "コピー中..." : "移行コードをコピー"}
             </button>
             <label className="auth-migration-url">
-              Netlify版URL
+              旧版のURL
               <input
                 type="url"
                 value={netlifyMigrationUrl}
@@ -5613,7 +5632,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
               type="button"
               onClick={handleOpenNetlifyMigrationUrl}
             >
-              旧Netlify版を開く
+              旧版を開く
             </button>
           </div>
           <details className="auth-migration-help">
@@ -5621,7 +5640,7 @@ VITE_SUPABASE_ANON_KEY=your-public-anon-key`}
             <ol>
               <li>移行コードをコピーします。</li>
               <li>ブラウザでブックマークを1つ作り、URL欄を移行コードに置き換えます。</li>
-              <li>Netlify版を開いた状態で、そのブックマークを押します。</li>
+              <li>旧版を開いた状態で、そのブックマークを押します。</li>
               <li>コピーされた履歴を下の欄へ貼り付けて読み込みます。</li>
             </ol>
           </details>
@@ -5680,7 +5699,7 @@ function normalizeFriendPublicId(value: string): string {
 }
 
 function getFriendConnectionDisplayName(connection: FriendConnection): string {
-  return connection.displayName?.trim() || connection.publicId || "Cube Friend";
+  return connection.displayName?.trim() || connection.publicId || "キューブ仲間";
 }
 
 function getFriendConnectionMeta(connection: FriendConnection): string {
@@ -5821,7 +5840,7 @@ function NotificationCenter({
     <section className="notification-center" aria-label="通知センター">
       <div className="notification-center-head">
         <div>
-          <p className="eyebrow">Notifications</p>
+          <p className="eyebrow">お知らせ</p>
           <h2>通知センター</h2>
         </div>
         <button className="ghost-button" type="button" onClick={onClose}>
@@ -5830,7 +5849,7 @@ function NotificationCenter({
       </div>
 
       {!isConfigured ? (
-        <p className="notification-empty">Supabase設定後に通知を使えます。</p>
+        <p className="notification-empty">この機能は今は使えません。</p>
       ) : !user ? (
         <div className="notification-empty">
           <p>ログインするとフレンド申請の通知を見られます。</p>
@@ -6038,7 +6057,7 @@ function FriendsPage({
     <main className="app-shell friends-page">
       <header className="app-header friends-header">
         <div>
-          <p className="eyebrow">Friends</p>
+          <p className="eyebrow">フレンド</p>
           <h1>フレンド</h1>
         </div>
         <div className="header-actions">
@@ -6046,20 +6065,20 @@ function FriendsPage({
             戻る
           </button>
           <button className="primary-button" type="button" onClick={onOpenTimer}>
-            Timerへ戻る
+            計測へ戻る
           </button>
         </div>
       </header>
 
       {!isConfigured ? (
         <section className="friends-card">
-          <p className="eyebrow">Setup required</p>
-          <h2>Supabaseが未設定です</h2>
-          <p>フレンド申請と通知を使うにはSupabase設定が必要です。</p>
+          <p className="eyebrow">準備中</p>
+          <h2>この機能は今は使えません</h2>
+          <p>この機能は今は使えません。</p>
         </section>
       ) : !user ? (
         <section className="friends-card">
-          <p className="eyebrow">Login required</p>
+          <p className="eyebrow">ログインが必要です</p>
           <h2>ログインすると使えます</h2>
           <p>ユーザーIDでフレンド申請を送り、承認された相手を一覧で管理できます。</p>
           <div className="feedback-actions">
@@ -6072,7 +6091,7 @@ function FriendsPage({
         <>
           <section className="friends-card friends-add-card">
             <div>
-              <p className="eyebrow">Add Friend</p>
+              <p className="eyebrow">フレンド追加</p>
               <h2>@ユーザーIDで申請</h2>
               <p>
                 マイページで設定したユーザーIDを入力してください。
@@ -6101,7 +6120,7 @@ function FriendsPage({
                     maxLength={20}
                     pattern="[a-z0-9_]{3,20}"
                     value={friendPublicId}
-                    placeholder="friend_id"
+                    placeholder="例: taro_123"
                     onChange={(event) =>
                       setFriendPublicId(normalizeFriendPublicId(event.currentTarget.value))
                     }
@@ -6121,7 +6140,7 @@ function FriendsPage({
           <section className="friends-card">
             <div className="friends-section-head">
               <div>
-                <p className="eyebrow">Requests</p>
+                <p className="eyebrow">届いた申請</p>
                 <h2>届いた申請</h2>
               </div>
               <span>{incomingRequests.length}件</span>
@@ -6162,7 +6181,7 @@ function FriendsPage({
           <section className="friends-card">
             <div className="friends-section-head">
               <div>
-                <p className="eyebrow">Friend List</p>
+                <p className="eyebrow">フレンド一覧</p>
                 <h2>フレンド一覧</h2>
               </div>
               <button className="ghost-button" type="button" onClick={() => void loadConnections()}>
@@ -6197,7 +6216,7 @@ function FriendsPage({
           <section className="friends-card">
             <div className="friends-section-head">
               <div>
-                <p className="eyebrow">Pending</p>
+                <p className="eyebrow">送信中</p>
                 <h2>送信中の申請</h2>
               </div>
               <span>{outgoingRequests.length}件</span>
@@ -6299,13 +6318,13 @@ function FriendProfilePage({
   }, [isConfigured, publicId, user]);
 
   const avatarOption = getProfileAvatarOption(profile?.avatarId);
-  const displayName = profile?.displayName?.trim() || profile?.publicId || "Cube Friend";
+  const displayName = profile?.displayName?.trim() || profile?.publicId || "キューブ仲間";
 
   return (
     <main className="app-shell friend-profile-page">
       <header className="app-header friends-header">
         <div>
-          <p className="eyebrow">Friend Profile</p>
+          <p className="eyebrow">フレンドのプロフィール</p>
           <h1>プロフィール</h1>
         </div>
         <div className="header-actions">
@@ -6320,13 +6339,13 @@ function FriendProfilePage({
 
       {!isConfigured ? (
         <section className="friends-card">
-          <p className="eyebrow">Setup required</p>
-          <h2>Supabaseが未設定です</h2>
-          <p>プロフィールを見るにはSupabase設定が必要です。</p>
+          <p className="eyebrow">準備中</p>
+          <h2>この機能は今は使えません</h2>
+          <p>この機能は今は使えません。</p>
         </section>
       ) : !user ? (
         <section className="friends-card">
-          <p className="eyebrow">Login required</p>
+          <p className="eyebrow">ログインが必要です</p>
           <h2>ログインすると見られます</h2>
           <p>フレンドのプロフィールを見るにはログインが必要です。</p>
           <div className="feedback-actions">
@@ -6337,13 +6356,13 @@ function FriendProfilePage({
         </section>
       ) : status === "loading" ? (
         <section className="friends-card">
-          <p className="eyebrow">Loading</p>
+          <p className="eyebrow">読み込み中</p>
           <h2>読み込み中</h2>
           <p>{message}</p>
         </section>
       ) : status === "error" ? (
         <section className="friends-card">
-          <p className="eyebrow">Error</p>
+          <p className="eyebrow">エラー</p>
           <h2>プロフィールを表示できません</h2>
           <p>{message}</p>
         </section>
@@ -6352,7 +6371,7 @@ function FriendProfilePage({
           <div className="friend-profile-hero">
             <img src={avatarOption.source} alt="" aria-hidden="true" />
             <div>
-              <p className="eyebrow">Player</p>
+              <p className="eyebrow">プレイヤー</p>
               <h2>{displayName}</h2>
               <p>{profile.publicId ? `@${profile.publicId}` : "ID未設定"}</p>
             </div>
@@ -6381,7 +6400,7 @@ function FriendProfilePage({
         </section>
       ) : (
         <section className="friends-card">
-          <p className="eyebrow">Profile</p>
+          <p className="eyebrow">プロフィール</p>
           <h2>プロフィールがありません</h2>
           <p>もう一度フレンド一覧から開いてください。</p>
         </section>
@@ -6403,11 +6422,11 @@ interface ChatPageProps {
 }
 
 function getChatDisplayName(thread: ChatThread): string {
-  return thread.displayName?.trim() || thread.publicId || "Cube Friend";
+  return thread.displayName?.trim() || thread.publicId || "キューブ仲間";
 }
 
 function getChatProfileDisplayName(profile: FriendPublicProfile): string {
-  return profile.displayName?.trim() || profile.publicId || "Cube Friend";
+  return profile.displayName?.trim() || profile.publicId || "キューブ仲間";
 }
 
 function ChatPage({
@@ -6580,7 +6599,7 @@ function ChatPage({
     <main className="app-shell chat-page">
       <header className="app-header friends-header">
         <div>
-          <p className="eyebrow">Chat</p>
+          <p className="eyebrow">チャット</p>
           <h1>{headerTitle}</h1>
         </div>
         <div className="header-actions">
@@ -6595,13 +6614,13 @@ function ChatPage({
 
       {!isConfigured ? (
         <section className="friends-card">
-          <p className="eyebrow">Setup required</p>
-          <h2>Supabaseが未設定です</h2>
-          <p>チャットを使うにはSupabase設定が必要です。</p>
+          <p className="eyebrow">準備中</p>
+          <h2>この機能は今は使えません</h2>
+          <p>この機能は今は使えません。</p>
         </section>
       ) : !user ? (
         <section className="friends-card">
-          <p className="eyebrow">Login required</p>
+          <p className="eyebrow">ログインが必要です</p>
           <h2>ログインすると使えます</h2>
           <p>承認済みのフレンドと1対1チャットできます。</p>
           <div className="feedback-actions">
@@ -6616,7 +6635,7 @@ function ChatPage({
             <div className="chat-thread-head">
               <img src={getProfileAvatarOption(profile.avatarId).source} alt="" aria-hidden="true" />
               <div>
-                <p className="eyebrow">Friend chat</p>
+                <p className="eyebrow">フレンドチャット</p>
                 <h2>{getChatProfileDisplayName(profile)}</h2>
                 <p>{profile.publicId ? `@${profile.publicId}` : "ID未設定"}</p>
               </div>
@@ -6686,7 +6705,7 @@ function ChatPage({
 
           {threads.length === 0 ? (
             <div className="chat-empty-panel">
-              <p className="eyebrow">No chats</p>
+              <p className="eyebrow">チャットなし</p>
               <h2>チャットできるフレンドがいません</h2>
               <p>フレンド申請が承認されると、ここにチャットが表示されます。</p>
             </div>
@@ -6768,7 +6787,7 @@ function ResetPasswordPage({ onOpenLogin, onOpenTimer }: ResetPasswordPageProps)
     <main className="app-shell auth-page">
       <header className="app-header auth-header">
         <div>
-          <p className="eyebrow">Account</p>
+          <p className="eyebrow">アカウント</p>
           <h1>パスワード再設定</h1>
         </div>
         <div className="header-actions">
@@ -6776,14 +6795,14 @@ function ResetPasswordPage({ onOpenLogin, onOpenTimer }: ResetPasswordPageProps)
             ログインへ
           </button>
           <button className="primary-button" type="button" onClick={onOpenTimer}>
-            Timerへ戻る
+            計測へ戻る
           </button>
         </div>
       </header>
 
-      <section className="auth-card" aria-label="Reset password form">
+      <section className="auth-card" aria-label="パスワード再設定フォーム">
         <div>
-          <p className="eyebrow">Reset Password</p>
+          <p className="eyebrow">パスワード再設定</p>
           <h2>新しいパスワード</h2>
           <p className="auth-lead">
             再設定メールのリンクから開いた状態で、新しいパスワードを入力してください。
@@ -6887,7 +6906,7 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
     } catch {
       setStatus("error");
       setStatusMessage(
-        "送信できませんでした。時間を置いてもう一度試すか、Supabaseの設定を確認してください。",
+        "送信できませんでした。時間を置いてもう一度お試しください。",
       );
     } finally {
       setIsSubmitting(false);
@@ -6898,7 +6917,7 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
     <main className="app-shell feedback-page" data-testid="recording-feedback-page">
       <header className="app-header feedback-header">
         <div>
-          <p className="eyebrow">Feedback</p>
+          <p className="eyebrow">ご意見</p>
           <h1>意見箱</h1>
         </div>
         <div className="header-actions">
@@ -6906,17 +6925,17 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
             戻る
           </button>
           <button className="primary-button" type="button" onClick={onOpenTimer}>
-            Timerへ戻る
+            計測へ戻る
           </button>
         </div>
       </header>
 
-      <section className="feedback-card" aria-label="Feedback form" data-testid="recording-feedback">
+      <section className="feedback-card" aria-label="ご意見フォーム" data-testid="recording-feedback">
         <div>
-          <p className="eyebrow">Report</p>
+          <p className="eyebrow">送る</p>
           <h2>バグや直してほしいところを送る</h2>
           <p className="feedback-lead">
-            送信内容は管理者がSupabaseの `feedback_reports` テーブルで確認できます。
+            送った内容は管理者だけが読みます。
             返信が必要な場合だけ、連絡先を書いてください。
           </p>
         </div>
@@ -6964,13 +6983,13 @@ function FeedbackPage({ currentScramble, timerMode, onBack, onOpenTimer }: Feedb
             />
           </label>
 
-          <div className="feedback-context" aria-label="Attached context">
+          <div className="feedback-context" aria-label="送信時の状態">
             <p>
-              <span>Mode</span>
+              <span>モード</span>
               <strong>{getModeLabel(timerMode)}</strong>
             </p>
             <p>
-              <span>Scramble</span>
+              <span>スクランブル</span>
               <strong>{currentScramble}</strong>
             </p>
           </div>
@@ -7000,20 +7019,20 @@ function HelpPage({ activeTopicId, onBack, onOpenTimer }: HelpPageProps) {
     <main className="app-shell help-page">
       <header className="app-header help-header">
         <div>
-          <p className="eyebrow">Help</p>
+          <p className="eyebrow">ヘルプ</p>
           <h1>使い方</h1>
         </div>
         <button className="ghost-button" type="button" onClick={onBack}>
-          Timerへ戻る
+          計測へ戻る
         </button>
       </header>
 
-      <section className="help-hero" aria-label="Help overview">
+      <section className="help-hero" aria-label="ヘルプ概要">
         <div>
           <p className="eyebrow">Cube Split Timer</p>
           <h2>迷ったらここを見れば大丈夫です。</h2>
           <p>
-            計測、履歴、削除、Share、PWA追加までをまとめています。各セクションの「?」からも
+            計測、履歴、削除、共有、ホーム画面への追加までをまとめています。各画面の「?」からも
             関連項目へ移動できます。
           </p>
         </div>
@@ -7022,7 +7041,7 @@ function HelpPage({ activeTopicId, onBack, onOpenTimer }: HelpPageProps) {
         </button>
       </section>
 
-      <nav className="help-topic-nav" aria-label="Help topics">
+      <nav className="help-topic-nav" aria-label="ヘルプ目次">
         {HELP_TOPICS.map((topic) => (
           <a key={topic.id} href={`#${topic.id}`}>
             {topic.title}
@@ -7030,7 +7049,7 @@ function HelpPage({ activeTopicId, onBack, onOpenTimer }: HelpPageProps) {
         ))}
       </nav>
 
-      <section className="help-topics" aria-label="Help contents">
+      <section className="help-topics" aria-label="ヘルプ本文">
         {HELP_TOPICS.map((topic) => (
           <details
             className="help-topic"
@@ -7082,17 +7101,17 @@ function TimerSidePanel({
   return (
     <aside
       className="home-side-panel timer-insight-panel"
-      aria-label="Timer insights"
+      aria-label="記録と統計"
       data-testid="recording-split-panel"
     >
-      <div className="timer-insight-tabs" role="tablist" aria-label="Timer insight tabs">
+      <div className="timer-insight-tabs" role="tablist" aria-label="履歴・統計タブ">
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === "history"}
           onClick={() => onTabChange("history")}
         >
-          History
+          履歴
         </button>
         <button
           type="button"
@@ -7100,7 +7119,7 @@ function TimerSidePanel({
           aria-selected={activeTab === "stats"}
           onClick={() => onTabChange("stats")}
         >
-          Stats
+          統計
         </button>
       </div>
 
@@ -7126,7 +7145,7 @@ function TimerHistoryPanel({ recentSolves, stats }: TimerHistoryPanelProps) {
     <section
       className="timer-insight-content"
       role="tabpanel"
-      aria-label="Recent history"
+      aria-label="最近の履歴"
       data-testid="recording-history"
     >
       {visibleSolves.length === 0 ? (
@@ -7163,17 +7182,17 @@ function TimerStatsPanel({ recentChartSolves, stats }: TimerStatsPanelProps) {
     <section
       className="timer-insight-content timer-stats-panel"
       role="tabpanel"
-      aria-label="Timer stats"
+      aria-label="統計"
       data-testid="recording-stats"
     >
       <TimerTrendChart solves={recentChartSolves} />
-      <div className="timer-stat-grid" aria-label="Session statistics">
-        <TimerMiniStat label="Best single" value={formatAverage(stats.best)} featured />
+      <div className="timer-stat-grid" aria-label="セッション統計">
+        <TimerMiniStat label="ベスト" value={formatAverage(stats.best)} featured />
         <TimerMiniStat label="ao5" value={formatAverage(stats.ao5)} />
         <TimerMiniStat label="ao12" value={formatAverage(stats.ao12)} />
-        <TimerMiniStat label="Session mean" value={formatAverage(stats.average)} />
+        <TimerMiniStat label="平均" value={formatAverage(stats.average)} />
         <TimerMiniStat label="ao50" value={formatAverage(stats.ao50)} />
-        <TimerMiniStat label="Total solves" value={String(stats.count)} />
+        <TimerMiniStat label="回数" value={String(stats.count)} />
       </div>
     </section>
   );
@@ -7228,7 +7247,7 @@ function TimerTrendChart({ solves }: TimerTrendChartProps) {
 
   return (
     <article className="timer-trend-card">
-      <p className="eyebrow">Time Trend</p>
+      <p className="eyebrow">タイムの推移</p>
       {chartPoints.length < 2 ? (
         <div className="timer-trend-empty">2件以上の記録でグラフを表示します。</div>
       ) : (
@@ -7376,7 +7395,7 @@ function PracticeStatCard({ title, stats }: PracticeStatCardProps) {
       </div>
       <dl>
         <div>
-          <dt>Avg</dt>
+          <dt>平均</dt>
           <dd>{formatAverage(stats.average)}</dd>
         </div>
         <div>
@@ -7388,7 +7407,7 @@ function PracticeStatCard({ title, stats }: PracticeStatCardProps) {
           <dd>{formatAverage(stats.ao12)}</dd>
         </div>
         <div>
-          <dt>Best</dt>
+          <dt>ベスト</dt>
           <dd>{formatAverage(stats.best)}</dd>
         </div>
       </dl>
@@ -7406,7 +7425,7 @@ function PracticeHistory({ title, solves }: PracticeHistoryProps) {
     <article className="practice-history-card">
       <h3>{title}</h3>
       {solves.length === 0 ? (
-        <p className="practice-empty">No records yet.</p>
+        <p className="practice-empty">まだ記録がありません</p>
       ) : (
         <ol>
           {solves.map((solve) => (
@@ -7445,13 +7464,13 @@ function RecentChart({ solves }: RecentChartProps) {
   const range = Math.max(1, maxValue - minValue);
 
   return (
-    <article className="recent-chart-card" aria-label="Recent 50 graph">
+    <article className="recent-chart-card" aria-label="直近50回グラフ">
       <div className="analysis-subheading">
-        <p className="eyebrow">Recent 50</p>
+        <p className="eyebrow">直近50回</p>
         <h3>直近50回グラフ</h3>
       </div>
       {chartSolves.length === 0 ? (
-        <p className="practice-empty">No records yet.</p>
+        <p className="practice-empty">まだ記録がありません</p>
       ) : (
         <>
           <div className="recent-chart" role="img" aria-label="直近50回のタイム推移">
@@ -7474,8 +7493,8 @@ function RecentChart({ solves }: RecentChartProps) {
             })}
           </div>
           <div className="chart-meta">
-            <span>Oldest</span>
-            <span>Newest</span>
+            <span>古い順</span>
+            <span>新しい順</span>
           </div>
         </>
       )}
@@ -7497,15 +7516,15 @@ function PhaseStatCard({ label, stat }: PhaseStatCardProps) {
       </div>
       <dl>
         <div>
-          <dt>Avg</dt>
+          <dt>平均</dt>
           <dd>{formatAverage(stat.average)}</dd>
         </div>
         <div>
-          <dt>Best</dt>
+          <dt>ベスト</dt>
           <dd>{formatAverage(stat.best)}</dd>
         </div>
         <div>
-          <dt>Worst</dt>
+          <dt>ワースト</dt>
           <dd>{formatAverage(stat.worst)}</dd>
         </div>
       </dl>

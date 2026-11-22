@@ -257,12 +257,12 @@ const SCRAMBLE_MOVE_GROUPS = [
   ["B", "B'", "B2"],
 ];
 const COLOR_OPTIONS: Array<{ value: CubeColorName; label: string; shortLabel: string }> = [
-  { value: "white", label: "White", shortLabel: "W" },
-  { value: "yellow", label: "Yellow", shortLabel: "Y" },
-  { value: "blue", label: "Blue", shortLabel: "B" },
-  { value: "green", label: "Green", shortLabel: "G" },
-  { value: "red", label: "Red", shortLabel: "R" },
-  { value: "orange", label: "Orange", shortLabel: "O" },
+  { value: "white", label: "白", shortLabel: "白" },
+  { value: "yellow", label: "黄", shortLabel: "黄" },
+  { value: "blue", label: "青", shortLabel: "青" },
+  { value: "green", label: "緑", shortLabel: "緑" },
+  { value: "red", label: "赤", shortLabel: "赤" },
+  { value: "orange", label: "橙", shortLabel: "橙" },
 ];
 const ANALYZER_WORKSPACE_PAGES: AnalyzerWorkspacePage[] = ["input", "cross", "f2l", "oll", "pll", "compare"];
 const COLOR_FACE_ORDER: FaceName[] = ["U", "L", "F", "R", "B", "D"];
@@ -342,14 +342,42 @@ function getColorByVector(vector: ColorVector): CubeColorName | null {
 
 function getOrientationError(settings: AnalyzerSettings): string | null {
   if (settings.frontColor === settings.topColor) {
-    return "Front color と Top color は同じ色にできません。";
+    return "前の色と上の色は同じ色にできません。";
   }
 
   if (COLOR_OPPOSITES[settings.frontColor] === settings.topColor) {
-    return "Front color と Top color は反対色にできません。隣り合う色を選んでください。";
+    return "前の色と上の色は反対色にできません。隣り合う色を選んでください。";
   }
 
   return null;
+}
+
+function formatSlotLabel(slotLabel: string): string {
+  return slotLabel.replace(/ slot$/i, " スロット");
+}
+
+function formatPiecePosition(position: string): string {
+  return position === "center" ? "中央" : position;
+}
+
+function formatPairNote(note: string): string {
+  return note.replace(/Learnの/g, "「学ぶ」の");
+}
+
+function formatLastLayerCaseTitle(caseTitle: string): string {
+  if (caseTitle === "OLL Skip") {
+    return "OLL スキップ";
+  }
+
+  if (caseTitle === "PLL Skip") {
+    return "PLL スキップ";
+  }
+
+  return caseTitle;
+}
+
+function formatBasicF2lCaseId(caseId: string): string {
+  return caseId === "LOCAL_SEARCH" ? "補助探索" : caseId;
 }
 
 function buildFaceColorMap(settings: AnalyzerSettings): Record<FaceName, CubeColorName> | null {
@@ -1396,7 +1424,7 @@ function getF2lRecommendation(
   const description =
     candidate.status === "completed"
       ? "このペアは完成済みです。次の未完成ペアを探す練習に移れます。"
-      : "対象ペアをU面で見つけ、向きを合わせてからスロットへ入れる流れをLearnで確認します。";
+      : "対象ペアを U 面で見つけ、向きを合わせてからスロットへ入れる流れを「学ぶ」で確認します。";
 
   return {
     caseItem,
@@ -1404,7 +1432,7 @@ function getF2lRecommendation(
     moveCount,
     ease: getF2lEaseLabel(caseItem.algorithm),
     description,
-    matchLabel: "近い可能性があるLearn F2Lケース",
+    matchLabel: "近い F2L のケース（学ぶ）",
   };
 }
 
@@ -1451,7 +1479,7 @@ function AnalyzerLastLayerCasePreview({
     return (
       <div className="analyzer-learn-preview-skip" role="img" aria-label={`${phase.toUpperCase()} skip`}>
         <span>{phase.toUpperCase()}</span>
-        <strong>Skip</strong>
+        <strong>スキップ</strong>
       </div>
     );
   }
@@ -1910,13 +1938,13 @@ export default function AnalyzerPage({
   const activeStartState = inputMode === "color" ? colorInputResult.state : scrambleStartState;
   const canUseColorInput = Boolean(colorInputResult.state) && canUseOrientation;
   const canUseStartState = inputMode === "color" ? canUseColorInput : canUseScramble;
-  const startInputLabel = inputMode === "color" ? "Color" : "Scramble";
+  const startInputLabel = inputMode === "color" ? "色配置" : "スクランブル";
   const startInputCount =
     inputMode === "color"
       ? colorInputResult.state
         ? "OK"
-        : `${colorInputResult.errors.length} errors`
-      : String(parsedScramble.moves.length);
+        : `${colorInputResult.errors.length}件エラー`
+      : `${parsedScramble.moves.length}手`;
   const stickerColorCounts = useMemo(() => {
     const counts: Record<CubeColorName, number> = {
       white: 0,
@@ -1993,8 +2021,8 @@ export default function AnalyzerPage({
   const basicF2lLoadingDescription = isLoadingBasicF2lOrderDetails
     ? "最短順序は残したまま、表示用の別順序候補だけを追加で計算しています。"
     : basicF2lAnalysisPhase === "basic41" && basicF2lPlan
-      ? "表示中のDB候補を残したまま、未解決ペアだけを詳しく探しています。"
-      : "既存の基本41DBを使って、F2Lの最短順序だけをWorkerで先に計算しています。";
+      ? "表示中の候補を残したまま、未解決ペアだけを詳しく探しています。"
+      : "基本41手順を使って、F2Lの最短順序だけを先に計算しています。";
   const moreBasicF2lOrderButtonLabel = isLoadingBasicF2lOrderDetails
     ? "他の順序候補を計算中..."
     : showBasicF2lOrderDetails
@@ -2752,7 +2780,7 @@ export default function AnalyzerPage({
   };
 
   const resetAnalyzerState = () => {
-    if (!window.confirm("Analyzerの状態をリセットしますか？")) {
+    if (!window.confirm("解析の状態をリセットしますか？")) {
       return;
     }
 
@@ -3182,7 +3210,7 @@ export default function AnalyzerPage({
     selectedCrossSolution,
   ]);
   const analyzerStepItems: Array<{ key: AnalyzerStepKey; label: string }> = [
-    { key: "scramble", label: "Scramble" },
+    { key: "scramble", label: "スクランブル" },
     { key: "cross", label: "Cross" },
     { key: "f2l1", label: "F2L 1" },
     { key: "f2l2", label: "F2L 2" },
@@ -3190,7 +3218,7 @@ export default function AnalyzerPage({
     { key: "f2l4", label: "F2L 4" },
     { key: "oll", label: "OLL" },
     { key: "pll", label: "PLL" },
-    { key: "complete", label: "Complete" },
+    { key: "complete", label: "完成" },
   ];
   const ollCandidates = useMemo<AnalyzerCandidate[]>(
     () =>
@@ -3413,7 +3441,7 @@ export default function AnalyzerPage({
 
   const showAiPlaceholder = useCallback((targetLabel: string) => {
     setAiNotice(
-      `${targetLabel}のAI説明は今後追加予定です。現在は選択中のスクランブル、Cross手順、F2L候補を渡せるUIだけ用意しています。`,
+      `${targetLabel}のAI説明は今後追加予定です。現在は選択中のスクランブル、Cross手順、F2L候補を渡せる画面だけ用意しています。`,
     );
   }, []);
 
@@ -3552,7 +3580,7 @@ export default function AnalyzerPage({
         if (pendingQuickPhaseRef.current === "cross") {
           pendingQuickPhaseRef.current = null;
           pendingQuickPlayRef.current = false;
-          setQuickPlaybackStatus("Cross bestを見つけられませんでした。");
+          setQuickPlaybackStatus("最短クロスを見つけられませんでした。");
         }
         return;
       }
@@ -3567,8 +3595,8 @@ export default function AnalyzerPage({
         setCurrentPracticeStep({ phase: "cross" });
         setQuickPlaybackStatus(
           shouldPlay
-            ? `Cross bestを再生します。${bestSolution.moveCount} moves`
-            : `Cross bestを再生待ちにしました。${bestSolution.moveCount} moves`,
+            ? `最短クロスを再生します。${bestSolution.moveCount}手`
+            : `最短クロスを再生待ちにしました。${bestSolution.moveCount}手`,
         );
         return;
       }
@@ -3585,7 +3613,7 @@ export default function AnalyzerPage({
         crossWorkerRef.current = null;
       }
       setIsSearchingCross(false);
-      setCrossError("Cross探索Workerでエラーが発生しました。");
+      setCrossError("Cross探索中にエラーが発生しました。");
       if (pendingQuickPhaseRef.current === "cross") {
         pendingQuickPhaseRef.current = null;
         pendingQuickPlayRef.current = false;
@@ -3818,7 +3846,7 @@ export default function AnalyzerPage({
       options: { play?: boolean } = {},
     ) => {
       if (!selectedCrossSolution) {
-        return { ok: false, message: "先にCross bestを選択してください。" };
+        return { ok: false, message: "先に最短クロスを選択してください。" };
       }
 
       const targetStep = plan.steps[stepIndex];
@@ -3922,7 +3950,7 @@ export default function AnalyzerPage({
       ) {
         pendingQuickPhaseRef.current = null;
         pendingQuickPlayRef.current = false;
-        setQuickPlaybackStatus("先にCross bestを選択してください。");
+        setQuickPlaybackStatus("先に最短クロスを選択してください。");
       }
       return;
     }
@@ -3968,7 +3996,7 @@ export default function AnalyzerPage({
           setQuickPlaybackStatus(
             wasPreparingNextF2l
               ? "次のF2Lを作成できませんでした。"
-              : "F2L bestを作成できませんでした。",
+              : "F2L の案を作成できませんでした。",
           );
         }
         if (!useLocalSearch && !includeAllPlans) {
@@ -4010,9 +4038,9 @@ export default function AnalyzerPage({
           setQuickPlaybackStatus(
             prepared
               ? shouldPlay
-                ? `Cross完了状態からF2L bestを再生します。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
-                : `Cross完了状態からF2L bestを再生待ちにしました。${event.data.plan.totalMoveCount} moves / ${event.data.plan.order.join(" → ")}`
-              : "F2L bestを再生待ちにできませんでした。",
+                ? `Cross完了状態からF2L の案を再生します。${event.data.plan.totalMoveCount}手 / ${event.data.plan.order.join(" → ")}`
+                : `Cross完了状態からF2L の案を再生待ちにしました。${event.data.plan.totalMoveCount}手 / ${event.data.plan.order.join(" → ")}`
+              : "F2L の案を再生待ちにできませんでした。",
           );
         }
         finishWorker();
@@ -4036,7 +4064,7 @@ export default function AnalyzerPage({
         setShowBasicF2lOrderDetails(false);
         setIsLoadingBasicF2lOrderDetails(false);
       }
-      setBasicF2lError("F2L解析Workerでエラーが発生しました。");
+      setBasicF2lError("F2L解析中にエラーが発生しました。");
       if (
         preparePlayback ||
         prepareNextStep ||
@@ -4105,15 +4133,15 @@ export default function AnalyzerPage({
       setCurrentPracticeStep({ phase: "cross" });
       setQuickPlaybackStatus(
         shouldPlay
-          ? `Cross bestを再生します。${bestCrossSolution.moveCount} moves`
-          : `Cross bestを再生待ちにしました。${bestCrossSolution.moveCount} moves`,
+          ? `最短クロスを再生します。${bestCrossSolution.moveCount}手`
+          : `最短クロスを再生待ちにしました。${bestCrossSolution.moveCount}手`,
       );
       return;
     }
 
     pendingQuickPhaseRef.current = "cross";
     pendingQuickPlayRef.current = shouldPlay;
-    setQuickPlaybackStatus(shouldPlay ? "Cross bestを解析して再生します..." : "Cross bestを解析中...");
+    setQuickPlaybackStatus(shouldPlay ? "最短クロスを解析して再生します..." : "最短クロスを解析中...");
     analyzeCross();
   }, [analyzeCross, bestCrossSolution, selectCrossSolution]);
 
@@ -4123,7 +4151,7 @@ export default function AnalyzerPage({
     if (!selectedCrossSolution) {
       pendingQuickPhaseRef.current = null;
       pendingQuickPlayRef.current = false;
-      setQuickPlaybackStatus("先にCross bestを選択してください。");
+      setQuickPlaybackStatus("先に最短クロスを選択してください。");
       return;
     }
 
@@ -4133,9 +4161,9 @@ export default function AnalyzerPage({
       setQuickPlaybackStatus(
         prepared
           ? shouldPlay
-            ? `Cross完了状態からF2L bestを再生します。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
-            : `Cross完了状態からF2L bestを再生待ちにしました。${basicF2lPlan.totalMoveCount} moves / ${basicF2lPlan.order.join(" → ")}`
-          : "F2L bestを再生待ちにできませんでした。",
+            ? `Cross完了状態からF2L の案を再生します。${basicF2lPlan.totalMoveCount}手 / ${basicF2lPlan.order.join(" → ")}`
+            : `Cross完了状態からF2L の案を再生待ちにしました。${basicF2lPlan.totalMoveCount}手 / ${basicF2lPlan.order.join(" → ")}`
+          : "F2L の案を再生待ちにできませんでした。",
       );
       if (prepared) {
         setCurrentPracticeStep({ phase: "f2l" });
@@ -4145,7 +4173,7 @@ export default function AnalyzerPage({
 
     pendingQuickPhaseRef.current = "f2l";
     pendingQuickPlayRef.current = shouldPlay;
-    setQuickPlaybackStatus(shouldPlay ? "F2L bestを解析して再生します..." : "F2L bestを解析中...");
+    setQuickPlaybackStatus(shouldPlay ? "F2L の案を解析して再生します..." : "F2L の案を解析中...");
     runBasicF2lAnalysis({ preparePlayback: true, play: shouldPlay });
   }, [
     basicF2lPlan,
@@ -4161,7 +4189,7 @@ export default function AnalyzerPage({
     if (!selectedCrossSolution) {
       pendingQuickPhaseRef.current = null;
       pendingQuickPlayRef.current = false;
-      setQuickPlaybackStatus("先にCross bestを選択してください。");
+      setQuickPlaybackStatus("先に最短クロスを選択してください。");
       return;
     }
 
@@ -4191,7 +4219,7 @@ export default function AnalyzerPage({
     pendingQuickPlayRef.current = false;
 
     if (!selectedCrossSolution || !basicF2lPlan) {
-      setQuickPlaybackStatus("先にF2L bestを作ってください。");
+      setQuickPlaybackStatus("先にF2L の案を作ってください。");
       return;
     }
 
@@ -4217,11 +4245,11 @@ export default function AnalyzerPage({
     setQuickPlaybackStatus(
       recognition.isSkip
         ? shouldPlay
-          ? "F2L完成状態からOLL Skipを再生します。"
-          : "F2L完成状態からOLL Skipを再生待ちにしました。"
+          ? "F2L完成状態からOLL スキップを再生します。"
+          : "F2L完成状態からOLL スキップを再生待ちにしました。"
         : shouldPlay
-          ? `F2L完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount} moves`
-          : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+          ? `F2L完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount}手`
+          : `F2L完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount}手`,
     );
     setCurrentPracticeStep({ phase: "oll" });
   }, [
@@ -4239,7 +4267,7 @@ export default function AnalyzerPage({
     pendingQuickPlayRef.current = false;
 
     if (!selectedCrossSolution || !basicF2lPlan) {
-      setQuickPlaybackStatus("先にF2L bestを作ってください。");
+      setQuickPlaybackStatus("先にF2L の案を作ってください。");
       return;
     }
 
@@ -4274,11 +4302,11 @@ export default function AnalyzerPage({
     setQuickPlaybackStatus(
       recognition.isSkip
         ? shouldPlay
-          ? "OLL完成状態からPLL Skipを再生します。"
-          : "OLL完成状態からPLL Skipを再生待ちにしました。"
+          ? "OLL完成状態からPLL スキップを再生します。"
+          : "OLL完成状態からPLL スキップを再生待ちにしました。"
         : shouldPlay
-          ? `OLL完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount} moves`
-          : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount} moves`,
+          ? `OLL完成状態から${recognition.caseTitle}を再生します。${recognition.moveCount}手`
+          : `OLL完成状態から${recognition.caseTitle}を再生待ちにしました。${recognition.moveCount}手`,
     );
     setCurrentPracticeStep({ phase: "pll" });
   }, [
@@ -4359,7 +4387,7 @@ export default function AnalyzerPage({
       selectCrossSolution(crossSolution, { play: true, scroll: false });
       setCurrentPracticeStep({ phase: "cross" });
       setQuickPlaybackStatus(
-        `前ステップ: Crossを再生します。${crossSolution.moveCount} moves`,
+        `前ステップ: Crossを再生します。${crossSolution.moveCount}手`,
       );
       return;
     }
@@ -4374,7 +4402,7 @@ export default function AnalyzerPage({
 
       setQuickPlaybackStatus(
         prepared
-          ? `前ステップ: F2L bestを再生します。${basicF2lPlan.totalMoveCount} moves`
+          ? `前ステップ: F2L の案を再生します。${basicF2lPlan.totalMoveCount}手`
           : "前ステップのF2Lを準備できませんでした。",
       );
       return;
@@ -4457,7 +4485,7 @@ export default function AnalyzerPage({
 
     if (!selectedCrossSolution) {
       return {
-        label: "Cross bestを再生",
+        label: "最短クロスを再生",
         helper: "まずクロスの最短候補を作ります。",
         onClick: () => prepareBestCrossPlayback({ play: true }),
         disabled: !canPlayBestCross,
@@ -4467,7 +4495,7 @@ export default function AnalyzerPage({
     if (isAnalyzingBasicF2l) {
       return {
         label: "F2Lを解析中...",
-        helper: "基本41ベースで順序を探しています。",
+        helper: "基本41手順ベースで順序を探しています。",
         onClick: () => prepareBestF2lPlayback({ play: true }),
         disabled: true,
       };
@@ -4475,7 +4503,7 @@ export default function AnalyzerPage({
 
     if (!basicF2lPlan) {
       return {
-        label: "F2L bestを再生",
+        label: "F2L の案を再生",
         helper: "Cross後の4ペアをまとめて準備します。",
         onClick: () => prepareBestF2lPlayback({ play: true }),
         disabled: !canPlayBestF2l,
@@ -4493,7 +4521,7 @@ export default function AnalyzerPage({
 
     if ((currentPracticeStep?.phase === "oll" || currentPracticeStep?.phase === "pll") && canPlayBestPll) {
       return {
-        label: "PLL bestを再生",
+        label: "PLL の手順を再生",
         helper: "最後のPLL候補を3Dで確認します。",
         onClick: () => prepareBestPllPlayback({ play: true }),
         disabled: !canPlayBestPll,
@@ -4502,7 +4530,7 @@ export default function AnalyzerPage({
 
     if (canPlayBestOll) {
       return {
-        label: "OLL bestを再生",
+        label: "OLL の手順を再生",
         helper: "F2L完成状態からOLL候補を確認します。",
         onClick: () => prepareBestOllPlayback({ play: true }),
         disabled: !canPlayBestOll,
@@ -4511,7 +4539,7 @@ export default function AnalyzerPage({
 
     if (canPlayBestPll) {
       return {
-        label: "PLL bestを再生",
+        label: "PLL の手順を再生",
         helper: "最後のPLL候補を3Dで確認します。",
         onClick: () => prepareBestPllPlayback({ play: true }),
         disabled: !canPlayBestPll,
@@ -4629,15 +4657,15 @@ export default function AnalyzerPage({
     {
       key: "oll",
       label: "OLL",
-      description: "OLL判定 / Learn",
-      status: ollRecognition?.ok ? ollRecognition.recognition.caseTitle : "待機",
+      description: "OLL の判定 / 学ぶ",
+      status: ollRecognition?.ok ? formatLastLayerCaseTitle(ollRecognition.recognition.caseTitle) : "待機",
       path: "/analyzer/oll",
     },
     {
       key: "pll",
       label: "PLL",
-      description: "PLL判定 / Learn",
-      status: pllRecognition?.ok ? pllRecognition.recognition.caseTitle : "待機",
+      description: "PLL の判定 / 学ぶ",
+      status: pllRecognition?.ok ? formatLastLayerCaseTitle(pllRecognition.recognition.caseTitle) : "待機",
       path: "/analyzer/pll",
     },
     {
@@ -4653,8 +4681,8 @@ export default function AnalyzerPage({
     <main className="app-shell analyzer-page" data-testid="recording-analyzer">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Virtual cube checker</p>
-          <h1>Analyzer</h1>
+          <p className="eyebrow">3Dキューブ解析</p>
+          <h1>解析</h1>
         </div>
         <div className="header-actions">
           <button className="ghost-button" type="button" onClick={resetAnalyzerState}>
@@ -4665,11 +4693,11 @@ export default function AnalyzerPage({
 
       <section className="analyzer-hero">
         <div>
-          <p className="eyebrow">Phase 11</p>
+          <p className="eyebrow">キューブの向き</p>
           <h2>実物キューブの向きに合わせて確認</h2>
         </div>
         <p>
-          Front / Top の色を選ぶと、その向きを基準にスクランブルを適用します。
+          前の色・上の色を選ぶと、その向きを基準にスクランブルを適用します。
           Cross色とターゲット面も保存され、次回も同じ設定で開けます。
         </p>
       </section>
@@ -4700,10 +4728,10 @@ export default function AnalyzerPage({
       <section className="analyzer-command-bar" aria-label="Analyzer quick actions" data-testid="recording-analyzer-actions">
         <div className="analyzer-command-status" aria-label="Analyzer status">
           <span>{startInputLabel} {startInputCount}</span>
-          <span>Active {activeMoves.length}</span>
+          <span>再生 {activeMoves.length}手</span>
           <span>
             {selectedCrossSolution
-              ? `Cross ${selectedCrossSolution.moveCount} moves`
+              ? `Cross ${selectedCrossSolution.moveCount}手`
               : "Cross未選択"}
           </span>
         </div>
@@ -4772,15 +4800,15 @@ export default function AnalyzerPage({
           <section className="analyzer-settings-card" aria-label="Analyzer settings">
             <div className="analyzer-subheading">
               <div>
-                <p className="eyebrow">Settings</p>
+                <p className="eyebrow">設定</p>
                 <h2>キューブの向き</h2>
               </div>
-              <span className="analyzer-settings-save">localStorage保存</span>
+              <span className="analyzer-settings-save">この端末に保存</span>
             </div>
 
             <div className="analyzer-settings-grid">
               <label className="analyzer-select-field">
-                <span>Cross color</span>
+                <span>クロスの色</span>
                 <select
                   value={settings.crossColor}
                   onChange={(event) =>
@@ -4796,7 +4824,7 @@ export default function AnalyzerPage({
               </label>
 
               <label className="analyzer-select-field">
-                <span>Cross target</span>
+                <span>クロスを作る面</span>
                 <select
                   value={settings.crossTargetFace}
                   onChange={(event) =>
@@ -4809,7 +4837,7 @@ export default function AnalyzerPage({
               </label>
 
               <label className="analyzer-select-field">
-                <span>Max depth</span>
+                <span>探す最大手数</span>
                 <select
                   value={settings.maxDepth}
                   onChange={(event) =>
@@ -4825,7 +4853,7 @@ export default function AnalyzerPage({
               </label>
 
               <label className="analyzer-select-field">
-                <span>Front color</span>
+                <span>前の色</span>
                 <select
                   value={settings.frontColor}
                   onChange={(event) =>
@@ -4841,7 +4869,7 @@ export default function AnalyzerPage({
               </label>
 
               <label className="analyzer-select-field">
-                <span>Top color</span>
+                <span>上の色</span>
                 <select
                   value={settings.topColor}
                   onChange={(event) =>
@@ -4899,7 +4927,7 @@ export default function AnalyzerPage({
           {inputMode === "scramble" ? (
             <>
           <label className="analyzer-field">
-            <span>Scramble</span>
+            <span>スクランブル</span>
             <textarea
               value={scrambleInput}
               onChange={(event) => setScrambleInput(event.target.value)}
@@ -5027,7 +5055,7 @@ export default function AnalyzerPage({
           )}
 
           <label className="analyzer-field">
-            <span>Solve algorithm</span>
+            <span>自分の手順</span>
             <textarea
               value={solveInput}
               onChange={(event) => setSolveInput(event.target.value)}
@@ -5079,15 +5107,15 @@ export default function AnalyzerPage({
 
           <div className="analyzer-stats" aria-label="Move counts">
             <div>
-              <span>Start</span>
+              <span>はじめの状態</span>
               <strong>{startInputCount}</strong>
             </div>
             <div>
-              <span>Solve</span>
-              <strong>{parsedSolve.moves.length}</strong>
+              <span>自分の手順</span>
+              <strong>{parsedSolve.moves.length}手</strong>
             </div>
             <div>
-              <span>Mode</span>
+              <span>モード</span>
               <strong>{getPlaybackModeLabel(playbackMode)}</strong>
             </div>
           </div>
@@ -5106,7 +5134,7 @@ export default function AnalyzerPage({
           >
             <div className="analyzer-subheading">
               <div>
-                <p className="eyebrow">Cross Analyzer</p>
+                <p className="eyebrow">Cross 解析</p>
                 <h2>最短クロス探索</h2>
               </div>
               <button
@@ -5121,6 +5149,9 @@ export default function AnalyzerPage({
             <p className="analyzer-muted">
               D面の4つのエッジだけでなく、側面センターまで合った状態をクロス完成として判定します。
               探索は最大{settings.maxDepth}手、HTM基準です。
+            </p>
+            <p className="analyzer-term-note">
+              HTM … 180度回し（R2 など）も1手と数える数え方
             </p>
 
             {crossError && (
@@ -5163,8 +5194,8 @@ export default function AnalyzerPage({
                         </p>
                         <div className="analyzer-cross-footer">
                           <span>
-                            {bestSolution.moveCount} moves
-                            {isSameCrossSolution(bestSolution, bestCrossSolution) ? " / Best" : ""}
+                            {bestSolution.moveCount}手
+                            {isSameCrossSolution(bestSolution, bestCrossSolution) ? " / 最短" : ""}
                           </span>
                           <button
                             type="button"
@@ -5198,14 +5229,14 @@ export default function AnalyzerPage({
                       />
                       <div>
                         <strong>{getColorLabel(candidate.color)} Cross</strong>
-                        <small>{candidate.targetFace}面 target</small>
+                        <small>{candidate.targetFace}面がゴール</small>
                       </div>
                     </div>
                     <p className="analyzer-cross-algorithm">
-                      探索ボタンを押すと、CubeState上で最短候補を探します。
+                      ボタンを押すと最短の候補を探します。
                     </p>
                     <div className="analyzer-cross-footer">
-                      <span>max {settings.maxDepth} moves</span>
+                      <span>最大 {settings.maxDepth}手</span>
                     </div>
                   </article>
                 ))
@@ -5225,7 +5256,7 @@ export default function AnalyzerPage({
                         <div>
                           <strong>{getColorLabel(result.color)} Cross</strong>
                           <small>
-                            {result.targetFace}面 / {result.nodes.toLocaleString()} nodes
+                            {result.targetFace}面
                           </small>
                         </div>
                       </div>
@@ -5251,7 +5282,7 @@ export default function AnalyzerPage({
                         >
                           <div className="analyzer-solution-label-row">
                             {isSameCrossSolution(solution, bestCrossSolution) && (
-                              <span className="analyzer-solution-badge">Best</span>
+                              <span className="analyzer-solution-badge">最短</span>
                             )}
                             {isSameCrossSolution(solution, selectedCrossSolution) && (
                               <span className="analyzer-solution-badge">選択中</span>
@@ -5270,7 +5301,7 @@ export default function AnalyzerPage({
                             ))}
                           </div>
                           <div className="analyzer-cross-footer">
-                            <span>{solution.moveCount} moves</span>
+                            <span>{solution.moveCount}手</span>
                             <button type="button" onClick={() => selectCrossSolution(solution)}>
                               この手順を選択
                             </button>
@@ -5301,7 +5332,7 @@ export default function AnalyzerPage({
             </div>
 
             <details className="analyzer-study-note">
-              <summary>Practice memo</summary>
+              <summary>練習のコツ</summary>
               <ul>
                 <li>クロスは手順暗記より、インスペクション中に4つのエッジを読む練習が大事です。</li>
                 <li>D面の色だけでなく、側面色がセンターと合っているかまで見ます。</li>
@@ -5322,7 +5353,7 @@ export default function AnalyzerPage({
           >
             <div className="analyzer-subheading">
               <div>
-                <p className="eyebrow">F2L Analyzer</p>
+                <p className="eyebrow">F2L 解析</p>
                 <h2>クロス後の最初のペア</h2>
               </div>
             </div>
@@ -5350,7 +5381,7 @@ export default function AnalyzerPage({
                     onClick={() => runBasicF2lAnalysis()}
                     disabled={isAnalyzingBasicF2l}
                   >
-                    {isAnalyzingBasicF2l ? "F2L解析中..." : "既存手順DBでF2L解析"}
+                    {isAnalyzingBasicF2l ? "F2L解析中..." : "登録済みの手順で F2L を解析"}
                   </button>
                   <button
                     className="analyzer-primary-action analyzer-next-f2l-action"
@@ -5373,14 +5404,14 @@ export default function AnalyzerPage({
                 </div>
                 {isAnalyzingBasicF2l && (
                   <article className="analyzer-basic-f2l-plan">
-                    <p className="eyebrow">Basic F2L 41</p>
+                    <p className="eyebrow">基本41手順</p>
                     <h3>{basicF2lLoadingTitle}</h3>
                     <p>{basicF2lLoadingDescription}</p>
                   </article>
                 )}
                 {basicF2lError && (
                   <article className="analyzer-basic-f2l-plan">
-                    <p className="eyebrow">Basic F2L 41</p>
+                    <p className="eyebrow">基本41手順</p>
                     <h3>F2L解析エラー</h3>
                     <p>{basicF2lError}</p>
                   </article>
@@ -5389,22 +5420,22 @@ export default function AnalyzerPage({
                   <article className="analyzer-basic-f2l-plan">
                     <div className="analyzer-basic-f2l-heading">
                       <div>
-                        <p className="eyebrow">Basic F2L 41</p>
+                        <p className="eyebrow">基本41手順</p>
                         <h3>基本41ベース最短順序</h3>
                       </div>
                       <div className="analyzer-basic-f2l-summary">
                         <span>
                           {basicF2lComparedOrderCount > 0
-                            ? `${basicF2lComparedOrderCount}順序比較`
+                            ? `${basicF2lComparedOrderCount}通り比較`
                             : basicF2lPlan.strategy === "permutation"
-                              ? "24順序比較"
-                              : "貪欲選択"}
+                              ? "24通り比較"
+                              : "順当選択"}
                         </span>
-                        <span>order {basicF2lPlan.order.join(" → ")}</span>
-                        <span>{basicF2lPlan.steps.length} steps</span>
+                        <span>{basicF2lPlan.order.join(" → ")} の順</span>
+                        <span>{basicF2lPlan.steps.length} ステップ</span>
                         {basicF2lAnalysisPhase === "fallback" && <span>補助探索あり</span>}
-                        {basicF2lAnalysisPhase === "basic41" && <span>DBのみ</span>}
-                        <strong>{basicF2lPlan.totalMoveCount} moves</strong>
+                        {basicF2lAnalysisPhase === "basic41" && <span>登録済みの手順だけ</span>}
+                        <strong>{basicF2lPlan.totalMoveCount}手</strong>
                       </div>
                     </div>
                     <p>{basicF2lPlan.note}</p>
@@ -5415,20 +5446,20 @@ export default function AnalyzerPage({
                             <li key={step.id}>
                               <div className="analyzer-basic-f2l-step-head">
                                 <strong>
-                                  Step {index + 1}: {step.pairTitle}
+                                  ステップ {index + 1}: {step.pairTitle}
                                 </strong>
                                 <button type="button" onClick={() => playBasicF2lStep(step)}>
                                   ここまで3D再生
                                 </button>
                               </div>
                               <div className="analyzer-f2l-tags">
-                                <span>Target: {step.targetSlot}</span>
-                                <span>Extract: {step.extractAlgorithm || "なし"}</span>
+                                <span>入れる所: {step.targetSlot}</span>
+                                <span>取り出し: {step.extractAlgorithm || "なし"}</span>
                                 <span>
-                                  Method: {step.method === "localSearch" ? "局所探索" : "基本41"}
+                                  方法: {step.method === "localSearch" ? "詳しく探索" : "基本41"}
                                 </span>
-                                <span>Case: {step.caseId}</span>
-                                <span>Moves: {step.moveCount}</span>
+                                <span>ケース: {formatBasicF2lCaseId(step.caseId)}</span>
+                                <span>手数: {step.moveCount}</span>
                               </div>
                               <code>{step.algorithm}</code>
                               <p>{step.explanation}</p>
@@ -5450,7 +5481,8 @@ export default function AnalyzerPage({
                     )}
                     {basicF2lPlan.unresolvedPairs.length > 0 && (
                       <p className="analyzer-muted">
-                        未解決ペア: {basicF2lPlan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
+                        未解決ペア:{" "}
+                        {basicF2lPlan.unresolvedPairs.map((pair) => formatSlotLabel(pair.slotLabel)).join(", ")}
                       </p>
                     )}
                     {basicF2lAnalysisPhase === "basic41" && basicF2lPlan.unresolvedPairs.length > 0 && (
@@ -5469,13 +5501,13 @@ export default function AnalyzerPage({
                   <article className="analyzer-basic-f2l-plan">
                     <div className="analyzer-basic-f2l-heading">
                       <div>
-                        <p className="eyebrow">Basic41 Order Ranking</p>
+                        <p className="eyebrow">順番の比較</p>
                         <h3>他の順序候補</h3>
                       </div>
                       <div className="analyzer-basic-f2l-summary">
-                        <span>{basicF2lComparedOrderCount} orders</span>
+                        <span>{basicF2lComparedOrderCount} 通り</span>
                         <span>
-                          {basicF2lAnalysisPhase === "fallback" ? "補助探索込み" : "Basic41 + 取り出し"}
+                          {basicF2lAnalysisPhase === "fallback" ? "補助探索込み" : "基本41＋取り出し"}
                         </span>
                       </div>
                     </div>
@@ -5510,8 +5542,8 @@ export default function AnalyzerPage({
                           <li key={plan.id}>
                             <div className="analyzer-basic-f2l-step-head">
                               <strong>
-                                候補 {planIndex + 2}: {plan.totalMoveCount} moves / order{" "}
-                                {plan.order.join(" → ")}
+                                候補 {planIndex + 2}: {plan.totalMoveCount}手 /{" "}
+                                {plan.order.join(" → ")} の順
                               </strong>
                               <button type="button" onClick={() => playBasicF2lSteps(plan.steps)}>
                                 この候補を3D再生
@@ -5519,8 +5551,8 @@ export default function AnalyzerPage({
                             </div>
 
                             <div className="analyzer-f2l-tags">
-                              <span>Steps: {plan.steps.length}</span>
-                              <span>Score: {plan.totalScore.toFixed(1)}</span>
+                              <span>ステップ: {plan.steps.length}</span>
+                              <span>評価点: {plan.totalScore.toFixed(1)}</span>
                               <span>未解決: {plan.unresolvedPairs.length}</span>
                               <span>{plan.unresolvedPairs.length === 0 ? "F2L完成" : "未完了"}</span>
                             </div>
@@ -5531,7 +5563,7 @@ export default function AnalyzerPage({
                                   <li key={`${plan.id}-${step.id}`}>
                                     <div className="analyzer-basic-f2l-step-head">
                                       <strong>
-                                        Step {stepIndex + 1}: {step.pairTitle}
+                                        ステップ {stepIndex + 1}: {step.pairTitle}
                                       </strong>
                                       <button
                                         type="button"
@@ -5542,13 +5574,13 @@ export default function AnalyzerPage({
                                     </div>
 
                                     <div className="analyzer-f2l-tags">
-                                      <span>Target: {step.targetSlot}</span>
-                                      <span>Extract: {step.extractAlgorithm || "なし"}</span>
+                                      <span>入れる所: {step.targetSlot}</span>
+                                      <span>取り出し: {step.extractAlgorithm || "なし"}</span>
                                       <span>
-                                        Method: {step.method === "localSearch" ? "局所探索" : "基本41"}
+                                        方法: {step.method === "localSearch" ? "詳しく探索" : "基本41"}
                                       </span>
-                                      <span>Case: {step.caseId}</span>
-                                      <span>Moves: {step.moveCount}</span>
+                                      <span>ケース: {formatBasicF2lCaseId(step.caseId)}</span>
+                                      <span>手数: {step.moveCount}</span>
                                     </div>
 
                                     <code>{step.fullAlgorithm || step.algorithm}</code>
@@ -5561,7 +5593,8 @@ export default function AnalyzerPage({
 
                             {plan.unresolvedPairs.length > 0 && (
                               <p className="analyzer-muted">
-                                未解決ペア: {plan.unresolvedPairs.map((pair) => pair.slotLabel).join(", ")}
+                                未解決ペア:{" "}
+                                {plan.unresolvedPairs.map((pair) => formatSlotLabel(pair.slotLabel)).join(", ")}
                               </p>
                             )}
                           </li>
@@ -5575,7 +5608,7 @@ export default function AnalyzerPage({
                     <p className="analyzer-muted">
                       {selectedCrossSolution.targetFace === "D"
                         ? "F2L候補を判定できませんでした。"
-                        : "現在のF2L解析はD面Crossのみ対応しています。Cross targetをD面にしてCross解析し直してください。"}
+                        : "現在のF2L解析はD面Crossのみ対応しています。クロスを作る面をD面にしてCross解析し直してください。"}
                     </p>
                   ) : (
                     f2lCandidates.map((candidate) => (
@@ -5589,8 +5622,9 @@ export default function AnalyzerPage({
                         <span>
                           <strong>{candidate.title}</strong>
                           <small>
-                            {candidate.slotLabel} / Corner: {candidate.cornerPosition} / Edge:{" "}
-                            {candidate.edgePosition}
+                            {formatSlotLabel(candidate.slotLabel)} / コーナー:{" "}
+                            {formatPiecePosition(candidate.cornerPosition)} / エッジ:{" "}
+                            {formatPiecePosition(candidate.edgePosition)}
                           </small>
                         </span>
                         <b>
@@ -5608,7 +5642,7 @@ export default function AnalyzerPage({
                 {selectedF2lPair && (
                   <article className="analyzer-f2l-detail">
                     <div className="analyzer-f2l-detail-head">
-                      <h3>{selectedF2lPair.slotLabel}</h3>
+                      <h3>{formatSlotLabel(selectedF2lPair.slotLabel)}</h3>
                       <label className="analyzer-f2l-highlight-toggle">
                         <input
                           type="checkbox"
@@ -5620,11 +5654,11 @@ export default function AnalyzerPage({
                         <span>現在のパーツを強調</span>
                       </label>
                     </div>
-                    <p>{selectedF2lPair.note}</p>
+                    <p>{formatPairNote(selectedF2lPair.note)}</p>
                     <div className="analyzer-f2l-tags">
-                      <span>Corner: {selectedF2lPair.cornerColors.map(getColorJapanese).join("")}</span>
-                      <span>Edge: {selectedF2lPair.edgeColors.map(getColorJapanese).join("")}</span>
-                      <span>Slot: {selectedF2lPair.slotFaces.join("")}</span>
+                      <span>コーナー: {selectedF2lPair.cornerColors.map(getColorJapanese).join("")}</span>
+                      <span>エッジ: {selectedF2lPair.edgeColors.map(getColorJapanese).join("")}</span>
+                      <span>スロット: {selectedF2lPair.slotFaces.join("")}</span>
                     </div>
                     {selectedF2lRecommendation ? (
                       <div className="analyzer-f2l-recommendation">
@@ -5633,7 +5667,7 @@ export default function AnalyzerPage({
                         <dl>
                           <div>
                             <dt>手数</dt>
-                            <dd>{selectedF2lRecommendation.moveCount} moves</dd>
+                            <dd>{selectedF2lRecommendation.moveCount}手</dd>
                           </div>
                           <div>
                             <dt>回しやすさ</dt>
@@ -5653,7 +5687,7 @@ export default function AnalyzerPage({
                               )
                             }
                           >
-                            Learn詳細を見る
+                            「学ぶ」で詳しく
                           </button>
                           <button
                             type="button"
@@ -5677,7 +5711,7 @@ export default function AnalyzerPage({
                       </div>
                     ) : (
                       <p className="analyzer-muted">
-                        Learn F2Lケース画像がまだありません。src/assets/learn/f2l に画像を追加すると連携できます。
+                        F2L の学習ケース画像がまだ登録されていません。
                       </p>
                     )}
                   </article>
@@ -5685,7 +5719,7 @@ export default function AnalyzerPage({
               </>
             ) : (
               <p className="analyzer-muted">
-                先にCross Analyzerで候補を選ぶと、その後の状態からF2L候補を表示します。
+                先に Cross 解析で候補を選ぶと、その後の状態から F2L 候補を表示します。
               </p>
             )}
           </section>
@@ -5699,29 +5733,32 @@ export default function AnalyzerPage({
           >
             <div className="analyzer-subheading">
               <div>
-                <p className="eyebrow">OLL Preview</p>
+                <p className="eyebrow">OLL の候補</p>
                 <h2>次に見るOLL候補</h2>
               </div>
             </div>
             <p className="analyzer-muted">
-              F2L best後の状態から、上面色の向きパターンを既存OLL DBと照合します。
+              F2L の案を適用した後の状態から、上面色の向きパターンを登録済みの OLL と照らし合わせます。
             </p>
             {ollRecognition ? (
               <article className="analyzer-candidate-card">
-                <p className="eyebrow">OLL Recognition</p>
+                <p className="eyebrow">OLL の判定</p>
                 {ollRecognition.ok ? (
                   <>
-                    <h3>{ollRecognition.recognition.caseTitle}</h3>
-                    <code>{ollRecognition.recognition.algorithm || "OLL Skip"}</code>
+                    <h3>{formatLastLayerCaseTitle(ollRecognition.recognition.caseTitle)}</h3>
+                    <code>{ollRecognition.recognition.algorithm || "OLL スキップ"}</code>
                     <p>
                       {ollRecognition.recognition.isSkip
                         ? "F2L後の時点でOLLは完成しています。"
                         : "このOLL手順をF2L完成状態から再生できます。"}
                     </p>
                     <div className="analyzer-f2l-tags">
-                      <span>{ollRecognition.recognition.moveCount} moves</span>
+                      <span>{ollRecognition.recognition.moveCount}手</span>
                       <span>{ollRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
                     </div>
+                    <p className="analyzer-term-note">
+                      AUF … 最後に上の面を回してそろえる手
+                    </p>
                     <div className="analyzer-f2l-actions">
                       <button type="button" onClick={() => prepareBestOllPlayback()}>
                         OLLを3D再生待ち
@@ -5730,7 +5767,7 @@ export default function AnalyzerPage({
                         type="button"
                         onClick={() => openLastLayerLearnPreview("oll")}
                       >
-                        Learnで勉強
+                        「学ぶ」で練習
                       </button>
                     </div>
                   </>
@@ -5740,7 +5777,7 @@ export default function AnalyzerPage({
               </article>
             ) : (
               <p className="analyzer-muted">
-                F2L bestを作ると、その完成状態からOLLを判定します。
+                F2L の案を作ると、その完成状態から OLL を判定します。
               </p>
             )}
             <details className="analyzer-library-details">
@@ -5748,7 +5785,7 @@ export default function AnalyzerPage({
               <div className="analyzer-candidate-grid">
                 {ollCandidates.length === 0 ? (
                   <p className="analyzer-muted">
-                    src/assets/learn/oll に画像を追加すると、OLL候補が表示されます。
+                    OLL の学習ケースがまだ登録されていません。
                   </p>
                 ) : (
                   ollCandidates.map((candidate) => (
@@ -5758,7 +5795,7 @@ export default function AnalyzerPage({
                       <code>{candidate.algorithm}</code>
                       <p>{candidate.description}</p>
                       <div className="analyzer-f2l-tags">
-                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)}手</span>
                         {(candidate.tags ?? []).slice(0, 3).map((tag) => (
                           <span key={`${candidate.id}-${tag}`}>{tag}</span>
                         ))}
@@ -5768,7 +5805,7 @@ export default function AnalyzerPage({
                           メイン3Dで見る
                         </button>
                         <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
-                          Learn詳細
+                          「学ぶ」で詳しく
                         </button>
                       </div>
                     </article>
@@ -5787,29 +5824,32 @@ export default function AnalyzerPage({
           >
             <div className="analyzer-subheading">
               <div>
-                <p className="eyebrow">PLL Preview</p>
+                <p className="eyebrow">PLL の候補</p>
                 <h2>最後に見るPLL候補</h2>
               </div>
             </div>
             <p className="analyzer-muted">
-              OLL適用後の状態から、最後層ピースの並びを既存PLL DBと照合します。
+              OLL適用後の状態から、最後層ピースの並びを登録済みの PLL と照らし合わせます。
             </p>
             {pllRecognition ? (
               <article className="analyzer-candidate-card">
-                <p className="eyebrow">PLL Recognition</p>
+                <p className="eyebrow">PLL の判定</p>
                 {pllRecognition.ok ? (
                   <>
-                    <h3>{pllRecognition.recognition.caseTitle}</h3>
-                    <code>{pllRecognition.recognition.algorithm || "PLL Skip"}</code>
+                    <h3>{formatLastLayerCaseTitle(pllRecognition.recognition.caseTitle)}</h3>
+                    <code>{pllRecognition.recognition.algorithm || "PLL スキップ"}</code>
                     <p>
                       {pllRecognition.recognition.isSkip
                         ? "OLL後の時点でPLLは完成しています。"
                         : "このPLL手順をOLL完成状態から再生できます。"}
                     </p>
                     <div className="analyzer-f2l-tags">
-                      <span>{pllRecognition.recognition.moveCount} moves</span>
+                      <span>{pllRecognition.recognition.moveCount}手</span>
                       <span>{pllRecognition.recognition.setupAlgorithm || "AUFなし"}</span>
                     </div>
+                    <p className="analyzer-term-note">
+                      AUF … 最後に上の面を回してそろえる手
+                    </p>
                     <div className="analyzer-f2l-actions">
                       <button type="button" onClick={() => prepareBestPllPlayback()}>
                         PLLを3D再生待ち
@@ -5818,7 +5858,7 @@ export default function AnalyzerPage({
                         type="button"
                         onClick={() => openLastLayerLearnPreview("pll")}
                       >
-                        Learnで勉強
+                        「学ぶ」で練習
                       </button>
                     </div>
                   </>
@@ -5836,7 +5876,7 @@ export default function AnalyzerPage({
               <div className="analyzer-candidate-grid">
                 {pllCandidates.length === 0 ? (
                   <p className="analyzer-muted">
-                    src/assets/learn/pll に画像を追加すると、PLL候補が表示されます。
+                    PLL の学習ケースがまだ登録されていません。
                   </p>
                 ) : (
                   pllCandidates.map((candidate) => (
@@ -5846,7 +5886,7 @@ export default function AnalyzerPage({
                       <code>{candidate.algorithm}</code>
                       <p>{candidate.description}</p>
                       <div className="analyzer-f2l-tags">
-                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)} moves</span>
+                        <span>{candidate.moveCount ?? getAlgorithmMoveCount(candidate.algorithm)}手</span>
                         {(candidate.tags ?? []).slice(0, 3).map((tag) => (
                           <span key={`${candidate.id}-${tag}`}>{tag}</span>
                         ))}
@@ -5856,7 +5896,7 @@ export default function AnalyzerPage({
                           メイン3Dで見る
                         </button>
                         <button type="button" onClick={() => openAnalyzerCandidateLearn(candidate)}>
-                          Learn詳細
+                          「学ぶ」で詳しく
                         </button>
                       </div>
                     </article>
@@ -5899,12 +5939,12 @@ export default function AnalyzerPage({
         >
           <div className="analyzer-player-header">
             <div>
-              <p className="eyebrow">3D Cube</p>
+              <p className="eyebrow">3Dキューブ</p>
               <h2>3D再生</h2>
             </div>
             <div className="analyzer-player-actions" data-testid="recording-analyzer-player-actions">
               <label className="analyzer-speed-control">
-                <span>Speed</span>
+                <span>速さ</span>
                 <select
                   value={isRecordingMode ? RECORDING_ANALYZER_SPEED : animationSpeed}
                   disabled={isRecordingMode}
@@ -5921,7 +5961,7 @@ export default function AnalyzerPage({
                 </select>
               </label>
               <label className="analyzer-speed-control">
-                <span>Size</span>
+                <span>大きさ</span>
                 <select
                   value={cubeScale}
                   disabled={isRecordingMode}
@@ -5978,7 +6018,7 @@ export default function AnalyzerPage({
                 <strong>{isRecordingMode ? 0 : turnSoundVolumePercent}%</strong>
               </label>
               <div className="analyzer-step">
-                Step: {currentIndex} / {activeMoves.length}
+                手目: {currentIndex} / {activeMoves.length}
               </div>
               <button
                 type="button"
@@ -5996,10 +6036,10 @@ export default function AnalyzerPage({
                 <span />
               </span>
               <div>
-                <p className="eyebrow">Landscape mode</p>
+                <p className="eyebrow">横画面モード</p>
                 <h3>スマホを横向きにしてください</h3>
                 <p>
-                  Analyzerの全画面3D再生は横画面で表示します。横向きにすると再生画面に切り替わります。
+                  解析の全画面3D再生は横画面で表示します。横向きにすると再生画面に切り替わります。
                 </p>
               </div>
               <button type="button" onClick={exitAnalyzerFullscreen}>
@@ -6028,8 +6068,8 @@ export default function AnalyzerPage({
               >
                 <div className="analyzer-phase-replay-head">
                   <div>
-                    <p className="eyebrow">Best Playback</p>
-                    <h3>工程別best</h3>
+                    <p className="eyebrow">おすすめ再生</p>
+                    <h3>工程別の案</h3>
                   </div>
                   <span>{quickPlaybackStatus}</span>
                 </div>
@@ -6076,14 +6116,14 @@ export default function AnalyzerPage({
                       disabled={!ollRecognition?.ok}
                       onClick={() => openLastLayerLearnPreview("oll")}
                     >
-                      OLL Learn
+                      OLL を学ぶ
                     </button>
                     <button
                       type="button"
                       disabled={!pllRecognition?.ok}
                       onClick={() => openLastLayerLearnPreview("pll")}
                     >
-                      PLL Learn
+                      PLL を学ぶ
                     </button>
                   </div>
                 </div>
@@ -6216,13 +6256,13 @@ export default function AnalyzerPage({
                   <div className="analyzer-learn-preview-head">
                     <div>
                       <p className="eyebrow">
-                        {lastLayerLearnPreview.phase.toUpperCase()} Learn Preview
+                        {lastLayerLearnPreview.phase.toUpperCase()} の確認
                       </p>
-                      <h3>{lastLayerLearnPreview.recognition.caseTitle}</h3>
+                      <h3>{formatLastLayerCaseTitle(lastLayerLearnPreview.recognition.caseTitle)}</h3>
                     </div>
                     <span>
                       {lastLayerLearnPreview.recognition.isSkip
-                        ? `${lastLayerLearnPreview.phase.toUpperCase()} Skip`
+                        ? `${lastLayerLearnPreview.phase.toUpperCase()} スキップ`
                         : "自動認識したケース"}
                     </span>
                   </div>
@@ -6231,7 +6271,7 @@ export default function AnalyzerPage({
                     <AnalyzerLastLayerCasePreview
                       caseItem={lastLayerLearnPreview.recognition.caseItem}
                       phase={lastLayerLearnPreview.phase}
-                      title={lastLayerLearnPreview.recognition.caseTitle}
+                      title={formatLastLayerCaseTitle(lastLayerLearnPreview.recognition.caseTitle)}
                     />
                     <div className="analyzer-learn-preview-copy">
                       <p>
@@ -6239,15 +6279,18 @@ export default function AnalyzerPage({
                           "この状態はこの工程をスキップできます。必要なら一覧から近いケースを復習できます。"}
                       </p>
                       <div className="analyzer-f2l-tags">
-                        <span>{lastLayerLearnPreview.recognition.moveCount} moves</span>
+                        <span>{lastLayerLearnPreview.recognition.moveCount}手</span>
                         <span>{lastLayerLearnPreview.recognition.setupAlgorithm || "AUFなし"}</span>
                       </div>
+                      <p className="analyzer-term-note">
+                        AUF … 最後に上の面を回してそろえる手
+                      </p>
                     </div>
                   </div>
 
                   <div className="algorithm-box analyzer-learn-preview-algorithm">
                     <span>手順</span>
-                    <code>{lastLayerLearnPreview.recognition.algorithm || "Skip"}</code>
+                    <code>{lastLayerLearnPreview.recognition.algorithm || "スキップ"}</code>
                   </div>
 
                   <p className="analyzer-learn-preview-description">
@@ -6291,7 +6334,7 @@ export default function AnalyzerPage({
                         )
                       }
                     >
-                      {lastLayerLearnPreview.recognition.caseItem ? "Learn詳細へ" : "Learn一覧へ"}
+                      {lastLayerLearnPreview.recognition.caseItem ? "「学ぶ」で詳しく" : "「学ぶ」の一覧へ"}
                     </button>
                   </div>
                 </section>

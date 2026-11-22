@@ -37,6 +37,8 @@ it("every Learn case is valid and recognized by the analyzer", () => {
 
     const legacy = parseAlgorithm(c.algorithm);
     if (legacy.invalidTokens.length) problems.push(`legacy parser invalid: ${legacy.invalidTokens.join(",")}`);
+    // The shown algorithm must use standard notation, not file-name spelling such as "(Up)".
+    if (/[URFDLBMESxyzw]p\)?(\s|$)/.test(c.algorithm)) problems.push(`file-name notation shown: ${c.algorithm}`);
 
     let state;
     try {

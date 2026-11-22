@@ -661,7 +661,7 @@ export default function ScramblePreviewPage({
     <main className="app-shell scramble-preview-page">
       <header className="app-header">
         <div>
-          <p className="eyebrow">Scramble check</p>
+          <p className="eyebrow">スクランブルの確認</p>
           <h1>スクランブル確認</h1>
         </div>
         <div className="header-actions">
@@ -669,25 +669,25 @@ export default function ScramblePreviewPage({
             戻る
           </button>
           <button className="ghost-button" type="button" onClick={onOpenTimer}>
-            Timer
+            計測
           </button>
         </div>
       </header>
 
       <section className="scramble-preview-hero">
         <div>
-          <p className="eyebrow">Before solve</p>
+          <p className="eyebrow">ソルブ前</p>
           <h2>記号を見ながら、崩し方だけを3Dで確認できます</h2>
         </div>
         <p>
-          ここで確認してTimerやAnalyzerへ戻っても、元のスクランブル文字列は変更しません。
+          ここで確認して計測や解析へ戻っても、元のスクランブル文字列は変更しません。
         </p>
       </section>
 
       <div className="scramble-preview-layout">
         <section className="scramble-preview-panel">
           <label className="analyzer-field">
-            <span>Scramble</span>
+            <span>スクランブル</span>
             <textarea
               value={scrambleInput}
               onChange={(event) => setScrambleInput(event.target.value)}
@@ -696,7 +696,7 @@ export default function ScramblePreviewPage({
             />
           </label>
 
-          <div className="analyzer-scramble-pad" aria-label="Scramble move input buttons">
+          <div className="analyzer-scramble-pad" aria-label="スクランブル回転記号入力ボタン">
             {SCRAMBLE_MOVE_GROUPS.map((group) => (
               <div className="analyzer-move-group" key={group[0]}>
                 {group.map((move) => (
@@ -758,12 +758,12 @@ export default function ScramblePreviewPage({
         >
           <div className="analyzer-player-header">
             <div>
-              <p className="eyebrow">3D Animation</p>
+              <p className="eyebrow">3D再生</p>
               <h2>スクランブル再生</h2>
             </div>
             <div className="analyzer-player-actions">
               <label className="analyzer-speed-control">
-                <span>Speed</span>
+                <span>速さ</span>
                 <select
                   value={speed}
                   onChange={(event) => setSpeed(Number(event.target.value) as AnimationSpeed)}
@@ -776,7 +776,7 @@ export default function ScramblePreviewPage({
                 </select>
               </label>
               <div className="analyzer-step">
-                Step: {currentIndex} / {parsedPlayback.moves.length}
+                手目: {currentIndex} / {parsedPlayback.moves.length}
               </div>
               <button
                 type="button"
@@ -795,12 +795,12 @@ export default function ScramblePreviewPage({
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
           >
-            <canvas ref={canvasRef} aria-label="Scramble 3D cube preview" />
+            <canvas ref={canvasRef} aria-label="スクランブル3Dキューブ表示" />
           </div>
 
           <div className="analyzer-now">
-            <span>Now: {currentMove ?? "Ready"}</span>
-            <small>{nextMove ? `Next: ${nextMove}` : "最後まで再生済み、または手順待ちです。"}</small>
+            <span>いま: {currentMove ?? "準備OK"}</span>
+            <small>{nextMove ? `次: ${nextMove}` : "最後まで再生済み、または手順待ちです。"}</small>
           </div>
 
           <div className="analyzer-controls">
@@ -838,7 +838,7 @@ export default function ScramblePreviewPage({
             </button>
           </div>
 
-          <div className="analyzer-move-list" aria-label="Scramble move list">
+          <div className="analyzer-move-list" aria-label="スクランブル手順一覧">
             {parsedPlayback.moves.length === 0 ? (
               <span className="analyzer-move-empty">スクランブルを入力してください。</span>
             ) : (

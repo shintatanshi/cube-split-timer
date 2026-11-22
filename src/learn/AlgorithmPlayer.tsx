@@ -699,7 +699,7 @@ function getStepLabel(index: number, total: number): string {
 
 export default function AlgorithmPlayer({
   caseItem,
-  headingLabel = "Three.js Animation",
+  headingLabel = "3D再生",
   headingTitle = "教材3D再生",
   showFocusLegend = true,
   startMode = "inverse",
@@ -1140,7 +1140,7 @@ export default function AlgorithmPlayer({
           <h3>{headingTitle}</h3>
         </div>
         <div className="algorithm-player-meta">
-          <strong>Step: {getStepLabel(currentIndex, moves.length)}</strong>
+          <strong>手目: {getStepLabel(currentIndex, moves.length)}</strong>
           <button type="button" onClick={isFullscreen ? exitFullscreen : enterFullscreen}>
             {isFullscreen ? "閉じる" : "全画面"}
           </button>
@@ -1160,10 +1160,10 @@ export default function AlgorithmPlayer({
 
         <div className="algorithm-now">
           <p>
-            Now: <strong>{activeMove ?? (isComplete ? "Complete" : "Ready")}</strong>
+            いま: <strong>{activeMove ?? (isComplete ? "完成" : "準備OK")}</strong>
           </p>
           <div className="algorithm-inline" aria-label="Current algorithm">
-            <span>Algorithm</span>
+            <span>手順</span>
             <ol className="algorithm-move-list algorithm-move-list-inline">
               {moves.map((move, index) => (
                 <li
@@ -1203,7 +1203,7 @@ export default function AlgorithmPlayer({
             リセット
           </button>
           <button aria-pressed={isLooping} type="button" onClick={toggleLoop}>
-            ループ: {isLooping ? "ON" : "OFF"}
+            ループ: {isLooping ? "オン" : "オフ"}
           </button>
           <button type="button" onClick={resetCameraView}>
             視点リセット
@@ -1211,7 +1211,7 @@ export default function AlgorithmPlayer({
         </div>
 
         <label className="speed-control">
-          <span>Speed</span>
+          <span>速さ</span>
           <select
             value={speed}
             onChange={(event) => setSpeed(Number(event.target.value) as SpeedOption)}
@@ -1233,9 +1233,9 @@ function FocusLegend({ caseItem }: { caseItem: LearningCase }) {
   if (caseItem.highlightConfig.kind === "f2l") {
     return (
       <div className="focus-legend">
-        <span className="focus-legend-corner">Corner</span>
-        <span className="focus-legend-edge">Edge</span>
-        <span className="focus-legend-slot">Slot</span>
+        <span className="focus-legend-corner">コーナー</span>
+        <span className="focus-legend-edge">エッジ</span>
+        <span className="focus-legend-slot">スロット</span>
       </div>
     );
   }
@@ -1243,17 +1243,17 @@ function FocusLegend({ caseItem }: { caseItem: LearningCase }) {
   if (caseItem.highlightConfig.kind === "oll") {
     return (
       <div className="focus-legend">
-        <span className="focus-legend-yellow">Yellow pattern on U</span>
-        <span>Blue front / yellow top</span>
+        <span className="focus-legend-yellow">上面の黄色の形</span>
+        <span>青が前・黄が上</span>
       </div>
     );
   }
 
   return (
     <div className="focus-legend">
-      <span className="focus-legend-edge">Edge swap</span>
-      <span className="focus-legend-corner">Corner swap</span>
-      <span className="focus-legend-slot">Block</span>
+      <span className="focus-legend-edge">エッジの入れ替え</span>
+      <span className="focus-legend-corner">コーナーの入れ替え</span>
+      <span className="focus-legend-slot">ブロック</span>
     </div>
   );
 }

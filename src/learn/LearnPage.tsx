@@ -81,7 +81,7 @@ const STATUS_FILTERS: Array<{ value: StatusFilter; label: string }> = [
 ];
 
 const PRACTICE_CATEGORY_OPTIONS: Array<{ value: PracticeCategory; label: string }> = [
-  { value: "all", label: "All" },
+  { value: "all", label: "すべて" },
   ...LEARNING_CATEGORIES.map((category) => ({
     value: category,
     label: LEARNING_CATEGORY_LABELS[category],
@@ -108,16 +108,16 @@ function createFaceMoves(base: string, face: string, reading: string, note: stri
     },
     {
       move: `${base}'`,
-      reading: `${reading} prime`,
+      reading: `${reading} プライム`,
       group: "basic",
       face,
       direction: `${face}を、その面を正面から見て反時計回りに90度回す`,
-      description: "prime は通常回転の逆向きです。",
+      description: "プライム（'）は通常回転の逆向きです。",
       supported: true,
     },
     {
       move: `${base}2`,
-      reading: `${reading} two`,
+      reading: `${reading} ツー`,
       group: "basic",
       face,
       direction: `${face}を180度回す`,
@@ -140,16 +140,16 @@ function createRotationMoves(base: "x" | "y" | "z", reference: "R" | "U" | "F"):
     },
     {
       move: `${base}'`,
-      reading: `${base} prime`,
+      reading: `${base} プライム`,
       group: "rotation",
       face: "キューブ全体",
       direction: `キューブ全体を${reference}'の回転方向に持ち替える`,
-      description: "prime は持ち替え方向も逆になります。",
+      description: "プライム（'）は持ち替え方向も逆になります。",
       supported: true,
     },
     {
       move: `${base}2`,
-      reading: `${base} two`,
+      reading: `${base} ツー`,
       group: "rotation",
       face: "キューブ全体",
       direction: "キューブ全体を180度持ち替える",
@@ -172,16 +172,16 @@ function createSliceMoves(base: "M" | "E" | "S", reference: "L" | "D" | "F", fac
     },
     {
       move: `${base}'`,
-      reading: `${base} prime`,
+      reading: `${base} プライム`,
       group: "slice",
       face,
       direction: `${face}を${reference}'と同じ方向に90度回す`,
-      description: "prime は通常のスライス回転の逆方向です。",
+      description: "プライム（'）は通常のスライス回転の逆方向です。",
       supported: true,
     },
     {
       move: `${base}2`,
-      reading: `${base} two`,
+      reading: `${base} ツー`,
       group: "slice",
       face,
       direction: `${face}を180度回す`,
@@ -204,16 +204,16 @@ function createWideMoves(base: string, face: string): NotationMove[] {
     },
     {
       move: `${base}'`,
-      reading: `${base} prime`,
+      reading: `${base} プライム`,
       group: "wide",
       face,
       direction: `${face}と隣の中央層をまとめて反時計回りに90度回す`,
-      description: "prime は2層まとめた回転も逆向きです。",
+      description: "プライム（'）は2層まとめた回転も逆向きです。",
       supported: true,
     },
     {
       move: `${base}2`,
-      reading: `${base} two`,
+      reading: `${base} ツー`,
       group: "wide",
       face,
       direction: `${face}と隣の中央層をまとめて180度回す`,
@@ -448,12 +448,12 @@ export default function LearnPage({ path, onNavigate, onOpenTimer }: LearnPagePr
     <main className="app-shell learn-page" data-testid="recording-learn">
       <header className="app-header learn-header">
         <div>
-          <p className="eyebrow">Learn</p>
+          <p className="eyebrow">学習</p>
           <h1>学ぶ</h1>
         </div>
         <div className="header-actions">
           <button className="ghost-button" type="button" onClick={onOpenTimer}>
-            Timerへ戻る
+            計測へ戻る
           </button>
         </div>
       </header>
@@ -582,7 +582,7 @@ function LearnLandscapeHint({ enabled, routeKey }: LearnLandscapeHintProps) {
       </div>
       <div className="learn-landscape-hint-actions">
         <button type="button" onClick={() => setIsClosed(true)}>
-          OK
+          閉じる
         </button>
         <button type="button" onClick={dismissForever}>
           今後表示しない
@@ -714,7 +714,7 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
 
       <section className="learn-practice-entry notation-entry" aria-label="Notation entry">
         <div>
-          <p className="eyebrow">Notation</p>
+          <p className="eyebrow">回転記号</p>
           <h2>回転記号だけを練習する</h2>
           <p>U / R / F などの基本回転、x / y / z の持ち替え、スライスと2層回しを1手ずつ3Dで確認します。</p>
         </div>
@@ -725,7 +725,7 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
 
       <section className="learn-practice-entry" aria-label="F2L candidate review entry">
         <div>
-          <p className="eyebrow">Advanced</p>
+          <p className="eyebrow">上級</p>
           <h2>上級者向けの追加F2L候補</h2>
           <p>基本41とは別枠で、追加F2L・裏F2L・インサート違いの候補を3Dで確認します。</p>
         </div>
@@ -736,12 +736,12 @@ function LearnHome({ progress, onNavigate }: LearnHomeProps) {
 
       <section className="learn-practice-entry" aria-label="Practice entry">
         <div>
-          <p className="eyebrow">Random Practice</p>
+          <p className="eyebrow">ランダム練習</p>
           <h2>ランダム出題で確認する</h2>
           <p>F2L / OLL / PLLからケースを出して、答えを見る前に手順を思い出します。</p>
         </div>
         <button className="ghost-button" type="button" onClick={() => onNavigate("/learn/practice")}>
-          Practiceへ
+          練習へ
         </button>
       </section>
     </>
@@ -905,7 +905,7 @@ function LearnCaseDetailPage({
     >
       <div className="learn-section-heading learn-detail-page-heading">
         <div>
-          <p className="eyebrow">{LEARNING_CATEGORY_LABELS[category]} Detail</p>
+          <p className="eyebrow">{LEARNING_CATEGORY_LABELS[category]} 詳細</p>
           <h2>{caseItem.title}</h2>
           <p>{caseItem.subtitle}</p>
         </div>
@@ -949,7 +949,7 @@ function createNotationLearningCase(notationMove: NotationMove): LearningCase {
       focusFaces: ["U", "F", "R", "L"],
     },
     shape: [],
-    tags: ["Notation", notationMove.group],
+    tags: ["回転記号", notationMove.group],
   };
 }
 
@@ -964,9 +964,16 @@ const F2L_CANDIDATE_TYPE_LABELS: Record<F2lCandidate["caseType"], string> = {
 };
 
 const F2L_CANDIDATE_DIFFICULTY_LABELS: Record<F2lCandidate["difficulty"], string> = {
-  basic: "basic",
-  intermediate: "intermediate",
-  advanced: "advanced",
+  basic: "基本",
+  intermediate: "中級",
+  advanced: "上級",
+};
+
+const F2L_CANDIDATE_STATUS_LABELS: Record<F2lCandidate["status"], string> = {
+  candidate: "候補",
+  reviewed: "確認済み",
+  approved: "採用済み",
+  rejected: "見送り",
 };
 
 const F2L_CANDIDATE_SLOT_CONFIG: Record<
@@ -999,7 +1006,9 @@ function createF2lCandidateLearningCase(candidate: F2lCandidate): LearningCase {
     category: "f2l",
     name: candidate.name,
     title: candidate.name,
-    subtitle: `${F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} / ${candidate.targetSlot}`,
+    subtitle: `${F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} / ${
+      candidate.targetSlot === "auto" ? "自動" : candidate.targetSlot
+    }`,
     algorithm: candidate.alg,
     alternative: candidate.inverseAlg,
     description: candidate.description,
@@ -1048,9 +1057,9 @@ function F2lCandidateReviewPage() {
     return (
       <section className="learn-section-heading" aria-label="F2L candidate empty">
         <div>
-          <p className="eyebrow">Review queue</p>
+          <p className="eyebrow">追加候補</p>
           <h2>F2L候補はまだありません</h2>
-          <p>src/learn/f2lCandidateData.ts に候補を追加すると、ここで確認できます。</p>
+          <p>追加の F2L 候補が登録されると、ここで確認できます。</p>
         </div>
       </section>
     );
@@ -1064,16 +1073,16 @@ function F2lCandidateReviewPage() {
         data-testid="recording-f2l-candidates"
       >
         <div>
-          <p className="eyebrow">Review queue</p>
+          <p className="eyebrow">追加候補</p>
           <h2>追加F2L候補リスト</h2>
           <p>
-            ここは正式DBへ入れる前の確認場所です。画像や説明文のコピーは使わず、手順候補だけを3Dで検証します。
+            追加予定の F2L 手順候補を 3D で確認できます。
           </p>
         </div>
         <div className="learn-total-progress">
           <strong>{F2L_CANDIDATE_SUMMARY.total}</strong>
           <span>
-            invalid {F2L_CANDIDATE_SUMMARY.invalid} / duplicate {F2L_CANDIDATE_SUMMARY.duplicates}
+            不備 {F2L_CANDIDATE_SUMMARY.invalid}件 / 重複 {F2L_CANDIDATE_SUMMARY.duplicates}件
           </span>
         </div>
       </section>
@@ -1098,11 +1107,12 @@ function F2lCandidateReviewPage() {
                 <span>
                   <strong>{candidate.name}</strong>
                   <small>
-                    {F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} / {candidate.targetSlot} /{" "}
-                    {candidate.moveCount} moves
+                    {F2L_CANDIDATE_TYPE_LABELS[candidate.caseType]} /{" "}
+                    {candidate.targetSlot === "auto" ? "自動" : candidate.targetSlot} /{" "}
+                    {candidate.moveCount}手
                   </small>
                 </span>
-                <b>{validation.ok ? candidate.status : "要確認"}</b>
+                <b>{validation.ok ? F2L_CANDIDATE_STATUS_LABELS[candidate.status] : "要確認"}</b>
               </button>
             );
           })}
@@ -1111,11 +1121,13 @@ function F2lCandidateReviewPage() {
         <article className="f2l-candidate-detail">
           <div className="learn-detail-head">
             <div>
-              <p className="eyebrow">Candidate detail</p>
+              <p className="eyebrow">候補の詳細</p>
               <h2>{selectedCandidate.name}</h2>
               <p>{selectedCandidate.description}</p>
             </div>
-            <span className="status-pill status-learning">{selectedCandidate.status}</span>
+            <span className="status-pill status-learning">
+              {F2L_CANDIDATE_STATUS_LABELS[selectedCandidate.status]}
+            </span>
           </div>
 
           <div className="algorithm-box">
@@ -1136,8 +1148,8 @@ function F2lCandidateReviewPage() {
               <dd>{F2L_CANDIDATE_TYPE_LABELS[selectedCandidate.caseType]}</dd>
             </div>
             <div>
-              <dt>targetSlot</dt>
-              <dd>{selectedCandidate.targetSlot}</dd>
+              <dt>入れる場所</dt>
+              <dd>{selectedCandidate.targetSlot === "auto" ? "自動" : selectedCandidate.targetSlot}</dd>
             </div>
             <div>
               <dt>難易度</dt>
@@ -1145,7 +1157,7 @@ function F2lCandidateReviewPage() {
             </div>
             <div>
               <dt>手数</dt>
-              <dd>{selectedCandidate.moveCount}</dd>
+              <dd>{selectedCandidate.moveCount}手</dd>
             </div>
           </dl>
 
@@ -1156,14 +1168,16 @@ function F2lCandidateReviewPage() {
           </div>
 
           <div className="f2l-candidate-source">
-            <strong>source memo</strong>
+            <strong>参考メモ</strong>
             {selectedCandidate.source?.map((source) =>
               source.url?.startsWith("http") ? (
                 <a href={source.url} key={`${source.name}-${source.url}`} rel="noreferrer" target="_blank">
-                  {source.name}
+                  {source.name === "Manual review seed" ? "初期登録データ" : source.name}
                 </a>
               ) : (
-                <span key={source.name}>{source.name}</span>
+                <span key={source.name}>
+                  {source.name === "Manual review seed" ? "初期登録データ" : source.name}
+                </span>
               ),
             )}
           </div>
@@ -1194,7 +1208,7 @@ function F2lCandidateReviewPage() {
           >
             <AlgorithmPlayer
               caseItem={selectedAnimationCase}
-              headingLabel="F2L Candidate"
+              headingLabel="F2L 候補"
               headingTitle="候補手順3D確認"
             />
           </Suspense>
@@ -1229,7 +1243,7 @@ function NotationPage() {
         data-testid="recording-notation"
       >
         <div>
-          <p className="eyebrow">Notation</p>
+          <p className="eyebrow">回転記号</p>
           <h2>回転記号を1手ずつ確認する</h2>
           <p>
             回転方向は「その面を正面から見たとき」を基準にしています。B / D / x / y / z は特に向きを確認しながら覚えます。
@@ -1255,7 +1269,7 @@ function NotationPage() {
         <article className="notation-detail-card">
           <div className="notation-detail-head">
             <div>
-              <p className="eyebrow">Selected Move</p>
+              <p className="eyebrow">選択中の記号</p>
               <h2>{selectedNotationMove.move}</h2>
               <p>{selectedNotationMove.reading}</p>
             </div>
@@ -1273,7 +1287,7 @@ function NotationPage() {
           >
             <AlgorithmPlayer
               caseItem={notationCase}
-              headingLabel="Notation Animation"
+              headingLabel="回転記号 3D再生"
               headingTitle={`${selectedNotationMove.move} 単体再生`}
               showFocusLegend={false}
               startMode="solved"
@@ -1301,10 +1315,10 @@ function NotationPage() {
           </div>
 
           <div className="notation-supported-box">
-            <strong>現在のmove parser対応</strong>
+            <strong>対応している回転記号</strong>
             <ul>
               {SUPPORTED_MOVE_SUMMARY.map((item) => (
-                <li key={item}>{item}</li>
+                <li key={item}>{item.replace(/prime/g, "プライム（'）")}</li>
               ))}
             </ul>
           </div>
@@ -1417,7 +1431,7 @@ function CaseDetail({ caseItem, status, onSetStatus }: CaseDetailProps) {
         <div className="algorithm-line">
           <code>{caseItem.algorithm}</code>
           <button type="button" onClick={copyAlgorithm}>
-            Copy
+            コピー
           </button>
         </div>
         {copyStatus === "copied" && <small>コピーしました。</small>}
@@ -1483,7 +1497,7 @@ function LearnPracticePage({
     <section className="learn-practice-page" aria-label="Random practice" data-testid="recording-learn-practice">
       <div className="learn-section-heading">
         <div>
-          <p className="eyebrow">Practice</p>
+          <p className="eyebrow">練習</p>
           <h2>ランダム練習</h2>
           <p>形だけを見て、手順を思い出してから答えを確認します。</p>
         </div>
@@ -1669,13 +1683,13 @@ function getStickerClass(sticker: LearningSticker): string {
 function getSlotLabel(slot: F2lCaseImage["slot"]): string {
   switch (slot) {
     case "right":
-      return "Right slot";
+      return "右スロット";
     case "left":
-      return "Left slot";
+      return "左スロット";
     case "back":
-      return "Back slot";
+      return "奥スロット";
     case "wrong":
-      return "Wrong slot";
+      return "別スロット";
   }
 }
 

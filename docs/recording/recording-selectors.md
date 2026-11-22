@@ -97,14 +97,14 @@
 | 画面 | waitFor selector | fallback text |
 | --- | --- | --- |
 | タイマー | `[data-testid="recording-main-timer"]` | `計測`, `スクランブル`, `0.000` |
-| 履歴 | `[data-testid="recording-history-page"]` | `履歴`, `Latest 100` |
-| 分析 | `[data-testid="recording-analysis"]` | `記録分析`, `Session Overview`, `Phase Stats` |
+| 履歴 | `[data-testid="recording-history-page"]` | `履歴`, `最新100件` |
+| 分析 | `[data-testid="recording-analysis"]` | `記録分析`, `今日のまとめ`, `段階ごとの統計` |
 | Learn | `[data-testid="recording-learn"]` | `学ぶ`, `F2L`, `OLL`, `PLL` |
 | Learn F2L | `[data-testid="recording-f2l-case-list"]` | `F2L一覧`, `F2L` |
 | Learn詳細 | `[data-testid="recording-algorithm-player"]` | `教材3D再生`, `手順` |
 | Analyzer | `[data-testid="recording-analyzer-player"]` | `3D再生`, `F2L強調`, `工程別best` |
 | Analyzer Canvas | `[data-testid="recording-analyzer-canvas"] canvas` | `3D cube preview` |
-| Feedback | `[data-testid="recording-feedback"]` | `意見箱`, `Feedback` |
+| Feedback | `[data-testid="recording-feedback"]` | `意見箱`, `ご意見` |
 
 ## URL直開き推奨画面
 

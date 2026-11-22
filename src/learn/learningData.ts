@@ -115,6 +115,13 @@ export function fileBaseNameToAlgorithm(baseName: string): string {
 }
 
 function fileTokenToMove(token: string): string {
+  // AUF written in parentheses in file names, e.g. "(Up)" -> "(U')".
+  const parenthesized = token.match(/^\((.+)\)$/);
+
+  if (parenthesized) {
+    return `(${fileTokenToMove(parenthesized[1])})`;
+  }
+
   const primeWideBeforeW = token.match(/^([URFDLB])p(w)$/);
 
   if (primeWideBeforeW) {
@@ -184,6 +191,12 @@ const F2L_CASE_TYPE_LABELS: Record<F2lCase["caseType"], string> = {
   other: "その他",
 };
 
+const F2L_DIFFICULTY_LABELS: Record<F2lCase["difficulty"], string> = {
+  basic: "基本",
+  intermediate: "中級",
+  advanced: "上級",
+};
+
 function getOfficialF2lSlotConfig(caseItem: F2lCase) {
   return caseItem.targetSlot === "auto"
     ? F2L_OFFICIAL_SLOT_CONFIG.FR
@@ -193,6 +206,8 @@ function getOfficialF2lSlotConfig(caseItem: F2lCase) {
 function createApprovedF2lLearningCase(caseItem: F2lCase): LearningCase {
   const slotConfig = getOfficialF2lSlotConfig(caseItem);
   const caseTypeLabel = F2L_CASE_TYPE_LABELS[caseItem.caseType];
+  const difficultyLabel = F2L_DIFFICULTY_LABELS[caseItem.difficulty];
+  const slotLabel = caseItem.targetSlot === "auto" ? "自動" : caseItem.targetSlot;
   const id = caseItem.learnCaseId ?? `official-${caseItem.id}`;
 
   return {
@@ -201,7 +216,7 @@ function createApprovedF2lLearningCase(caseItem: F2lCase): LearningCase {
     category: "f2l",
     name: caseItem.name,
     title: caseItem.name,
-    subtitle: `${caseTypeLabel} / ${caseItem.targetSlot} / ${caseItem.moveCount} moves`,
+    subtitle: `${caseTypeLabel} / ${slotLabel} / ${caseItem.moveCount}手`,
     algorithm: caseItem.alg,
     alternative: caseItem.inverseAlg,
     description: caseItem.description,
@@ -225,7 +240,7 @@ function createApprovedF2lLearningCase(caseItem: F2lCase): LearningCase {
       centers: slotConfig.centers,
     },
     shape: repeatSticker("empty", 9),
-    tags: ["正式F2L", caseTypeLabel, caseItem.difficulty, ...caseItem.tags],
+    tags: ["正式F2L", caseTypeLabel, difficultyLabel, ...caseItem.tags],
   };
 }
 
@@ -310,7 +325,7 @@ function createLearningCaseFromImage(
     category,
     name: label,
     title: algorithm,
-    subtitle: `${moveCount} moves`,
+    subtitle: `${moveCount}手`,
     algorithm,
     description,
     image: {
@@ -325,10 +340,10 @@ function createLearningCaseFromImage(
     highlightConfig,
     shape: repeatSticker("empty", 9),
     tags: generatedOllPreview
-      ? [label, "自動生成図", `${moveCount} moves`]
+      ? [label, "自動生成図", `${moveCount}手`]
       : generatedImageUrl
-        ? [label, "仮生成画像", `${moveCount} moves`]
-        : [label, `${moveCount} moves`],
+        ? [label, "仮生成画像", `${moveCount}手`]
+        : [label, `${moveCount}手`],
   };
 }
 

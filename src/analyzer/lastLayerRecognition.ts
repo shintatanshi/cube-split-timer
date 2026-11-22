@@ -423,7 +423,7 @@ export function recognizeOll(
   }
 
   if (ollCases.length === 0) {
-    return { ok: false, reason: "OLL手順DBが空なので判定できません。" };
+    return { ok: false, reason: "登録済みの OLL 手順がないため判定できません。" };
   }
 
   const lastLayerColor = getLastLayerColor(state, targetFace);
@@ -451,7 +451,7 @@ export function recognizeOll(
 
   return {
     ok: false,
-    reason: "このOLLケースは現在のDBでは自動判定できません。Learn候補から確認してください。",
+    reason: "このOLLケースは登録済みの手順では自動判定できません。「学ぶ」の一覧から確認してください。",
   };
 }
 
@@ -465,7 +465,7 @@ export function recognizePll(
   }
 
   if (pllCases.length === 0) {
-    return { ok: false, reason: "PLL手順DBが空なので判定できません。" };
+    return { ok: false, reason: "登録済みの PLL 手順がないため判定できません。" };
   }
 
   const lastLayerColor = getLastLayerColor(state, targetFace);
@@ -502,6 +502,6 @@ export function recognizePll(
 
   return {
     ok: false,
-    reason: "このPLLケースは現在のDBでは自動判定できません。Learn候補から確認してください。",
+    reason: "このPLLケースは登録済みの手順では自動判定できません。「学ぶ」の一覧から確認してください。",
   };
 }

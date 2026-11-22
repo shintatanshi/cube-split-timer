@@ -42,10 +42,10 @@ export default function MoveButtonPanel({
     <section className={["move-button-panel", className].filter(Boolean).join(" ")}>
       <div className="move-button-panel-head">
         <div>
-          <p className="eyebrow">Manual moves</p>
+          <p className="eyebrow">手で回す</p>
           <h3>回転記号ボタン</h3>
         </div>
-        <span>{manualMoveCount} moves</span>
+        <span>{manualMoveCount}手</span>
       </div>
 
       <div className="move-button-groups" aria-label="Manual cube move buttons">

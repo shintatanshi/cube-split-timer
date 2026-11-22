@@ -220,8 +220,8 @@ export default function SolveComparePanel({
       jobKindByIdRef.current.clear();
       setIsLoadingOverview(false);
       setIsLoadingAnalyze(false);
-      setOverviewError((prev) => prev ?? "解析Workerでエラーが発生しました。");
-      setAnalyzeError((prev) => prev ?? "解析Workerでエラーが発生しました。");
+      setOverviewError((prev) => prev ?? "解析中にエラーが発生しました。");
+      setAnalyzeError((prev) => prev ?? "解析中にエラーが発生しました。");
     };
 
     workerRef.current = worker;
@@ -253,7 +253,7 @@ export default function SolveComparePanel({
       worker.postMessage(request);
     } catch {
       setIsLoadingOverview(false);
-      setOverviewError("解析Workerを起動できませんでした。");
+      setOverviewError("解析を開始できませんでした。");
     }
   }, [getOrCreateWorker, scramble]);
 
@@ -298,7 +298,7 @@ export default function SolveComparePanel({
       worker.postMessage(request);
     } catch {
       setIsLoadingAnalyze(false);
-      setAnalyzeError("解析Workerを起動できませんでした。");
+      setAnalyzeError("解析を開始できませんでした。");
     }
   }, [getOrCreateWorker, scramble, selectedCrossFace, solution, splits]);
 
@@ -348,7 +348,7 @@ export default function SolveComparePanel({
       <div className="solve-compare-block">
         <div className="analyzer-subheading">
           <div>
-            <p className="eyebrow">6-Color Shortest</p>
+            <p className="eyebrow">6色比較</p>
             <h2>全色の最短</h2>
           </div>
           <button
@@ -363,6 +363,9 @@ export default function SolveComparePanel({
 
         <p className="analyzer-muted">
           現在のスクランブルに対して、6色すべての最短クロスと最短 X クロスを探します。
+        </p>
+        <p className="solve-compare-glossary-note">
+          X クロス … クロスと1つ目のペアを同時に作ること
         </p>
 
         {splitsSummary && (
@@ -458,14 +461,14 @@ export default function SolveComparePanel({
                             onClick={() => onPlay(row.cross.solution.join(" "))}
                             disabled={row.cross.truncated}
                           >
-                            Cross再生
+                            クロスを再生
                           </button>
                           <button
                             type="button"
                             onClick={() => onPlay(row.xcross.solution.join(" "))}
                             disabled={row.xcross.truncated}
                           >
-                            XCross再生
+                            X クロスを再生
                           </button>
                         </div>
                       </td>
@@ -481,14 +484,14 @@ export default function SolveComparePanel({
       <div className="solve-compare-block">
         <div className="analyzer-subheading">
           <div>
-            <p className="eyebrow">Phase Comparison</p>
+            <p className="eyebrow">段ごとの比較</p>
             <h2>自分の手順と比べる</h2>
           </div>
         </div>
 
         {!hasSolution ? (
           <p className="analyzer-muted">
-            解析ページの &quot;手順&quot; に自分の手順を入れると、段ごとに最短と比べます
+            入力タブの「自分の手順」に手順を入れると、段ごとに最短と比べます
           </p>
         ) : (
           <>
@@ -672,6 +675,13 @@ export default function SolveComparePanel({
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="solve-compare-glossary" aria-label="用語の説明">
+                  <p>HTM … 180度回し（R2 など）も1手と数える数え方</p>
+                  <p>STM … 真ん中の層（M など）も1手と数える数え方</p>
+                  <p>TPS … 1秒あたりの手数</p>
+                  <p>X クロス … クロスと1つ目のペアを同時に作ること</p>
                 </div>
               </>
             )}

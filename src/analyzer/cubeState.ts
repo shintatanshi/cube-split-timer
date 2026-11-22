@@ -740,7 +740,7 @@ export function createCubeStateFromStickerColors(
       colorCounts[color] += 1;
 
       if (index === 4 && color !== faceColorMap[face]) {
-        errors.push(`${face}面センターは${faceColorMap[face]}で固定です。`);
+        errors.push(`${face}面センターは${getColorJapanese(faceColorMap[face])}で固定です。`);
       }
 
       const coord = FACE_STICKER_COORDS[face][index];
@@ -763,7 +763,7 @@ export function createCubeStateFromStickerColors(
 
   (Object.entries(colorCounts) as Array<[CubeColorName, number]>).forEach(([color, count]) => {
     if (count !== 9) {
-      errors.push(`${color} が${count}枚です。各色9枚にしてください。`);
+      errors.push(`${getColorJapanese(color)} が${count}枚です。各色9枚にしてください。`);
     }
   });
 
@@ -782,7 +782,9 @@ export function createCubeStateFromStickerColors(
     }
 
     if (!expectedKind || expectedKind !== kind) {
-      errors.push(`${positionLabel}の色組み合わせが実在する${kind}ではありません。`);
+      errors.push(
+        `${positionLabel}の色組み合わせが実在する${kind === "edge" ? "エッジ" : "コーナー"}ではありません。`,
+      );
       return;
     }
 

@@ -15,6 +15,7 @@ import {
   type TargetFace,
   type Vec3,
 } from "./cubeState";
+import { toFaceTurns } from "./solver/cubie";
 
 type LastLayerPhase = "oll" | "pll";
 
@@ -323,7 +324,18 @@ function buildLastLayerIndex(
         return;
       }
 
-      const preCaseState = applyInverseAlgorithmForRecognition(solvedState, parsed.moves);
+      // Slice and wide moves move centers, which this state model keeps fixed;
+      // convert to fixed-center face turns first so cases such as
+      // "R' U' R U x' z' R U L' U' M'" are indexed (they were silently skipped).
+      let recognitionMoves: string[];
+
+      try {
+        recognitionMoves = toFaceTurns(parsed.moves).faceTurns;
+      } catch {
+        return;
+      }
+
+      const preCaseState = applyInverseAlgorithmForRecognition(solvedState, recognitionMoves);
 
       if (
         phase === "oll" &&

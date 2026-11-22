@@ -1,4 +1,5 @@
 import type { LearningSticker } from "../types";
+import { toFaceTurns } from "../analyzer/solver/cubie";
 import { getMoveDescriptor, invertAlgorithm, parseAlgorithm } from "./moveNotation";
 
 type FaceName = "U" | "D" | "F" | "B" | "R" | "L";
@@ -312,7 +313,18 @@ function createImageDataUrl(svg: string): string {
 
 export function createGeneratedOllPreview(algorithm: string): GeneratedOllPreview {
   const parsed = parseAlgorithm(algorithm);
-  const inverseMoves = invertAlgorithm(parsed.moves);
+  // Undo the algorithm in fixed-center face turns. Inverting the raw moves left a
+  // trailing rotation (e.g. "x' R U' R' D R U R' D'") applied to the whole cube,
+  // so the thumbnail showed the wrong face on top.
+  let faceTurns: string[];
+
+  try {
+    faceTurns = toFaceTurns(parsed.moves).faceTurns;
+  } catch {
+    faceTurns = parsed.moves;
+  }
+
+  const inverseMoves = invertAlgorithm(faceTurns);
   const state = applyAlgorithm(createSolvedCubeState(), inverseMoves);
   const grid = cubeStateToStickerColorGrid(state);
   const top = grid.U.map(toSticker);

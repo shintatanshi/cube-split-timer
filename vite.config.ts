@@ -1,8 +1,14 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  test: {
+    // Solver tests build ~16MB pruning tables and assert timing; running files in
+    // parallel makes those timings meaningless, so run test files one at a time.
+    fileParallelism: false,
+  },
   build: {
     rollupOptions: {
       output: {

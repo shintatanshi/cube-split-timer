@@ -100,6 +100,12 @@ import {
   formatTime,
   getSolveValue,
 } from "./lib/time";
+import {
+  formatSolveInsightText,
+  getCachedScrambleOverview,
+  requestScrambleOverview,
+  shouldRequestInsight,
+} from "./lib/solveInsight";
 
 type TimerState =
   | "idle"
@@ -112,6 +118,28 @@ type TimerState =
 type StartHoldSource = "keyboard" | "pointer";
 type StartReturnState = "idle" | "inspecting" | "finished";
 type TimerSidePanelTab = "history" | "stats";
+type SolveInsightState =
+  | { status: "idle"; solveId: null; text: null }
+  | { status: "loading"; solveId: string; text: null }
+  | { status: "ready"; solveId: string; text: string }
+  | { status: "error"; solveId: string; text: null };
+
+function buildCompareAnalyzerUrl(solve: SolveRecord): string {
+  const params = new URLSearchParams();
+  params.set("scramble", solve.scramble);
+
+  if (solve.mode === "cfop_split") {
+    params.set(
+      "splits",
+      [solve.crossTime, solve.f2lTime, solve.ollTime, solve.pllTime]
+        .map((value) => Math.max(0, Math.round(value)))
+        .join(","),
+    );
+  }
+
+  params.set("auto", "1");
+  return `/analyzer/compare?${params.toString()}`;
+}
 
 const INPUT_DEBOUNCE_MS = 200;
 const HOLD_TO_START_MS = 500;
@@ -1415,6 +1443,12 @@ export default function App() {
         : solves.find((solve) => solve.id === lastSavedSolveId && solve.deletedAt === null),
     [isRecordingMode, lastSavedSolveId, solves],
   );
+  const [solveInsight, setSolveInsight] = useState<SolveInsightState>({
+    status: "idle",
+    solveId: null,
+    text: null,
+  });
+  const insightRequestIdRef = useRef(0);
   const targetSolveStorageUserId = authUser?.id ?? null;
 
   const setTimerStatus = useCallback((nextTimerState: TimerState) => {
@@ -1849,6 +1883,74 @@ export default function App() {
 
     return () => window.clearTimeout(timeoutId);
   }, [lastSavedSolveId]);
+
+  useEffect(() => {
+    if (isRecordingMode || !lastSavedSolve) {
+      insightRequestIdRef.current += 1;
+      setSolveInsight({ status: "idle", solveId: null, text: null });
+      return;
+    }
+
+    if (!shouldRequestInsight(timerState)) {
+      // Never start calculation or update insight state while preparing/inspecting/running.
+      insightRequestIdRef.current += 1;
+      return;
+    }
+
+    const targetColor =
+      lastSavedSolve.mode === "cross_practice" ? lastSavedSolve.crossColor : undefined;
+    const cachedOverview = getCachedScrambleOverview(lastSavedSolve.scramble);
+
+    if (cachedOverview) {
+      const text = formatSolveInsightText(cachedOverview, { targetColor });
+      setSolveInsight(
+        text
+          ? { status: "ready", solveId: lastSavedSolve.id, text }
+          : { status: "error", solveId: lastSavedSolve.id, text: null },
+      );
+      return;
+    }
+
+    const requestId = insightRequestIdRef.current + 1;
+    insightRequestIdRef.current = requestId;
+    const targetSolveId = lastSavedSolve.id;
+    let cancelled = false;
+
+    setSolveInsight({ status: "loading", solveId: targetSolveId, text: null });
+
+    void requestScrambleOverview(lastSavedSolve.scramble)
+      .then((overview) => {
+        if (
+          cancelled ||
+          insightRequestIdRef.current !== requestId ||
+          timerStateRef.current !== "finished"
+        ) {
+          return;
+        }
+
+        const text = formatSolveInsightText(overview, { targetColor });
+        setSolveInsight(
+          text
+            ? { status: "ready", solveId: targetSolveId, text }
+            : { status: "error", solveId: targetSolveId, text: null },
+        );
+      })
+      .catch(() => {
+        if (
+          cancelled ||
+          insightRequestIdRef.current !== requestId ||
+          timerStateRef.current !== "finished"
+        ) {
+          return;
+        }
+
+        setSolveInsight({ status: "error", solveId: targetSolveId, text: null });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isRecordingMode, lastSavedSolve, timerState]);
 
   useEffect(() => {
     if (shareStatus === null) {
@@ -3318,6 +3420,13 @@ const handleTimerPointerCancel = useCallback(
     navigateTo(`/analyzer?scramble=${encodeURIComponent(scramble)}`);
   }, [navigateTo, scramble]);
 
+  const openSolveInCompareAnalyzer = useCallback(
+    (solve: SolveRecord) => {
+      navigateTo(buildCompareAnalyzerUrl(solve));
+    },
+    [navigateTo],
+  );
+
   const openCurrentScramblePreview = useCallback(() => {
     saveCurrentScramble(scramble);
     navigateTo(
@@ -3984,6 +4093,9 @@ const handleTimerPointerCancel = useCallback(
                     </div>
 
                     <div className="history-actions">
+                      <button type="button" onClick={() => openSolveInCompareAnalyzer(solve)}>
+                        解析
+                      </button>
                       <button type="button" onClick={() => shareSolve(solve)}>
                         Share
                       </button>
@@ -4390,21 +4502,39 @@ const handleTimerPointerCancel = useCallback(
 
       {!isRecordingMode && lastSavedSolve && (
         <section className="post-solve-actions" aria-label="Last solve actions">
-          <div>
-            <p className="post-solve-label">Saved</p>
-            <strong>{formatSolveTime(lastSavedSolve)}</strong>
+          <div className="post-solve-top">
+            <div>
+              <p className="post-solve-label">Saved</p>
+              <strong>{formatSolveTime(lastSavedSolve)}</strong>
+            </div>
+            <div className="post-solve-buttons">
+              <button type="button" onClick={() => shareSolve(lastSavedSolve)}>
+                Share
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  softDeleteSolve(lastSavedSolve.id, "直前の記録を保存しませんでした。")
+                }
+              >
+                保存しない
+              </button>
+            </div>
           </div>
-          <div className="post-solve-buttons">
-            <button type="button" onClick={() => shareSolve(lastSavedSolve)}>
-              Share
-            </button>
+          <div className="post-solve-insight">
+            <span className="post-solve-insight-text" role="status">
+              {solveInsight.solveId === lastSavedSolve.id && solveInsight.status === "ready"
+                ? solveInsight.text
+                : solveInsight.solveId === lastSavedSolve.id && solveInsight.status === "error"
+                  ? "最短を計算できませんでした"
+                  : "最短を計算中…"}
+            </span>
             <button
               type="button"
-              onClick={() =>
-                softDeleteSolve(lastSavedSolve.id, "直前の記録を保存しませんでした。")
-              }
+              className="post-solve-insight-button"
+              onClick={() => openSolveInCompareAnalyzer(lastSavedSolve)}
             >
-              保存しない
+              くわしく解析
             </button>
           </div>
         </section>

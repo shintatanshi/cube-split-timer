@@ -1,3 +1,5 @@
+import { tokenizeAlgorithm } from "../../learn/moveNotation";
+
 export type Face = "U" | "D" | "F" | "B" | "R" | "L";
 export type Slot = "FR" | "FL" | "BL" | "BR";
 export type MoveSuffix = "" | "'" | "2";
@@ -147,11 +149,10 @@ export const SOLVED_STATE: CubieState = createSolvedState();
 const VALID_MOVE_REGEX = /^(?:[URFDLBMESxyz]|[URFDLB]w|[urfdlb])(?:'|2)?$/;
 
 export function parseMoves(text: string): string[] {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return [];
-  }
-  const tokens = trimmed.split(/\s+/);
+  // Same tokenizing as the rest of the app (learn/moveNotation): parentheses such as
+  // "(U)", commas and line breaks are separators, and ’ ′ ` count as a prime.
+  // "R2'" means the same as "R2".
+  const tokens = tokenizeAlgorithm(text).map((token) => token.replace(/2'$/, "2"));
   for (const token of tokens) {
     if (!VALID_MOVE_REGEX.test(token)) {
       throw new Error(`Invalid move token: "${token}"`);

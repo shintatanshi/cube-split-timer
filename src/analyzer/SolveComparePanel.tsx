@@ -27,6 +27,7 @@ export interface SolveComparePanelProps {
   solution: string;
   faceColorMap: Record<FaceName, CubeColorName>;
   splits?: SolveCompareSplits;
+  autoOverview?: boolean;
   onPlay: (algorithm: string) => void;
 }
 
@@ -75,6 +76,36 @@ function buildOptimalPlaybackAlgorithm(
   return [...normalizedPrefix, ...optimalSolution].join(" ");
 }
 
+function formatSplitSeconds(ms: number | null | undefined): string | null {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms <= 0) {
+    return null;
+  }
+
+  return (ms / 1000).toFixed(2);
+}
+
+function formatSplitsSummary(splits?: SolveCompareSplits): string | null {
+  if (!splits) {
+    return null;
+  }
+
+  const entries: Array<[string, string | null]> = [
+    ["Cross", formatSplitSeconds(splits.crossMs)],
+    ["F2L", formatSplitSeconds(splits.f2lMs)],
+    ["OLL", formatSplitSeconds(splits.ollMs)],
+    ["PLL", formatSplitSeconds(splits.pllMs)],
+  ];
+  const parts = entries
+    .filter((entry): entry is [string, string] => entry[1] !== null)
+    .map(([label, value]) => `${label} ${value}`);
+
+  if (parts.length === 0) {
+    return null;
+  }
+
+  return `この記録: ${parts.join(" / ")}`;
+}
+
 /**
  * Displays 6-color shortest Cross / X-Cross overview and per-phase comparison against the user's solve.
  */
@@ -83,6 +114,7 @@ export default function SolveComparePanel({
   solution,
   faceColorMap,
   splits,
+  autoOverview = false,
   onPlay,
 }: SolveComparePanelProps) {
   const workerRef = useRef<Worker | null>(null);
@@ -90,6 +122,7 @@ export default function SolveComparePanel({
   const jobKindByIdRef = useRef<Map<number, "overview" | "analyze">>(new Map());
   const latestOverviewJobIdRef = useRef(0);
   const latestAnalyzeJobIdRef = useRef(0);
+  const hasAutoRunOverviewRef = useRef(false);
 
   const [isLoadingOverview, setIsLoadingOverview] = useState(false);
   const [overviewResults, setOverviewResults] = useState<SolverOverviewFaceResult[] | null>(null);
@@ -117,6 +150,9 @@ export default function SolveComparePanel({
       workerRef.current?.terminate();
       workerRef.current = null;
       jobKindByIdRef.current.clear();
+      hasAutoRunOverviewRef.current = false;
+      setIsLoadingOverview(false);
+      setIsLoadingAnalyze(false);
     },
     [],
   );
@@ -221,6 +257,20 @@ export default function SolveComparePanel({
     }
   }, [getOrCreateWorker, scramble]);
 
+  useEffect(() => {
+    if (!autoOverview) {
+      hasAutoRunOverviewRef.current = false;
+      return;
+    }
+
+    if (hasAutoRunOverviewRef.current || !scramble.trim()) {
+      return;
+    }
+
+    hasAutoRunOverviewRef.current = true;
+    runOverview();
+  }, [autoOverview, runOverview, scramble]);
+
   const runAnalyze = useCallback(() => {
     setAnalyzeError(null);
 
@@ -291,6 +341,7 @@ export default function SolveComparePanel({
   }, [analyzeResult]);
 
   const hasSolution = solution.trim().length > 0;
+  const splitsSummary = useMemo(() => formatSplitsSummary(splits), [splits]);
 
   return (
     <div className="solve-compare-panel">
@@ -313,6 +364,13 @@ export default function SolveComparePanel({
         <p className="analyzer-muted">
           現在のスクランブルに対して、6色すべての最短クロスと最短 X クロスを探します。
         </p>
+
+        {splitsSummary && (
+          <div className="solve-compare-splits-banner">
+            <p>{splitsSummary}</p>
+            <small>自分の手順を入れると、段ごとの手数と TPS も出ます</small>
+          </div>
+        )}
 
         {isLoadingOverview && (
           <p className="solve-compare-status" role="status">

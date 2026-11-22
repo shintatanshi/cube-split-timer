@@ -10,7 +10,7 @@
     "f2l:studio": "node scripts/f2l-image-studio.mjs",
     "oll:compare": "node scripts/oll-image-compare.mjs",
     "recording:manifest:check": "node scripts/check-recording-manifest.mjs",
-    "test": "vitest run"
+    "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

@@ -10515,7 +10515,7 @@ textarea:focus,
   top: 18px;
   z-index: 22;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   min-width: 0;
   padding: 6px;
@@ -10780,7 +10780,7 @@ textarea:focus,
 
   .analyzer-workspace-tabs {
     top: max(78px, calc(env(safe-area-inset-top) + 78px));
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 6px;
     overflow: visible;
     padding: 5px;
@@ -10879,7 +10879,7 @@ textarea:focus,
   }
 
   .analyzer-workspace-tabs {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .analyzer-workspace-tabs span {
@@ -13402,4 +13402,100 @@ textarea:focus,
 
 .solve-compare-xcross-hint code {
   word-break: break-word;
+}
+
+/* Post-solve shortest insight & history analyze action */
+.post-solve-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.post-solve-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.post-solve-actions .post-solve-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.post-solve-actions .post-solve-insight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+
+.post-solve-insight-text {
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.post-solve-insight-button {
+  flex: 0 0 auto;
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border));
+}
+
+.history-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (min-width: 720px) {
+  .history-actions {
+    width: 320px;
+  }
+}
+
+@media (max-width: 520px) {
+  .post-solve-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .post-solve-actions .post-solve-buttons {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .post-solve-actions .post-solve-insight {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .history-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.solve-compare-splits-banner {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-muted));
+}
+
+.solve-compare-splits-banner p {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 0.88rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.solve-compare-splits-banner small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
 }

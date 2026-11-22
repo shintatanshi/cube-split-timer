@@ -10,6 +10,7 @@ import {
   saveAnimationSpeed,
   type AnimationSpeed,
 } from "../lib/cubeVisuals";
+import { DEFAULT_FACE_COLOR_MAP } from "../lib/defaultFaceColors";
 import {
   loadCubeTurnSoundVolume,
   playRandomCubeTurnSound,
@@ -289,14 +290,6 @@ const COLOR_OPPOSITES: Record<CubeColorName, CubeColorName> = {
   green: "blue",
   red: "orange",
   orange: "red",
-};
-const DEFAULT_FACE_COLOR_MAP: Record<FaceName, CubeColorName> = {
-  U: "yellow",
-  D: "white",
-  F: "blue",
-  B: "green",
-  R: "red",
-  L: "orange",
 };
 const DEFAULT_ANALYZER_SETTINGS: AnalyzerSettings = {
   crossColor: "white",
@@ -620,6 +613,14 @@ function getIncomingSplitsFromUrl(): SolveCompareSplits | undefined {
     return { crossMs, f2lMs, ollMs, pllMs };
   } catch {
     return undefined;
+  }
+}
+
+function getIncomingAutoCompareFromUrl(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get("auto") === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -1664,6 +1665,15 @@ export default function AnalyzerPage({
   const isRecordingMode = isRecordingModeProp ?? isRecordingModeUrl();
   const activeWorkspacePage = getAnalyzerWorkspacePage(path);
   const incomingSplits = useMemo(() => getIncomingSplitsFromUrl(), [path]);
+  const shouldAutoCompare = useMemo(() => getIncomingAutoCompareFromUrl(), [path]);
+  const [isDetailDisclosureOpen, setIsDetailDisclosureOpen] = useState(
+    () => activeWorkspacePage !== "input",
+  );
+  useEffect(() => {
+    if (activeWorkspacePage !== "input") {
+      setIsDetailDisclosureOpen(true);
+    }
+  }, [activeWorkspacePage]);
   const [initialAnalyzerState] = useState(() => {
     const savedState = loadAnalyzerState();
     const incomingScramble = getIncomingScrambleFromUrl() ?? (isRecordingMode ? RECORDING_DEMO_SCRAMBLE : null);
@@ -3388,12 +3398,17 @@ export default function AnalyzerPage({
           }
         });
         setCurrentIndex(solution.moves.length);
-        document
-          .getElementById("analyzer-f2l-section")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        // The F2L section lives on its own route page and is hidden on /analyzer/cross,
+        // so scrolling alone did nothing; switch to the F2L page first.
+        onNavigate("/analyzer/f2l");
+        window.setTimeout(() => {
+          document
+            .getElementById("analyzer-f2l-section")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 0);
       }, 0);
     },
-    [applyScrambleInstant, selectCrossSolution],
+    [applyScrambleInstant, onNavigate, selectCrossSolution],
   );
 
   const showAiPlaceholder = useCallback((targetLabel: string) => {
@@ -4722,7 +4737,11 @@ export default function AnalyzerPage({
           aria-label="Analyzer inputs"
           data-testid="recording-analyzer-input"
         >
-          <details className="analyzer-detail-disclosure">
+          <details
+            className="analyzer-detail-disclosure"
+            open={isDetailDisclosureOpen}
+            onToggle={(event) => setIsDetailDisclosureOpen(event.currentTarget.open)}
+          >
             <summary>
               <span>詳細を見る</span>
             </summary>
@@ -5858,6 +5877,7 @@ export default function AnalyzerPage({
               solution={solveInput}
               faceColorMap={faceColorMap}
               splits={incomingSplits}
+              autoOverview={shouldAutoCompare}
               onPlay={handleComparePlay}
             />
           </section>

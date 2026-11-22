@@ -9,6 +9,11 @@ export default defineConfig({
     // parallel makes those timings meaningless, so run test files one at a time.
     fileParallelism: false,
   },
+  worker: {
+    // cubing.js (used only inside src/lib/scrambleWorker.ts) splits its search code
+    // into dynamic imports, which needs ES-module workers.
+    format: "es",
+  },
   build: {
     rollupOptions: {
       output: {

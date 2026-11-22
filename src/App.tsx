@@ -57,7 +57,7 @@ import {
   getInspectionStage,
 } from "./lib/inspection";
 import { getCloudDeletedLocalIds } from "./lib/cloudSync";
-import { generateScramble } from "./lib/scramble";
+import { prefetchScrambles, takeScramble } from "./lib/wcaScramble";
 import {
   getMySolveSessions,
   saveSolveSession,
@@ -1360,9 +1360,14 @@ export default function App() {
   const [isRecordingMode, setIsRecordingMode] = useState(initialRecordingMode);
   const [solves, setSolves] = useState<SolveRecord[]>(() => loadSolves());
   const [scramble, setScramble] = useState(() =>
-    initialRecordingMode ? RECORDING_DEMO_SCRAMBLE : loadCurrentScramble() ?? generateScramble(),
+    initialRecordingMode ? RECORDING_DEMO_SCRAMBLE : loadCurrentScramble() ?? takeScramble().scramble,
   );
   const [timerMode, setTimerMode] = useState<SolveMode>("normal");
+
+  // Start preparing WCA random-state scrambles in the background (idle on load).
+  useEffect(() => {
+    void prefetchScrambles();
+  }, []);
   const [themePreference, setThemePreference] = useState<ThemePreference>(() =>
     loadThemePreference(),
   );
@@ -2281,7 +2286,7 @@ export default function App() {
         return;
       }
 
-      setScramble(generateScramble());
+      setScramble(takeScramble().scramble);
       setLastSavedSolveId(solve.id);
       setUndoState(null);
       persistAndSetSolves([solve, ...solves]);
@@ -4446,7 +4451,7 @@ const handleTimerPointerCancel = useCallback(
                 type="button"
                 aria-label="新しいスクランブル"
                 title="新しいスクランブル"
-                onClick={() => setScramble(generateScramble())}
+                onClick={() => setScramble(takeScramble().scramble)}
               >
                 <span aria-hidden="true">↻</span>
               </button>
